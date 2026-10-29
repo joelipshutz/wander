@@ -215,22 +215,22 @@ enum PlaceProfileSaveActionPolicy {
         switch state {
         case .unsaved:
             PlaceProfileSaveActionPresentation(actions: [
-                action(.checkIn, title: "Check In", destinationStatus: .been),
+                action(.checkIn, title: "Check in", destinationStatus: .been),
                 action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .wanna:
             PlaceProfileSaveActionPresentation(actions: [
-                action(.checkIn, title: "Check In", destinationStatus: .been),
+                action(.checkIn, title: "Check in", destinationStatus: .been),
                 action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .checkInHistory:
             PlaceProfileSaveActionPresentation(actions: [
-                action(.checkIn, title: "Check In", destinationStatus: .been),
+                action(.checkIn, title: "Check in", destinationStatus: .been),
                 action(.wanna, title: "Wanna", destinationStatus: .wannaGo)
             ])
         case .sharedInvite:
             PlaceProfileSaveActionPresentation(actions: [
-                action(.checkIn, title: "Check In", destinationStatus: .been)
+                action(.checkIn, title: "Check in", destinationStatus: .been)
             ])
         case .readOnly:
             .empty

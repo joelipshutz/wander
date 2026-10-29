@@ -388,8 +388,8 @@ enum FeedPresentation {
                     visiblePlace: place,
                     actor: event.actor,
                     reason: place.userPlace.status == .been
-                        ? "Checked In By \(event.actor.displayName)"
-                        : "Wanna By \(event.actor.displayName)"
+                        ? "Checked in by \(event.actor.displayName)"
+                        : "Wanna by \(event.actor.displayName)"
                 )
             )
             if results.count == max(0, limit) { break }

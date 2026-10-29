@@ -27,14 +27,14 @@ final class PlaceRatingSummariesTests: XCTestCase {
 
     func testRailAlwaysKeepsYourFriendsAndAstirSlotsWithoutFitOrFakeFive() throws {
         let empty = PlaceRatingsState.loaded(.init(own: .empty, friends: .empty, astir: .empty)).metrics
-        XCTAssertEqual(empty.map(\.title), ["Your Rating", "Friends Rating", "Astir Rating"])
+        XCTAssertEqual(empty.map(\.title), ["Your rating", "Friends rating", "Astir rating"])
         XCTAssertEqual(empty.map { $0.value + $0.suffix }, ["—/5", "—/5", "—/5"])
         let hiddenOnly = PlaceRatingsState.loaded(.init(
             own: .empty, friends: .empty, astir: try PlaceRatingAggregate(score: 4.5, count: 1)
         )).metrics
         XCTAssertEqual(hiddenOnly.map(\.value), ["—", "—", "4.5"])
-        XCTAssertEqual(hiddenOnly[1].subtitle, "No Visible Ratings Yet")
-        XCTAssertEqual(hiddenOnly[2].subtitle, "1 Rating")
+        XCTAssertEqual(hiddenOnly[1].subtitle, "No visible ratings yet")
+        XCTAssertEqual(hiddenOnly[2].subtitle, "1 rating")
     }
 
     func testFailedAndLoadingRatingsAreNotPresentedAsAnEmptySuccessfulResponse() {

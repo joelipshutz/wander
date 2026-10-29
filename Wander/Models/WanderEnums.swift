@@ -36,9 +36,9 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .featured: "Featured Shows You Recommendations Based On Your Taste"
-        case .friends: "All Places From Everyone You Follow"
-        case .you: "Only Your Check-Ins And Wanna Go Places"
+        case .featured: "Featured shows you recommendations based on your taste"
+        case .friends: "All places from everyone you follow"
+        case .you: "Only your check-ins and Wanna Go places"
         }
     }
 
@@ -56,16 +56,16 @@ enum MapSource: String, Codable, CaseIterable, Equatable, Identifiable {
 /// Keep this separate from persistence: `PlaceStatus.been` and the backend
 /// value `"been"` remain stable compatibility contracts.
 enum CheckInCopy {
-    static let verb = "Check In"
-    static let action = "Check In"
-    static let pluralTitle = "Check-Ins"
-    static let noun = "Check-In"
-    static let pluralNoun = "Check-Ins"
-    static let title = "Check-In"
-    static let pastTense = "Checked In"
+    static let verb = "check in"
+    static let action = "Check in"
+    static let pluralTitle = "Check-ins"
+    static let noun = "check-in"
+    static let pluralNoun = "check-ins"
+    static let title = "Check-in"
+    static let pastTense = "checked in"
     static let againAction = action
-    static let editAction = "Edit Check-In"
-    static let deleteAction = "Delete Check-In"
+    static let editAction = "Edit check-in"
+    static let deleteAction = "Delete check-in"
 
     static func count(_ count: Int) -> String {
         "\(count) \(count == 1 ? noun : pluralNoun)"
@@ -99,38 +99,38 @@ struct SaveSyncFeedback: Identifiable, Equatable {
 
         switch syncState {
         case .synced:
-            title = "Saved To Your Map"
-            message = "Synced And Ready."
+            title = "Saved to your map"
+            message = "Synced and ready."
             systemImage = "checkmark"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 2_000_000_000
         case .failed:
-            title = "Sync Failed"
-            message = "Saved On This Phone. We'll Retry Automatically."
+            title = "Sync failed"
+            message = "Saved on this phone. We'll retry automatically."
             systemImage = "exclamationmark.triangle"
             usesWarningHaptic = true
             dismissDelayNanoseconds = 5_000_000_000
         case .pendingCreate, .pendingUpdate, .pendingDelete:
-            title = "Saved On This Phone"
-            message = "Sync Is Queued."
+            title = "Saved on this phone"
+            message = "Sync is queued."
             systemImage = "arrow.triangle.2.circlepath"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 3_500_000_000
         case .localOnly:
-            title = "Saved On This Phone"
-            message = canSignIn ? "Sign In To Back It Up." : "Kept On This Phone."
+            title = "Saved on this phone"
+            message = canSignIn ? "Sign in to back it up." : "Kept on this phone."
             systemImage = "checkmark"
             usesWarningHaptic = false
             dismissDelayNanoseconds = canSignIn ? 5_000_000_000 : 2_500_000_000
         case .serverDenied:
-            title = "Needs Review"
-            message = "Saved On This Phone Until It Can Sync."
+            title = "Needs review"
+            message = "Saved on this phone until it can sync."
             systemImage = "exclamationmark.triangle"
             usesWarningHaptic = true
             dismissDelayNanoseconds = 5_000_000_000
         case .tombstoned:
             title = "Removed"
-            message = "This Saved Place Was Removed."
+            message = "This saved place was removed."
             systemImage = "trash"
             usesWarningHaptic = false
             dismissDelayNanoseconds = 3_500_000_000
@@ -142,15 +142,15 @@ struct SaveSyncFeedback: Identifiable, Equatable {
         case .synced:
             successMessage
         case .failed:
-            "Saved On This Phone, But Sync Failed. We'll Retry."
+            "Saved on this phone, but sync failed. We'll retry."
         case .pendingCreate, .pendingUpdate, .pendingDelete:
-            "Saved On This Phone. Sync Is Queued."
+            "Saved on this phone. Sync is queued."
         case .localOnly:
-            "Saved On This Phone."
+            "Saved on this phone."
         case .serverDenied:
-            "Saved On This Phone, But It Needs Review Before Syncing."
+            "Saved on this phone, but it needs review before syncing."
         case .tombstoned:
-            "This Saved Place Was Removed."
+            "This saved place was removed."
         }
     }
 }
@@ -216,11 +216,11 @@ enum AddSourceType: String, Codable, CaseIterable, Equatable {
 
     var title: String {
         switch self {
-        case .currentLocation: "I'm Here Right Now"
-        case .link: "Paste A Link"
-        case .manual: "Add Manually"
-        case .photo: "From A Photo"
-        case .socialSave: "Save From Someone"
+        case .currentLocation: "I'm here right now"
+        case .link: "Paste a link"
+        case .manual: "Add manually"
+        case .photo: "From a photo"
+        case .socialSave: "Save from someone"
         }
     }
 }
@@ -240,10 +240,10 @@ extension PlaceVisibility {
 
     var stealthModeHelperCopy: String {
         if isStealthModeEnabled {
-            return "Private. Only You Can See This Place."
+            return "Private. Only you can see this place."
         }
 
-        return "Not Private. People Who Follow You Can See It."
+        return "Not private. People who follow you can see it."
     }
 
     var showsTileLockIndicator: Bool {
@@ -260,9 +260,9 @@ extension PlaceVisibility {
 
     var helperCopy: String {
         switch self {
-        case .followers: "People Who Follow You Can See This."
-        case .mutuals: "Only Mutual Follows Can See This."
-        case .selfOnly: "Only You Can See This."
+        case .followers: "People who follow you can see this."
+        case .mutuals: "Only mutual follows can see this."
+        case .selfOnly: "Only you can see this."
         }
     }
 }
@@ -270,8 +270,8 @@ extension PlaceVisibility {
 extension PlaceStatus {
     var displayTitle: String {
         switch self {
-        case .been: CheckInCopy.noun
-        case .wannaGo: "Wanna Go"
+        case .been: CheckInCopy.title
+        case .wannaGo: "Wanna go"
         }
     }
 }
@@ -282,7 +282,7 @@ extension ViewerRelationship {
         case .owner: "You"
         case .mutual: "Friend"
         case .follower: "Following"
-        case .nonFollower: "Not Following"
+        case .nonFollower: "Not following"
         }
     }
 }

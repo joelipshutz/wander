@@ -310,7 +310,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let refreshed = snapshot.refreshingPresentation(for: .checkInHistory)
 
         XCTAssertEqual(refreshed.route, .floatingActions)
-        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check In", "Wanna"])
+        XCTAssertEqual(refreshed.presentation.actions.map(\.title), ["Check in", "Wanna"])
         XCTAssertEqual(flagOffSnapshot.route, .legacy)
         XCTAssertEqual(snapshot.route, .floatingActions)
         let legacy = PlaceProfileSaveActionSnapshot(
@@ -664,22 +664,22 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(place.photoRequest.sourceProvider, "google_maps")
         XCTAssertEqual(place.photoRequest.sourceProviderPlaceID, "google-maru-hillhurst")
         XCTAssertEqual(PlaceSheetAction.choose.systemImage, "checkmark")
-        XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose This Place")
+        XCTAssertEqual(PlaceSheetAction.choose.accessibilityLabel, "Choose this place")
         XCTAssertEqual(PlaceSheetAction.add.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.addVisit.systemImage, "plus")
         XCTAssertEqual(PlaceSheetAction.editWant.systemImage, "pencil")
-        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check In")
-        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check In")
+        XCTAssertEqual(PlaceSheetAction.add.displayTitle, "Check in")
+        XCTAssertEqual(PlaceSheetAction.addVisit.displayTitle, "Check in")
         XCTAssertEqual(PlaceSheetAction.editWant.displayTitle, "Edit Wanna")
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: false),
-            "Check In At Maru Coffee"
+            "Check in at Maru Coffee"
         )
         XCTAssertEqual(
             PlaceSheetAction.addVisit.displayTitle(placeName: "Maru Coffee", hasPriorCheckIn: true),
-            "Check In"
+            "Check in"
         )
-        XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose This Place")
+        XCTAssertEqual(PlaceSheetAction.choose.displayTitle, "Choose this place")
         XCTAssertTrue(PlaceSheetAction.choose.isPrimaryAction)
         XCTAssertTrue(PlaceSheetAction.editWant.isPrimaryAction)
     }
@@ -690,7 +690,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check In",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 ),
@@ -707,7 +707,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check In",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 ),
@@ -724,7 +724,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check In",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 ),
@@ -741,7 +741,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
             [
                 PlaceProfileSaveAction(
                     kind: .checkIn,
-                    title: "Check In",
+                    title: "Check in",
                     isSelected: false,
                     destinationStatus: .been
                 )
@@ -1021,9 +1021,9 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(PlaceRatingExplanation.ratings.title, "Ratings")
         XCTAssertEqual(
             PlaceRatingExplanation.ratings.message,
-            "Your Rating Averages Your Rated Check-Ins Here. Friends Rating Averages Each Followed Person's Visible Ratings; Activity Hidden From You Does Not Count. Astir Rating Averages All Rated Check-Ins, Including Private Activity, Without Showing Who Contributed. A Dash Means There Are No Ratings Yet."
+            "Your rating averages your rated check-ins here. Friends rating averages each followed person's visible ratings; activity hidden from you does not count. Astir rating averages all rated check-ins, including private activity, without showing who contributed. A dash means there are no ratings yet."
         )
-        XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About The Ratings")
+        XCTAssertEqual(PlaceRatingExplanation.ratings.accessibilityLabel, "About the Ratings")
     }
 
     func testPlacePhotoDecodesProviderTypesForCategoryEnrichment() throws {
@@ -1408,7 +1408,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(ownRating.source, .own)
         XCTAssertEqual(ownRating.displayScore, "4.7")
         XCTAssertEqual(ownRating.count, 3)
-        XCTAssertEqual(ownRating.subtitle, "3 Check-Ins")
+        XCTAssertEqual(ownRating.subtitle, "3 check-ins")
     }
 
     func testOverallRatingAveragesTrustedRatingsWhenUnsaved() throws {
@@ -1443,7 +1443,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertEqual(rating.source, .friends)
         XCTAssertEqual(rating.score, 4.5, accuracy: 0.0001)
         XCTAssertEqual(rating.count, 2)
-        XCTAssertEqual(rating.subtitle, "2 People You Follow")
+        XCTAssertEqual(rating.subtitle, "2 people you follow")
     }
 
     func testCurrentUserWannaSaveCanShowTrustedOverallButNoOwnRating() throws {
@@ -1559,7 +1559,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
         XCTAssertEqual(rating.source, .community)
-        XCTAssertEqual(rating.title, "Astir Rating")
+        XCTAssertEqual(rating.title, "Astir rating")
         XCTAssertEqual(rating.score, 4.2)
         XCTAssertEqual(rating.count, 12)
     }
@@ -1593,7 +1593,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         let rating = try XCTUnwrap(PlaceProfilePresenter.overallRating(from: summaries, currentUserID: currentUser.id))
 
         XCTAssertEqual(rating.source, .friends)
-        XCTAssertEqual(rating.title, "Friends Rating")
+        XCTAssertEqual(rating.title, "Friends rating")
         XCTAssertEqual(rating.score, 5)
         XCTAssertEqual(rating.count, 1)
     }
@@ -1648,7 +1648,7 @@ final class PlaceProfilePresentationTests: XCTestCase {
         XCTAssertNil(presentation.ownRating)
         XCTAssertGreaterThanOrEqual(fit.score, 8)
         XCTAssertEqual(presentation.commonTags.map(\.title), ["quiet"])
-        XCTAssertTrue(fit.reasons.contains { $0.contains("Coffee, Tea, & Sweets") })
+        XCTAssertTrue(fit.reasons.contains { $0.contains("coffee, tea, & sweets") })
         XCTAssertTrue(fit.reasons.contains { $0.contains("quiet") })
     }
 

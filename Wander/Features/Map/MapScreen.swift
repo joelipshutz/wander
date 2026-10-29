@@ -18,7 +18,7 @@ enum SharedVisitOutboxNotice {
         ownerUserID: String
     ) -> String? {
         pendingInvites.contains(where: { $0.ownerUserID == ownerUserID })
-            ? "Friend Updates Are Still Sending. Astir Will Keep Retrying."
+            ? "Friend updates are still sending. Astir will keep retrying."
             : nil
     }
 }
@@ -287,9 +287,9 @@ enum MapSearchQueryPolicy {
     private static let minimumNearbyMatchRadius: CLLocationDistance = 100_000
     private static let regionRadiusMultiplier = 4.0
     private static let proximitySuffixes = [
-        "Around Me",
-        "Close By",
-        "Near Me",
+        "around me",
+        "close by",
+        "near me",
         "nearby"
     ]
     private static let genericCategoryQualifierTokens: Set<String> = [
@@ -1875,15 +1875,15 @@ struct MapScreen: View {
             return nil
         }
         if mapFilterState.more.activeSectionCount > 0 {
-            return "No \(mapFilterState.source.title) Places Match These Filters."
+            return "No \(mapFilterState.source.title.lowercased()) places match these filters."
         }
         switch mapFilterState.source {
         case .featured:
             return nil
         case .friends:
-            return "No Friends’ Places Yet."
+            return "No friends’ places yet."
         case .you:
-            return "No Places On Your Map Yet."
+            return "No places on your map yet."
         }
     }
 
@@ -1992,7 +1992,7 @@ struct MapScreen: View {
                     totalCount: annotationCount
                 ),
                 entranceDelay: MapPinEntranceStyle.staggerDelay(for: entranceIndex),
-                accessibilityLabel: "Map Search Result, \(candidate.name)",
+                accessibilityLabel: "Map search result, \(candidate.name)",
                 bounceRevision: candidate.id == selectedSearchCandidateID
                     ? activePinBounceRevision
                     : 0
@@ -2049,7 +2049,7 @@ struct MapScreen: View {
                                 .font(.caption2)
                                 .opacity(0.001)
                                 .accessibilityIdentifier("map.performanceProbe")
-                                .accessibilityLabel("Map Performance Probe")
+                                .accessibilityLabel("Map performance probe")
                                 .accessibilityValue(mapPerformanceProbeSnapshot)
                                 .allowsHitTesting(false)
 
@@ -2097,13 +2097,13 @@ struct MapScreen: View {
                         .buttonStyle(.plain)
                         .offset(x: 176, y: 320)
                         .accessibilityIdentifier("map.performanceSelectFirstPin")
-                        .accessibilityLabel("Select First Performance Pin")
+                        .accessibilityLabel("Select first performance pin")
                     } else if Self.usesREC352AdaptiveMapSearchFixtures() {
                         Text("\(mappableSearchCandidates.count)")
                             .font(.caption2)
                             .opacity(0.001)
                             .accessibilityIdentifier("map.searchResultPinCount")
-                            .accessibilityLabel("Rendered Search Result Count")
+                            .accessibilityLabel("Rendered search result count")
                             .accessibilityValue("\(mappableSearchCandidates.count)")
                             .allowsHitTesting(false)
                     }
@@ -2689,10 +2689,10 @@ struct MapScreen: View {
             ) else { return }
             guard case .resolved(let destination) = resolution else {
                 if resolution == .unavailable {
-                    mapSearchMessage = "That Shared Check-In Is No Longer Available."
+                    mapSearchMessage = "That shared check-in is no longer available."
                     pushNotifications.consumeNavigationRequest(id: request.id)
                 } else {
-                    mapSearchMessage = "Could Not Open That Shared Check-In Yet. It Will Retry When The App Becomes Active."
+                    mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                 }
                 return
             }
@@ -2707,7 +2707,7 @@ struct MapScreen: View {
                     revision: navigationRevision
                 ) else { return }
                 guard let invitation else {
-                    mapSearchMessage = "Could Not Open That Shared Check-In Yet. It Will Retry When The App Becomes Active."
+                    mapSearchMessage = "Could not open that shared check-in yet. It will retry when the app becomes active."
                     return
                 }
                 mapSaveFlow = .sharedVisit(invitation, defaultVisibility: store.effectiveDefaultVisibility)
@@ -2719,7 +2719,7 @@ struct MapScreen: View {
                     navigationRevision: navigationRevision
                 )
             } else {
-                mapSearchMessage = "That Shared Check-In Is No Longer Available."
+                mapSearchMessage = "That shared check-in is no longer available."
                 pushNotifications.consumeNavigationRequest(id: request.id)
             }
         default:
@@ -2841,7 +2841,7 @@ struct MapScreen: View {
                   let latitude = candidate.latitude,
                   let longitude = candidate.longitude
             else {
-                mapSearchMessage = "That Shared Place Is No Longer Available."
+                mapSearchMessage = "That shared place is no longer available."
                 pushNotifications.consumeNavigationRequest(id: requestID)
                 return
             }
@@ -2855,13 +2855,13 @@ struct MapScreen: View {
             isPlaceProfilePresented = false
             initialCameraState.resolve()
             centerMap(latitude: latitude, longitude: longitude)
-            mapSearchMessage = "Shared Place. Add It To Keep It On Your Map."
+            mapSearchMessage = "Shared place. Add it to keep it on your map."
         } catch {
             guard canApplyDeferredMapNavigation(
                 requestID: requestID,
                 revision: navigationRevision
             ) else { return }
-            mapSearchMessage = "That Shared Place Could Not Be Opened. Try The Link Again."
+            mapSearchMessage = "That shared place could not be opened. Try the link again."
         }
         pushNotifications.consumeNavigationRequest(id: requestID)
     }
@@ -3765,7 +3765,7 @@ struct MapScreen: View {
                 .isEmpty != false
         else { return nil }
 
-        return "Worth Remembering—And An Easy Place To Recommend When Someone Asks."
+        return "Worth remembering—and an easy place to recommend when someone asks."
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
@@ -4710,7 +4710,7 @@ struct MapScreen: View {
                 routedVisiblePlaceGroup = nil
                 selectedPlaceGroupKey = nil
                 selectedSearchCandidateID = nil
-                mapSearchMessage = "No Places On Your Map Or Map Results Found."
+                mapSearchMessage = "No places on your map or map results found."
             }
             if queryIntent == .category, !displayedCandidates.isEmpty {
                 fitSubmittedSearchResults(
@@ -4767,7 +4767,7 @@ struct MapScreen: View {
                 mapSearchMessage = nil
             } else {
                 submittedSavedSearchGroups = []
-                mapSearchMessage = "No Places On Your Map Match Yet. Try A More Specific Search."
+                mapSearchMessage = "No places on your map match yet. Try a more specific search."
             }
         }
     }
@@ -4830,7 +4830,7 @@ struct MapScreen: View {
         }
 
         mapFeatureResolutionTask?.cancel()
-        mapSearchMessage = "Loading Place..."
+        mapSearchMessage = "Loading place..."
 
         let request = MKMapItemRequest(mapFeatureAnnotation: feature)
         let origin = currentMapCenterLocation()
@@ -5683,7 +5683,7 @@ struct MapScreen: View {
             }
             showMapSaveFeedback(
                 SaveSyncFeedback(syncState: result.syncState, canSignIn: !auth.isSignedIn),
-                successMessage: "Added To Your Map."
+                successMessage: "Added to your map."
             )
 
             if !auth.isSignedIn {
@@ -5744,15 +5744,15 @@ struct MapScreen: View {
     private func scopedSaveMessage(for context: MapPlaceSaveContext, status: PlaceStatus) -> String {
         switch context.mode {
         case .add:
-            status == .been ? "Checked In." : "Added To Wanna."
+            status == .been ? "Checked in." : "Added to Wanna."
         case .addVisit:
-            "Checked In Again."
+            "Checked in again."
         case .sharedVisit:
-            "Shared Check-In Is On Your Map."
+            "Shared check-in is on your map."
         case .editVisit:
-            "Check-In Updated."
+            "Check-in updated."
         case .editWant:
-            "Want Updated."
+            "Want updated."
         }
     }
 
@@ -5878,7 +5878,7 @@ struct MapScreen: View {
             guard auth.state.session?.userID == acceptingSession.userID,
                   store.currentUser.id == acceptingSession.userID else { return nil }
             if photoCopyFailed {
-                mapSearchMessage = "Checked In. One Shared Photo Will Retry When You Reopen Astir."
+                mapSearchMessage = "Checked in. One shared photo will retry when you reopen Astir."
             }
             await store.refreshSharedVisitInbox(backend: backend)
             guard auth.state.session?.userID == acceptingSession.userID,
@@ -5893,7 +5893,7 @@ struct MapScreen: View {
                   store.currentUser.id == acceptingSession.userID else { return nil }
             return persistPrivateCheckInAnswers(result: SaveResult(userPlaceID: result.userPlaceID, syncState: .synced), submission: submission, visit: visit, store: store)
         } catch {
-            mapSearchMessage = "That Shared Check-In Changed Before It Reached Your Map. Open The Invitation Again."
+            mapSearchMessage = "That shared check-in changed before it reached your map. Open the invitation again."
             return nil
         }
     }
@@ -5905,7 +5905,7 @@ struct MapScreen: View {
             guard await store.deleteVisit(visitID: visit.id, backend: auth.isSignedIn ? backend : nil) else {
                 return false
             }
-            showTransientMapSearchMessage("Check-In Deleted.")
+            showTransientMapSearchMessage("Check-in deleted.")
             return true
         case .editWant(let visiblePlace):
             let removal = await store.removeSave(
@@ -5941,7 +5941,7 @@ struct MapScreen: View {
                 selectedPlaceGroupKey = nil
             }
             isPlaceProfilePresented = false
-            showTransientMapSearchMessage("Want Removed.")
+            showTransientMapSearchMessage("Want removed.")
             return true
         case .add, .addVisit, .sharedVisit:
             return false
@@ -7433,7 +7433,7 @@ final class NativeMapPinAnnotationView: MKAnnotationView {
         accessibilityLabel = descriptor.accessibilityLabel
         accessibilityIdentifier = descriptor.accessibilityIdentifier
         accessibilityTraits = .button
-        accessibilityValue = descriptor.resolvedDetail == .dot ? "Map Dot" : "Category Pin"
+        accessibilityValue = descriptor.resolvedDetail == .dot ? "Map dot" : "Category pin"
         clusteringIdentifier = nil
         // Your Map is a complete view of saved places, including dense areas.
         // Required priority prevents MapKit from hiding overlapping markers.
@@ -9383,7 +9383,7 @@ private struct MapSearchSuggestion: Identifiable {
         return MapSearchSuggestion(
             id: "mapkit_\(candidate.id)",
             title: candidate.name,
-            subtitle: candidate.previewSubtitle(trailingParts: ["New To Your Map"]),
+            subtitle: candidate.previewSubtitle(trailingParts: ["New to your map"]),
             category: candidate.category,
             source: .mapKit(candidate)
         )
@@ -9395,13 +9395,13 @@ private struct MapSearchSuggestion: Identifiable {
         saveStates: [MapPinSaveState]
     ) -> String {
         let ownerLabel = placeCount > 1
-            ? "\(ownerName) + \(placeCount - 1) \(placeCount == 2 ? "Other" : "Others")"
+            ? "\(ownerName) + \(placeCount - 1) \(placeCount == 2 ? "other" : "others")"
             : ownerName
         let hasCheckIn = saveStates.contains { $0.status == .been }
         let hasWanna = saveStates.contains { $0.status == .wannaGo }
 
-        if hasCheckIn, hasWanna { return "\(ownerLabel) · Check-In + Wanna" }
-        if hasCheckIn { return "\(ownerLabel) Checked In" }
+        if hasCheckIn, hasWanna { return "\(ownerLabel) · check-in + Wanna" }
+        if hasCheckIn { return "\(ownerLabel) checked in" }
         if hasWanna { return "\(ownerLabel) · Wanna" }
         return "On \(AppBrand.displayName)"
     }
@@ -9495,7 +9495,7 @@ private struct MapGlassAddButton: View {
     var body: some View {
         AstirIconActionButton(
             systemImage: "plus",
-            accessibilityLabel: "Add A Place",
+            accessibilityLabel: "Add a place",
             accessibilityIdentifier: "map.headerAdd",
             isAddAction: true,
             action: action
@@ -9547,7 +9547,7 @@ private struct SearchBar: View {
         PersonMentionField(
             text: $draftQuery, mentions: $personMentions,
             focus: isFocused,
-            placeholder: "Search Your Map Or People...", accessibilityLabel: "Search Your Map Or People",
+            placeholder: "Search your map or people...", accessibilityLabel: "Search your map or people",
             accessibilityIdentifier: "map.searchField", maximumLines: 1, isSearch: true, isVisible: isVisible,
             onSubmit: {
                 let requestedQuery = PersonMentionDraft(text: draftQuery, mentions: personMentions).searchText
@@ -9608,7 +9608,7 @@ private struct SearchBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear Map Search")
+                .accessibilityLabel("Clear map search")
                 .accessibilityIdentifier("map.searchClear")
             }
         }
@@ -9774,14 +9774,14 @@ private struct MapTypeaheadList: View {
                     ProgressView()
                         .controlSize(.small)
                         .tint(WanderTheme.terracotta.color)
-                    Text(suggestions.isEmpty ? "Looking Nearby..." : "Checking Nearby...")
+                    Text(suggestions.isEmpty ? "Looking nearby..." : "Checking nearby...")
                         .font(AstirTypography.caption)
                         .foregroundStyle(appearance.secondaryText)
                     Spacer()
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
                 .padding(.vertical, WanderTheme.spacing2)
-                .accessibilityLabel("Looking For Nearby Places")
+                .accessibilityLabel("Looking for nearby places")
             }
         }
         .astirGlassSurface(cornerRadius: WanderTheme.radiusLarge, castsShadow: true)
@@ -9830,7 +9830,7 @@ private struct MapTypeaheadRow: View {
             }
             .buttonStyle(.plain)
             .frame(width: 44, height: 44)
-            .accessibilityLabel("Check In At \(suggestion.title)")
+            .accessibilityLabel("Check in at \(suggestion.title)")
         }
         .padding(.horizontal, WanderTheme.spacing3)
         .padding(.vertical, WanderTheme.spacing2)
@@ -9949,8 +9949,8 @@ private struct RecenterButton: View {
         .buttonStyle(.plain)
         .disabled(isLoading)
         .accessibilityIdentifier("map.nearby")
-        .accessibilityLabel("Center On My Location")
-        .accessibilityValue(showsAttentionBadge ? "Location Permission Needed" : "Location Available")
+        .accessibilityLabel("Center on my location")
+        .accessibilityValue(showsAttentionBadge ? "Location permission needed" : "Location available")
     }
 }
 
@@ -9985,12 +9985,12 @@ private struct MapLocationEducationPrompt: View {
                 .accessibilityHidden(true)
 
                 VStack(spacing: WanderTheme.spacing2) {
-                    Text("Astir Works Best With Your Location")
+                    Text("Astir works best with your location")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(WanderTheme.textInk.color)
                         .multilineTextAlignment(.center)
 
-                    Text("See Nearby Places, Get Better Search Results, And Bring The Map Back To You When Location Services Are On.")
+                    Text("See nearby places, get better search results, and bring the map back to you when Location Services are on.")
                         .font(AstirTypography.body)
                         .foregroundStyle(WanderTheme.textMuted.color)
                         .multilineTextAlignment(.center)
@@ -10003,7 +10003,7 @@ private struct MapLocationEducationPrompt: View {
                             ProgressView()
                                 .tint(AstirTheme.ink.color)
                         }
-                        Text(isRequesting ? "Requesting Location…" : primaryTitle)
+                        Text(isRequesting ? "Requesting location…" : primaryTitle)
                     }
                     .font(AstirTypography.control)
                     .foregroundStyle(AstirTheme.ink.color)
@@ -10105,8 +10105,8 @@ private struct MapSourceFilterChip: View {
         .foregroundStyle(isSelected ? astirBrandMode.accentText : astirBrandMode.primaryText)
         .contentShape(Capsule())
         .astirGlassSurface(cornerRadius: 18, selected: isSelected, castsShadow: true)
-        .accessibilityLabel("\(source.title) Map Source")
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityLabel("\(source.title) map source")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -10148,13 +10148,13 @@ private struct MapMoreFilterChip: View {
         .foregroundStyle(isActive ? astirBrandMode.accentText : astirBrandMode.primaryText)
         .contentShape(Capsule())
         .astirGlassSurface(cornerRadius: 18, selected: isActive, castsShadow: true)
-        .accessibilityLabel("More Map Filters")
+        .accessibilityLabel("More map filters")
         .accessibilityValue(
             selectedOptionCount == 0
-                ? "No Additional Filters"
+                ? "No additional filters"
                 : selectedOptionCount == 1
-                    ? "1 Selected Filter"
-                    : "\(selectedOptionCount) Selected Filters"
+                    ? "1 selected filter"
+                    : "\(selectedOptionCount) selected filters"
         )
     }
 }
@@ -10186,7 +10186,7 @@ private struct MapMoreFiltersPopover: View {
 
                 filterSection(
                     title: "Categories",
-                    detail: "Choose One Or More"
+                    detail: "Choose one or more"
                 ) {
                     VStack(spacing: WanderTheme.spacing2) {
                         LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
@@ -10200,7 +10200,7 @@ private struct MapMoreFiltersPopover: View {
 
                             ForEach(visibleCategories, id: \.self) { category in
                                 MapMoreOptionChip(
-                                    title: AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category)),
+                                    title: AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)),
                                     emoji: WanderPlaceCategory.broadEmoji(for: category),
                                     isSelected: selection.categories.contains(category)
                                 ) {
@@ -10215,7 +10215,7 @@ private struct MapMoreFiltersPopover: View {
                             }
                         } label: {
                             HStack(spacing: WanderTheme.spacing1) {
-                                Text(showsAllCategories ? "Show Fewer Categories" : "More Categories")
+                                Text(showsAllCategories ? "Show fewer categories" : "More categories")
                                     .font(AstirTypography.label)
                                 Image(systemName: showsAllCategories ? "chevron.up" : "chevron.down")
                                     .font(.system(size: 10, weight: .black))
@@ -10230,7 +10230,7 @@ private struct MapMoreFiltersPopover: View {
 
                 filterSection(
                     title: "People",
-                    detail: "Choose One Or More"
+                    detail: "Choose one or more"
                 ) {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
                         MapMoreOptionChip(
@@ -10255,7 +10255,7 @@ private struct MapMoreFiltersPopover: View {
                     }
 
                     if peopleOptions.isEmpty {
-                        Text("People You Follow Will Appear Here.")
+                        Text("People you follow will appear here.")
                             .font(AstirTypography.caption)
                             .foregroundStyle(appearance.secondaryText)
                     }
@@ -10264,7 +10264,7 @@ private struct MapMoreFiltersPopover: View {
                 if MapMoreFilterPolicy.showsStatus(for: source) {
                     filterSection(
                         title: "Status",
-                        detail: "Choose One"
+                        detail: "Choose one"
                     ) {
                         LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
                             ForEach(MapStatusFilter.allCases) { status in
@@ -10280,7 +10280,7 @@ private struct MapMoreFiltersPopover: View {
                     }
                 }
 
-                Text("Choices Combine Across Sections. If Nothing Matches, The Map Stays Empty.")
+                Text("Choices combine across sections. If nothing matches, the map stays empty.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(appearance.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -10322,10 +10322,10 @@ private struct MapMoreFiltersPopover: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("More Filters")
+                Text("More filters")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(appearance.primaryText)
-                Text("Narrow \(source.title)")
+                Text("Narrow \(source.title.lowercased())")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(appearance.secondaryText)
             }
@@ -10402,7 +10402,7 @@ private struct MapMoreOptionChip: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -10475,7 +10475,7 @@ private struct SearchResultMarker: View {
                     : MapPinSelectionMotionStyle.inactiveScale
             )
             .animation(MapPinSelectionMotionStyle.animation, value: isSelected)
-            .accessibilityLabel("Map Search Result, \(candidate.name)")
+            .accessibilityLabel("Map search result, \(candidate.name)")
     }
 
 }
@@ -11318,11 +11318,11 @@ enum MapPinAccessibility {
     static func label(outlines: [MapPinOutline], category: String, placeName: String) -> String {
         let stateSummaries = outlines.map { outline in
             if outline.ownership == .featured { return "Featured" }
-            let owner = outline.ownership == .currentUser ? "You" : "Social"
-            let primaryStatus = outline.status == .been ? CheckInCopy.pastTense : "Wanna"
+            let owner = outline.ownership == .currentUser ? "you" : "social"
+            let primaryStatus = outline.status == .been ? CheckInCopy.pastTense : "wanna"
 
             if outline.secondaryStatus == .wannaGo {
-                return "\(owner) \(primaryStatus) And Wanna"
+                return "\(owner) \(primaryStatus) and wanna"
             }
 
             return "\(owner) \(primaryStatus)"
@@ -11364,10 +11364,10 @@ enum PlaceSheetAction {
     var accessibilityLabel: String {
         switch self {
         case .add: CheckInCopy.action
-        case .reselectWant: "Check In Or Wanna"
+        case .reselectWant: "Check in or Wanna"
         case .addVisit: CheckInCopy.againAction
         case .editWant: "Edit Wanna"
-        case .choose: "Choose This Place"
+        case .choose: "Choose this place"
         case .none: ""
         }
     }
@@ -11381,7 +11381,7 @@ enum PlaceSheetAction {
         case .addVisit:
             return hasPriorCheckIn
                 ? CheckInCopy.againAction
-                : "Check In At \(placeName)"
+                : "Check in at \(placeName)"
         case .add, .reselectWant, .editWant, .choose, .none:
             return displayTitle
         }
@@ -11720,7 +11720,7 @@ struct MapPlaceSaveContext: Identifiable {
         case .sharedVisit:
             CheckInCopy.action
         case .editVisit:
-            "Update Check-In"
+            "Update check-in"
         case .editWant:
             "Update Wanna"
         }
@@ -11731,31 +11731,31 @@ struct MapPlaceSaveContext: Identifiable {
         case .editVisit:
             CheckInCopy.deleteAction
         case .editWant:
-            "Remove From Wanna"
+            "Remove from Wanna"
         case .add, .addVisit, .sharedVisit:
-            "Remove Place"
+            "Remove place"
         }
     }
 
     var removeConfirmationTitle: String {
         switch mode {
         case .editVisit:
-            "Delete Check-In?"
+            "Delete check-in?"
         case .editWant:
-            "Remove From Wanna?"
+            "Remove from Wanna?"
         case .add, .addVisit, .sharedVisit:
-            "Remove Place?"
+            "Remove place?"
         }
     }
 
     var removeConfirmationMessage: String {
         switch mode {
         case .editVisit:
-            "This Removes This Check-In And Its Photos From Your Place History."
+            "This removes this check-in and its photos from your place history."
         case .editWant:
-            "This Removes This Place From Wanna."
+            "This removes this place from Wanna."
         case .add, .addVisit, .sharedVisit:
-            "This Removes The Place From Your Map."
+            "This removes the place from your map."
         }
     }
 
@@ -12999,7 +12999,7 @@ func persistPrivateCheckInAnswers(
               $0.userID == store.currentUser.id && ($0.id == visit.userPlaceID || $0.localID == visit.userPlaceID)
           })
     else {
-        if !answers.isEmpty { completed.localDetailsWarning = "Your Check-In Saved, But Its Private Answers Couldn't Be Stored On This Device." }
+        if !answers.isEmpty { completed.localDetailsWarning = "Your check-in saved, but its private answers couldn't be stored on this device." }
         return completed
     }
     do {
@@ -13008,7 +13008,7 @@ func persistPrivateCheckInAnswers(
             userPlaceID: userPlace.localID, visitID: visit.serverID ?? visit.localID
         )
     } catch {
-        completed.localDetailsWarning = "Your Check-In Saved, But Its Private Answers Couldn't Be Stored On This Device."
+        completed.localDetailsWarning = "Your check-in saved, but its private answers couldn't be stored on this device."
     }
     return completed
 }
@@ -13458,7 +13458,7 @@ private struct MapCheckInDateSection: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("save.checkInDateDisclosure")
-                .accessibilityLabel("Check-In Date")
+                .accessibilityLabel("Check-in date")
                 .accessibilityValue(
                     "\(visitedAt.formatted(date: .long, time: .omitted)), "
                         + (presentation.isExpanded ? "Expanded" : "Collapsed")
@@ -13469,7 +13469,7 @@ private struct MapCheckInDateSection: View {
                         Divider().background(WanderTheme.borderHairline.color)
 
                         MultiDatePicker(
-                            "Check-In Date",
+                            "Check-in date",
                             selection: Binding(
                                 get: {
                                     CheckInDatePickerSelection.calendarSelection(for: visitedAt)
@@ -13846,7 +13846,7 @@ struct MapPlaceSaveEditor: View {
         } ?? false
         _errorMessage = State(
             initialValue: draft?.recoveryNotice
-                ?? (hasMissingRestoredPhotos ? "One Photo Could Not Be Restored. You Can Add It Again." : nil)
+                ?? (hasMissingRestoredPhotos ? "One photo could not be restored. You can add it again." : nil)
         )
         _saveAttemptedAt = State(initialValue: nil)
     }
@@ -14020,9 +14020,9 @@ struct MapPlaceSaveEditor: View {
                 onComplete: { _ in }
             )
         }
-        .alert(selectedStatus == .been ? "Check-In Saved" : "Wanna Saved", isPresented: $showsListSaveResult) {
+        .alert(selectedStatus == .been ? "Check-in saved" : "Wanna saved", isPresented: $showsListSaveResult) {
             if listSaveResult.pendingCount + listSaveResult.failedCount > 0 {
-                Button("Retry Lists") { retrySelectedLists() }
+                Button("Retry lists") { retrySelectedLists() }
             }
             Button("Done") { completePlaceListSave() }
         } message: {
@@ -14338,7 +14338,7 @@ struct MapPlaceSaveEditor: View {
     private var singleScreenContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if sourceContext.requiresStatusConfirmation {
-                MapSavePickerBlock(title: "What Do You Want To Do?") {
+                MapSavePickerBlock(title: "What do you want to do?") {
                     HStack(spacing: 0) {
                         checkInStatusChoice
                         wannaGoStatusChoice
@@ -14371,7 +14371,7 @@ struct MapPlaceSaveEditor: View {
     private var wannaGoStatusChoice: some View {
         if sourceContext.allowsWannaGoSelection {
             MapSaveChoiceButton(
-                title: "Wanna Go",
+                title: "Wanna go",
                 isSelected: presentedHasSelectedStatus && selectedStatus == .wannaGo
             ) {
                 selectStatus(.wannaGo)
@@ -14476,9 +14476,9 @@ struct MapPlaceSaveEditor: View {
                 .frame(width: 38, height: 38)
                 .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("Remove From Wanna")
+                    Text("Remove from Wanna")
                         .font(.system(size: 14, weight: .bold))
-                    Text("Remove Your Existing Wanna For This Place. New Wannas Will Not Be Impacted.")
+                    Text("Remove your existing Wanna for this place. New Wannas will not be impacted.")
                         .font(.system(size: 13, weight: .medium))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -14537,22 +14537,22 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var primaryActionTitle: String {
-        if completedPlaceSaveForLists != nil { return "Retry Lists" }
+        if completedPlaceSaveForLists != nil { return "Retry lists" }
         if selectedStatus == .wannaGo {
             if case .editWant = context.mode {
                 return "Update Wanna"
             }
-            return "Add To Wanna"
+            return "Add to Wanna"
         }
         return context.saveTitle
     }
 
     private var progressActionTitle: String {
-        if completedPlaceSaveForLists != nil { return "Updating Lists…" }
+        if completedPlaceSaveForLists != nil { return "Updating lists…" }
         if case .editWant = context.mode {
             return "Updating Wanna..."
         }
-        return selectedStatus == .been ? "Checking In..." : "Adding To Wanna..."
+        return selectedStatus == .been ? "Checking in..." : "Adding to Wanna..."
     }
 
     private var checkInQuestionSubtype: String? {
@@ -14582,7 +14582,7 @@ struct MapPlaceSaveEditor: View {
         )
         .disabled(!didLoadPrivateAnswers || privateAnswersOwnerID != store.currentUser.id)
         .onChange(of: context.id, initial: true) { _, _ in loadPrivateQuestionAnswersIfNeeded() }
-        .alert("Check-In Saved", isPresented: Binding(
+        .alert("Check-in saved", isPresented: Binding(
             get: { completedSaveWithWarning != nil },
             set: { if !$0, let result = completedSaveWithWarning {
                 completedSaveWithWarning = nil
@@ -14623,7 +14623,7 @@ struct MapPlaceSaveEditor: View {
             for id in customQuestionAnswers.keys { selectedAnswers[id] = [] }
             didLoadPrivateAnswers = true
         } catch {
-            errorMessage = "Your Private Answers Couldn't Be Loaded. They Are Unchanged. Try Saving Again To Retry."
+            errorMessage = "Your private answers couldn't be loaded. They are unchanged. Try saving again to retry."
         }
     }
 
@@ -14634,14 +14634,14 @@ struct MapPlaceSaveEditor: View {
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             if selectedStatus == .wannaGo {
-                Text("What Made You Save This?")
+                Text("What made you save this?")
                     .font(AstirTypography.label)
                     .foregroundStyle(astirBrandMode.secondaryText)
             }
             PersonMentionField(
                 text: $note, mentions: $noteMentions, focus: $noteFocused,
-                placeholder: selectedStatus == .wannaGo ? "Who Told You, What Caught Your Eye, When You Might Go…" : "The Good Bits, What You Ordered, Who You Were With…",
-                accessibilityLabel: selectedStatus == .wannaGo ? "What Made You Save This?" : "Check-In Note",
+                placeholder: selectedStatus == .wannaGo ? "Who told you, what caught your eye, when you might go…" : "The good bits, what you ordered, who you were with…",
+                accessibilityLabel: selectedStatus == .wannaGo ? "What made you save this?" : "Check-in note",
                 accessibilityIdentifier: "save.note", minimumLines: 3, maximumLines: 5,
                 decorateInput: { input in
                     AnyView(input
@@ -14656,7 +14656,7 @@ struct MapPlaceSaveEditor: View {
 
     private var droppedPinNameSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Name This Dropped Pin")
+            Text("Name this dropped pin")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
 
@@ -14677,7 +14677,7 @@ struct MapPlaceSaveEditor: View {
                     }
                 }
 
-            Text("This Name Belongs To Your Save. People Who Can See Your Memory Can See The Name; The Shared Map Place Is Unchanged.")
+            Text("This name belongs to your save. People who can see your memory can see the name; the shared map place is unchanged.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(astirBrandMode.secondaryText)
         }
@@ -14685,7 +14685,7 @@ struct MapPlaceSaveEditor: View {
 
     private var plannedDateSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("When Do You Wanna Go?")
+            Text("When do you wanna go?")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
 
@@ -14707,7 +14707,7 @@ struct MapPlaceSaveEditor: View {
 
                         if let plannedDate {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Planned For")
+                                Text("Planned for")
                                     .font(AstirTypography.metadata)
                                     .foregroundStyle(astirBrandMode.secondaryText)
                                 Text(WannaGoDate.displayString(for: plannedDate))
@@ -14717,7 +14717,7 @@ struct MapPlaceSaveEditor: View {
                                     .minimumScaleFactor(0.82)
                             }
                         } else {
-                            Text("Add A Date")
+                            Text("Add a date")
                                 .font(AstirTypography.control)
                                 .foregroundStyle(astirBrandMode.primaryText)
                                 .lineLimit(1)
@@ -14736,14 +14736,14 @@ struct MapPlaceSaveEditor: View {
                     .frame(minHeight: 58)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(plannedDate == nil ? "Add A Wanna Go Date" : "Change Wanna Go Date")
-                .accessibilityValue(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "No Date Selected")
+                .accessibilityLabel(plannedDate == nil ? "Add a Wanna go date" : "Change Wanna go date")
+                .accessibilityValue(plannedDate.map { WannaGoDate.displayString(for: $0) } ?? "No date selected")
 
                 if isShowingPlannedDatePicker {
                     Divider().background(astirBrandMode.border)
 
                     MultiDatePicker(
-                        "Wanna Go Date",
+                        "Wanna go date",
                         selection: Binding(
                             get: {
                                 WannaGoDate.calendarSelection(for: plannedDate)
@@ -14763,7 +14763,7 @@ struct MapPlaceSaveEditor: View {
                     .padding(.horizontal, WanderTheme.spacing2)
 
                     HStack {
-                        Label("Past Dates Are Unavailable", systemImage: "calendar.badge.exclamationmark")
+                        Label("Past dates are unavailable", systemImage: "calendar.badge.exclamationmark")
                             .font(AstirTypography.caption)
                             .foregroundStyle(astirBrandMode.secondaryText)
 
@@ -14789,7 +14789,7 @@ struct MapPlaceSaveEditor: View {
                     .stroke(astirBrandMode.border)
             )
 
-            Text("If Notifications Are On, Astir Will Remind You Three Days Before.")
+            Text("If notifications are on, Astir will remind you three days before.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -14824,11 +14824,11 @@ struct MapPlaceSaveEditor: View {
 
     private var visibilitySection: some View {
         PlaceVisibilityStealthToggle(
-            title: store.isPrivateProfile ? "Stealth Mode Locked On" : "Stealth Mode",
+            title: store.isPrivateProfile ? "Stealth mode locked on" : "Stealth mode",
             visibility: selectedVisibilityForStealthToggle,
             helperCopy: { visibility in
                 store.isPrivateProfile
-                    ? "Locked On By Private Profile. This Place Stays Hidden While Your Profile Is Private."
+                    ? "Locked on by Private Profile. This place stays hidden while your profile is private."
                     : visibility.stealthModeHelperCopy
             }
         )
@@ -14852,7 +14852,7 @@ struct MapPlaceSaveEditor: View {
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text("More Options")
+                    Text("More options")
                         .font(AstirTypography.control)
                         .foregroundStyle(astirBrandMode.primaryText)
 
@@ -14889,13 +14889,13 @@ struct MapPlaceSaveEditor: View {
             .buttonStyle(.plain)
             .disabled(isWalkthroughAutomating(.saveMoreOptions))
             .walkthroughTarget(.saveMoreOptions)
-            .accessibilityLabel(isShowingOptionalDetails ? "Hide More Options" : "Show More Options")
+            .accessibilityLabel(isShowingOptionalDetails ? "Hide more options" : "Show more options")
             .accessibilityIdentifier("save.moreOptions")
             .accessibilityValue(isShowingOptionalDetails ? "Expanded" : "Collapsed")
             .accessibilityHint(
                 walkthroughs.currentStep?.target == .saveMoreOptions
-                    ? "This Walkthrough Points Out Where Optional Tags Live."
-                    : "Optional. You Can Save Without Opening This Section."
+                    ? "This walkthrough points out where optional tags live."
+                    : "Optional. You can save without opening this section."
             )
             .id(WalkthroughTargetID.saveMoreOptions)
             .task(id: isWalkthroughTarget) {
@@ -14932,12 +14932,12 @@ struct MapPlaceSaveEditor: View {
             HStack(spacing: WanderTheme.spacing2) {
                 Image(systemName: PlaceListSymbol.systemImage)
                     .foregroundStyle(WanderTheme.pinSocial.color)
-                Text("Add To Lists")
+                Text("Add to lists")
                     .font(AstirTypography.control)
                     .foregroundStyle(astirBrandMode.primaryText)
                 Spacer(minLength: WanderTheme.spacing2)
                 if !selectedListIDs.isEmpty {
-                    Text("\(selectedListIDs.count) Selected")
+                    Text("\(selectedListIDs.count) selected")
                         .font(AstirTypography.caption)
                         .foregroundStyle(astirBrandMode.secondaryText)
                 }
@@ -14957,8 +14957,8 @@ struct MapPlaceSaveEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("save.lists")
-        .accessibilityValue("\(selectedListIDs.count) Selected")
-        .accessibilityHint("Optional. Lists Are Updated Only When You Save.")
+        .accessibilityValue("\(selectedListIDs.count) selected")
+        .accessibilityHint("Optional. Lists are updated only when you save.")
     }
 
     private var removeSaveSection: some View {
@@ -15002,11 +15002,11 @@ struct MapPlaceSaveEditor: View {
     private var placeTypeSection: some View {
         let display = WanderPlaceCategory.display(for: selectedAssignmentForSave)
         let categoryValue = selectedAssignmentForSave.primaryCategory == WanderPlaceCategory.fallbackPlace
-            ? "Choose Category"
+            ? "Choose category"
             : display.category
 
         return VStack(alignment: .leading, spacing: 0) {
-            Text("Place Type")
+            Text("Place type")
                 .font(AstirTypography.label)
                 .foregroundStyle(astirBrandMode.secondaryText)
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -15032,7 +15032,7 @@ struct MapPlaceSaveEditor: View {
                         isChoosingPlaceType = true
                     } label: {
                         PlaceTypeRow(
-                            title: "Food Type",
+                            title: "Food type",
                             value: selectedCuisine ?? "Optional",
                             isPlaceholderValue: selectedCuisine == nil
                         )
@@ -15044,7 +15044,7 @@ struct MapPlaceSaveEditor: View {
                         placeTypePickerMode = .subcategory
                         isChoosingPlaceType = true
                     } label: {
-                        PlaceTypeRow(title: "Subcategory", value: display.subcategory ?? "Choose One")
+                        PlaceTypeRow(title: "Subcategory", value: display.subcategory ?? "Choose one")
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("save.placeType.subcategory")
@@ -15086,7 +15086,7 @@ struct MapPlaceSaveEditor: View {
             return inference.reason
         }
 
-        return "Already On Your Map"
+        return "Already on your map"
     }
 
     private var recentRestaurantCuisines: [String] {
@@ -15655,7 +15655,7 @@ struct MapPlaceSaveEditor: View {
         }
         guard await waitForWalkthroughBeat(.milliseconds(650), target: target) else { return }
 
-        let demoNote = "A Peaceful Neighborhood Park With Room To Slow Down And Breathe."
+        let demoNote = "A peaceful neighborhood park with room to slow down and breathe."
         note = ""
         if reduceMotion || UIAccessibility.isVoiceOverRunning {
             note = demoNote
@@ -15694,11 +15694,11 @@ struct MapPlaceSaveEditor: View {
 
     private func walkthroughParkTag(from options: [String]) -> String? {
         let preferences = [
-            "Reset Spot",
-            "Low Effort",
-            "Good Walk",
-            "Dog Friendly",
-            "Bring Visitors",
+            "reset spot",
+            "low effort",
+            "good walk",
+            "dog friendly",
+            "bring visitors",
             "views"
         ]
         return preferences.compactMap { preferred in
@@ -15708,11 +15708,11 @@ struct MapPlaceSaveEditor: View {
 
     private func walkthroughParkOption(for block: AddQuestionBlock) -> String? {
         let preferences = [
-            "Good Walk",
-            "Reset Spot",
-            "Low Effort",
-            "Dog Friendly",
-            "Bring Visitors",
+            "good walk",
+            "reset spot",
+            "low effort",
+            "dog friendly",
+            "bring visitors",
             "views",
             "yes"
         ]
@@ -15788,18 +15788,18 @@ struct MapPlaceSaveEditor: View {
         if selectedStatus == .been {
             loadPrivateQuestionAnswersIfNeeded()
             guard didLoadPrivateAnswers, privateAnswersOwnerID == store.currentUser.id else {
-                errorMessage = "Your Private Answers Couldn't Be Loaded. They Are Unchanged. Try Saving Again To Retry."
+                errorMessage = "Your private answers couldn't be loaded. They are unchanged. Try saving again to retry."
                 return
             }
         }
         if case .editVisit(_, let visit) = context.mode,
            !store.canEditVisitAnswers(visitID: visit.id) {
-            errorMessage = "Your Saved Details Haven't Loaded. Close This Editor And Try Edit Again When Connected."
+            errorMessage = "Your saved details haven't loaded. Close this editor and try Edit again when connected."
             return
         }
         dismissKeyboard()
         guard selectedStatus != .been || visitedAt <= Date.now else {
-            errorMessage = "A Check-In Date Can’t Be In The Future."
+            errorMessage = "A check-in date can’t be in the future."
             resetWalkthroughAutoSaveForRetry()
             return
         }
@@ -15909,18 +15909,18 @@ struct MapPlaceSaveEditor: View {
                     saveAttemptedAt = nil
                     resetWalkthroughAutoSaveForRetry()
                     if context.sharedVisitInvitation != nil {
-                        errorMessage = "Could Not Add This Shared Check-In. Open The Invitation And Try Again."
+                        errorMessage = "Could not add this shared check-in. Open the invitation and try again."
                     } else {
                         errorMessage = selectedStatus == .been
-                            ? "Could Not Check In. Try Again."
-                            : "Could Not Add This To Wanna. Try Again."
+                            ? "Could not check in. Try again."
+                            : "Could not add this to Wanna. Try again."
                     }
                 } else {
                     saveAttemptedAt = nil
                     resetWalkthroughAutoSaveForRetry()
                     errorMessage = selectedStatus == .been
-                        ? "Sign In To Finish Your Check-In."
-                        : "Sign In To Add This To Wanna."
+                        ? "Sign in to finish your check-in."
+                        : "Sign in to add this to Wanna."
                 }
             }
         }
@@ -16101,7 +16101,7 @@ struct MapPlaceSaveEditor: View {
             )
             didLoadSharedVisitInvitees = true
         } catch {
-            sharedVisitInviteesError = "Could Not Load Shared Friends. Your Check-In Can Still Be Edited Without Changing Them."
+            sharedVisitInviteesError = "Could not load shared friends. Your check-in can still be edited without changing them."
         }
         isLoadingSharedVisitInvitees = false
     }
@@ -16124,7 +16124,7 @@ struct MapPlaceSaveEditor: View {
                 if removed {
                     onClose()
                 } else {
-                    errorMessage = "Could Not Remove This Place From Your Map. Try Again."
+                    errorMessage = "Could not remove this place from your map. Try again."
                 }
             }
         }
@@ -16158,7 +16158,7 @@ private struct MapSaveVisitPhotoSection: View {
 
                     Spacer()
 
-                    Text(photoCount == 0 ? "Add" : "\(photoCount) Added")
+                    Text(photoCount == 0 ? "Add" : "\(photoCount) added")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(WanderTheme.textMuted.color)
 
@@ -16175,13 +16175,13 @@ private struct MapSaveVisitPhotoSection: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("save.photos")
             .disabled(!canAddPhotos || photoCount >= MapPlaceSavePhotoAttachment.maximumCount)
-            .confirmationDialog("Add Photos To Your Check-In", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+            .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                 if UIImagePickerController.isSourceTypeAvailable(.camera) {
                     Button("Take Photo") {
                         isShowingCamera = true
                     }
                 }
-                Button("Choose From Library") {
+                Button("Choose from Library") {
                     isShowingPhotoMenu = false
                     isShowingPhotoPicker = true
                 }
@@ -16196,7 +16196,7 @@ private struct MapSaveVisitPhotoSection: View {
                                 photo: PlaceActivityPhoto(metadata: photo, entryID: photo.visitID),
                                 size: 82
                             )
-                            .accessibilityLabel("Existing Check-In Photo")
+                            .accessibilityLabel("Existing check-in photo")
                         }
                         ForEach(Array(photos.enumerated()), id: \.element.id) { index, attachment in
                             ZStack(alignment: .topTrailing) {
@@ -16219,7 +16219,7 @@ private struct MapSaveVisitPhotoSection: View {
                                 }
                                 .buttonStyle(.plain)
                                 .padding(5)
-                                .accessibilityLabel("Remove Photo")
+                                .accessibilityLabel("Remove photo")
                             }
                         }
                     }
@@ -16229,7 +16229,7 @@ private struct MapSaveVisitPhotoSection: View {
             }
 
             if !canAddPhotos {
-                Text("Photos Can Be Added After You Check In.")
+                Text("Photos can be added after you check in.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -16256,7 +16256,7 @@ private struct MapSaveVisitPhotoSection: View {
                 if let attachment = MapPlaceSavePhotoAttachment.make(image: image) {
                     appendIfWithinLimits(attachment)
                 } else {
-                    photoError = "That Photo Is Too Large Or Could Not Be Prepared."
+                    photoError = "That photo is too large or could not be prepared."
                 }
                 isShowingPhotoMenu = false
             }
@@ -16301,7 +16301,7 @@ private struct MapSaveVisitPhotoSection: View {
                 }
             } catch {
                 await MainActor.run {
-                    photoError = "Could Not Use One Of Those Photos."
+                    photoError = "Could not use one of those photos."
                 }
             }
         }
@@ -16318,12 +16318,12 @@ private struct MapSaveVisitPhotoSection: View {
 
     private func appendIfWithinLimits(_ attachment: MapPlaceSavePhotoAttachment) {
         guard photoCount < MapPlaceSavePhotoAttachment.maximumCount else {
-            photoError = "A Check-In Can Have Up To 10 Photos."
+            photoError = "A check-in can have up to 10 photos."
             return
         }
         guard existingPhotos.reduce(0, { $0 + ($1.byteSize ?? 0) })
             + photos.reduce(0, { $0 + $1.byteSize }) + attachment.byteSize <= MapPlaceSavePhotoAttachment.maximumTotalBytes else {
-            photoError = "Those Photos Are Over The 75 MB Check-In Limit."
+            photoError = "Those photos are over the 75 MB check-in limit."
             return
         }
         photoError = nil
@@ -16374,7 +16374,7 @@ private struct MapSaveChoiceButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -16531,7 +16531,7 @@ struct PlaceTypePickerSheet: View {
     }
 
     private var selectedCategoryTitle: String {
-        AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory))
+        AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: selectedPrimaryCategory))
     }
 
     private var subcategoryFilterTitles: [String] {
@@ -16631,7 +16631,7 @@ struct PlaceTypePickerSheet: View {
                selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
                 PlaceTypeSelectionFooter(
                     label: "TYPE",
-                    value: selectedAssignment.subcategory ?? "Choose A Type"
+                    value: selectedAssignment.subcategory ?? "Choose a type"
                 ) {
                     dismiss()
                 }
@@ -16648,12 +16648,12 @@ struct PlaceTypePickerSheet: View {
 
     private var categoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            CategoryPickerHeader(title: "Choose Category", subtitle: "\(WanderPlaceCategory.editableCategories.count) Primary Categories")
+            CategoryPickerHeader(title: "Choose category", subtitle: "\(WanderPlaceCategory.editableCategories.count) primary categories")
 
-            CategoryPickerSearchField(placeholder: "Search Primary Categories", text: $query)
+            CategoryPickerSearchField(placeholder: "Search primary categories", text: $query)
 
             if filteredCategories.isEmpty {
-                CategoryPickerEmptyState(title: "No Category Found", message: "Try Restaurant, Trail, Gym, Hotel, Shop, Or Transit.")
+                CategoryPickerEmptyState(title: "No category found", message: "Try restaurant, trail, gym, hotel, shop, or transit.")
             } else {
                 LazyVGrid(
                     columns: [
@@ -16678,16 +16678,16 @@ struct PlaceTypePickerSheet: View {
     private var subcategoryPickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "Explore Types",
-                subtitle: "Pick The Closest Match. You Can Change It Anytime."
+                title: "Explore types",
+                subtitle: "Pick the closest match. You can change it anytime."
             )
 
             selectedCategoryPills
 
-            CategoryPickerSearchField(placeholder: "Search Types", text: $query)
+            CategoryPickerSearchField(placeholder: "Search types", text: $query)
 
             if !hasEditableSelection {
-                CategoryPickerEmptyState(title: "Choose A Category First", message: "Pick One Of The 14 Primary Categories, Then Choose Its Type.")
+                CategoryPickerEmptyState(title: "Choose a category first", message: "Pick one of the 14 primary categories, then choose its type.")
             } else {
                 SubcategoryAtlasFilters(
                     titles: subcategoryFilterTitles,
@@ -16699,7 +16699,7 @@ struct PlaceTypePickerSheet: View {
 
             if hasEditableSelection, filteredSubcategoryOptions.isEmpty {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    CategoryPickerEmptyState(title: "No Matching Type", message: "Try A Broader Search, Or Add Your Custom Type Below.")
+                    CategoryPickerEmptyState(title: "No matching type", message: "Try a broader search, or add your custom type below.")
                     customSubcategoryControl
                 }
             } else if hasEditableSelection {
@@ -16729,12 +16729,12 @@ struct PlaceTypePickerSheet: View {
     private var cuisinePickerContent: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             CategoryPickerHeader(
-                title: "Explore Food Types",
-                subtitle: "We’ll Start With Our Best Guess. Change It Only If We Missed."
+                title: "Explore food types",
+                subtitle: "We’ll start with our best guess. Change it only if we missed."
             )
 
             if selectedPrimaryCategory != WanderPlaceCategory.restaurantsFood {
-                CategoryPickerEmptyState(title: "Choose Restaurants & Food First", message: "Food Type Only Applies To Restaurants And Food Places.")
+                CategoryPickerEmptyState(title: "Choose Restaurants & Food first", message: "Food type only applies to restaurants and food places.")
             } else {
                 selectedCategoryPills
 
@@ -16743,14 +16743,14 @@ struct PlaceTypePickerSheet: View {
                     RestaurantCuisineSuggestionCard(
                         placeName: placeName,
                         cuisine: suggestedCuisine,
-                        reason: suggestionReason ?? "Best Match From The Place Details",
+                        reason: suggestionReason ?? "Best match from the place details",
                         isSelected: selectedCuisine?.caseInsensitiveCompare(suggestedCuisine) == .orderedSame
                     ) {
                         selectCuisine(suggestedCuisine)
                     }
                 }
 
-                CategoryPickerSearchField(placeholder: "Search Food Types", text: $query)
+                CategoryPickerSearchField(placeholder: "Search food types", text: $query)
 
                 if !recentCuisines.isEmpty {
                     RestaurantCuisineRecentsStrip(
@@ -16768,8 +16768,8 @@ struct PlaceTypePickerSheet: View {
 
                 if filteredCuisineOptions.isEmpty {
                     CategoryPickerEmptyState(
-                        title: "No Matching Food Type",
-                        message: "Try Thai, Mexican, Korean BBQ, Or South American."
+                        title: "No matching food type",
+                        message: "Try Thai, Mexican, Korean BBQ, or South American."
                     )
                 } else {
                     LazyVGrid(
@@ -16824,7 +16824,7 @@ struct PlaceTypePickerSheet: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "xmark")
                         .font(.system(size: 12, weight: .black))
-                    Text("No Food Type")
+                    Text("No food type")
                         .font(AstirTypography.control)
                 }
                 .padding(.horizontal, WanderTheme.spacing3)
@@ -16838,7 +16838,7 @@ struct PlaceTypePickerSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Clear Food Type")
+            .accessibilityLabel("Clear food type")
         }
     }
 
@@ -16868,7 +16868,7 @@ struct PlaceTypePickerSheet: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Use Custom Subcategory \(customSearchSubcategory)")
+            .accessibilityLabel("Use custom subcategory \(customSearchSubcategory)")
         }
     }
 
@@ -17012,8 +17012,8 @@ private struct RestaurantCuisineSuggestionCard: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Best Food Type Guess For \(placeName): \(cuisine)")
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityLabel("Best food type guess for \(placeName): \(cuisine)")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint(reason)
     }
 }
@@ -17075,7 +17075,7 @@ private struct RestaurantCuisineCompactChoice: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(cuisine)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 }
 
@@ -17119,8 +17119,8 @@ private struct RestaurantCuisineRegionFilters: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(filter.id) Food Types")
-                        .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not Selected")
+                        .accessibilityLabel("\(filter.id) food types")
+                        .accessibilityValue(selectedRegion == filter.id ? "Selected" : "Not selected")
                     }
                 }
             }
@@ -17176,7 +17176,7 @@ private struct RestaurantCuisineAtlasTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(cuisine)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 }
 
@@ -17187,7 +17187,7 @@ private struct RestaurantCuisineSelectionFooter: View {
     var body: some View {
         PlaceTypeSelectionFooter(
             label: "FOOD TYPE",
-            value: cuisine ?? "No Food Type",
+            value: cuisine ?? "No food type",
             onDone: onDone
         )
     }
@@ -17276,8 +17276,8 @@ private struct SubcategoryAtlasFilters: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("\(title) Types")
-                        .accessibilityValue(selectedTitle == title ? "Selected" : "Not Selected")
+                        .accessibilityLabel("\(title) types")
+                        .accessibilityValue(selectedTitle == title ? "Selected" : "Not selected")
                     }
                 }
             }
@@ -17334,7 +17334,7 @@ private struct PlaceTypeAtlasTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(subcategory)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 }
 
@@ -17396,7 +17396,7 @@ struct PrimaryCategoryPickerTile: View {
 
     private var optionCountLabel: String {
         let count = WanderPlaceCategory.subcategorySuggestions(for: category).count
-        let noun = category == WanderPlaceCategory.restaurantsFood ? "Food Types" : "types"
+        let noun = category == WanderPlaceCategory.restaurantsFood ? "food types" : "types"
         return "\(count) \(noun)"
     }
 
@@ -17419,14 +17419,14 @@ struct PrimaryCategoryPickerTile: View {
                     }
                 }
 
-                Text(AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category)))
+                Text(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)))
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
                     .frame(height: 44, alignment: .topLeading)
 
-                Text(AppCopy.capitalizingWords(CategoryPickerVisuals.tileDetail(for: category)))
+                Text(AppCopy.capitalizingInitial(CategoryPickerVisuals.tileDetail(for: category)))
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textMuted.color)
                     .lineLimit(2)
@@ -17447,7 +17447,7 @@ struct PrimaryCategoryPickerTile: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category))), \(optionCountLabel)")
+        .accessibilityLabel("\(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category))), \(optionCountLabel)")
     }
 }
 
@@ -17506,7 +17506,7 @@ struct SubcategoryGroupSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text(AppCopy.capitalizingWords(group.title))
+            Text(AppCopy.capitalizingInitial(group.title))
                 .font(AstirTypography.cardTitle)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -17617,33 +17617,33 @@ private enum CategoryPickerVisuals {
     static func tileDetail(for category: String) -> String {
         switch category {
         case WanderPlaceCategory.restaurantsFood:
-            "Restaurants, Food Types, Quick Bites"
+            "Restaurants, food types, quick bites"
         case WanderPlaceCategory.coffeeTeaSweets:
-            "Coffee, Tea, Bakeries"
+            "Coffee, tea, bakeries"
         case WanderPlaceCategory.barsNightlife:
-            "Bars, Lounges, Clubs"
+            "Bars, lounges, clubs"
         case WanderPlaceCategory.outdoorsNature:
-            "Parks, Trails, Water"
+            "Parks, trails, water"
         case WanderPlaceCategory.thingsToDo:
-            "Attractions, Arts, Venues"
+            "Attractions, arts, venues"
         case WanderPlaceCategory.shopping:
-            "Stores, Markets, Supplies"
+            "Stores, markets, supplies"
         case WanderPlaceCategory.wellnessFitness:
-            "Health, Beauty, Fitness"
+            "Health, beauty, fitness"
         case WanderPlaceCategory.stays:
-            "Hotels, Rentals, Camping"
+            "Hotels, rentals, camping"
         case WanderPlaceCategory.servicesErrands:
-            "Salons, Repairs, Pet Care"
+            "Salons, repairs, pet care"
         case WanderPlaceCategory.travelTransit:
-            "Airports, Stations, Parking"
+            "Airports, stations, parking"
         case WanderPlaceCategory.workEducation:
-            "Offices, Schools, Libraries"
+            "Offices, schools, libraries"
         case WanderPlaceCategory.civicFaith:
-            "Government, Worship, Safety"
+            "Government, worship, safety"
         case WanderPlaceCategory.areasAddresses:
-            "Cities, Addresses, Regions"
+            "Cities, addresses, regions"
         case WanderPlaceCategory.facilitiesOther:
-            "Restrooms, Facilities, Unknown"
+            "Restrooms, facilities, unknown"
         default:
             WanderPlaceCategory.categoryDetail(for: category)
         }
@@ -17751,7 +17751,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(AppCopy.capitalizingWords(option))
+                Text(AppCopy.capitalizingInitial(option))
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.center)
@@ -17765,7 +17765,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                Text(block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingWords(option) : option)
+                Text(block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingInitial(option) : option)
                     .font(AstirTypography.label)
                     .foregroundStyle(WanderTheme.textInk.color)
                     .multilineTextAlignment(.leading)
@@ -17783,11 +17783,11 @@ private struct MapSaveQuestionOptions: View {
 
     private func accessibilityLabel(for option: String, isSelected: Bool) -> String {
         if block.kind == .multiTag {
-            let title = block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingWords(option) : option
+            let title = block.key.hasPrefix(PlaceCheckInQuestionCatalog.keyPrefix) ? AppCopy.capitalizingInitial(option) : option
             return "\(isSelected ? "Remove" : "Add") \(title)"
         }
-        let title = AppCopy.capitalizingWords(option)
-        return isSelected ? "\(title), Selected" : title
+        let title = AppCopy.capitalizingInitial(option)
+        return isSelected ? "\(title), selected" : title
     }
 
     @ViewBuilder
@@ -17798,7 +17798,7 @@ private struct MapSaveQuestionOptions: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                TextField("Add Your Own", text: $customTagText)
+                TextField("Add your own", text: $customTagText)
                     .textFieldStyle(.plain)
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -17814,7 +17814,7 @@ private struct MapSaveQuestionOptions: View {
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Save Custom Option")
+                .accessibilityLabel("Save custom option")
             }
             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             .padding(.horizontal, WanderTheme.spacing3)
@@ -17834,7 +17834,7 @@ private struct MapSaveQuestionOptions: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .black))
-                    Text("Add Your Own")
+                    Text("Add your own")
                         .font(AstirTypography.label)
                     Spacer()
                 }
@@ -17852,7 +17852,7 @@ private struct MapSaveQuestionOptions: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add Your Own Option")
+            .accessibilityLabel("Add your own option")
         }
     }
 
@@ -17962,7 +17962,7 @@ private struct MapSaveUnifiedTagsSection: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option.title) Tag")
+        .accessibilityLabel("\(isSelected ? "Remove" : "Add") \(option.title) tag")
         .accessibilityIdentifier(isSelected ? "save.tags.selected" : "save.tags.suggestion")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -17975,7 +17975,7 @@ private struct MapSaveUnifiedTagsSection: View {
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(WanderTheme.terracotta.color)
 
-                TextField("Add Your Own Tag", text: $customTagText)
+                TextField("Add your own tag", text: $customTagText)
                     .textFieldStyle(.plain)
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(WanderTheme.textInk.color)
@@ -17991,7 +17991,7 @@ private struct MapSaveUnifiedTagsSection: View {
                         .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Save Custom Tag")
+                .accessibilityLabel("Save custom tag")
             }
             .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
             .padding(.horizontal, WanderTheme.spacing3)
@@ -18011,7 +18011,7 @@ private struct MapSaveUnifiedTagsSection: View {
                 HStack(spacing: WanderTheme.spacing2) {
                     Image(systemName: "plus")
                         .font(.system(size: 13, weight: .black))
-                    Text("Add Your Own")
+                    Text("Add your own")
                         .font(AstirTypography.label)
                     Spacer()
                 }
@@ -18029,7 +18029,7 @@ private struct MapSaveUnifiedTagsSection: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add Your Own Tag")
+            .accessibilityLabel("Add your own tag")
         }
     }
 
@@ -18177,7 +18177,7 @@ struct PlaceSheet: View {
                 .frame(width: 42, height: 5)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, WanderTheme.spacing1)
-                .accessibilityLabel(isExpanded ? "Place Details Expanded" : "Swipe Up For Place Details")
+                .accessibilityLabel(isExpanded ? "Place details expanded" : "Swipe up for place details")
 
             if isExpanded {
                 ScrollView(showsIndicators: false) {
@@ -18338,7 +18338,7 @@ struct PlaceSheet: View {
                     .foregroundStyle(WanderTheme.textInk.color)
                     .clipShape(Circle())
             }
-            .accessibilityLabel("Share Place")
+            .accessibilityLabel("Share place")
         }
     }
 
@@ -18382,7 +18382,7 @@ struct PlaceSheet: View {
 
     private var whyItFitsSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            sectionTitle("Why It Fits")
+            sectionTitle("Why it fits")
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                 ForEach(presentation.whyItFits, id: \.self) { reason in
                     HStack(alignment: .top, spacing: WanderTheme.spacing2) {
@@ -18443,7 +18443,7 @@ struct PlaceSheet: View {
 
     private var selectedNoteLine: String? {
         guard let selectedNote else { return nil }
-        let ownerLabel = place.noteOwnerID == currentUserID ? "Your Note" : "\(place.noteOwnerName ?? "Their") Note"
+        let ownerLabel = place.noteOwnerID == currentUserID ? "Your note" : "\(place.noteOwnerName ?? "Their") note"
         return "\(ownerLabel): \"\(selectedNote)\""
     }
 
@@ -18720,7 +18720,7 @@ struct PlaceActivityEntry: Identifiable {
     }
 
     var editAccessibilityLabel: String {
-        status == .wannaGo ? "Edit Want" : CheckInCopy.editAction
+        status == .wannaGo ? "Edit want" : CheckInCopy.editAction
     }
 
     var status: PlaceStatus {
@@ -18824,7 +18824,7 @@ struct PlaceActivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Check-In History")
+            Text("Check-in history")
                 .font(AstirTypography.sectionTitle)
                 .textCase(.uppercase)
                 .foregroundStyle(visualStyle == .astir ? astirBrandMode.primaryText : WanderTheme.textMuted.color)
@@ -18833,7 +18833,7 @@ struct PlaceActivitySection: View {
                 .frame(maxWidth: .infinity)
 
             if isPreparingEdit {
-                ProgressView("Loading Check-In…")
+                ProgressView("Loading check-in…")
                     .font(AstirTypography.bodySmall)
             }
 
@@ -18876,13 +18876,13 @@ struct PlaceActivitySection: View {
                 await removeActivityEdit(context)
             }
         }
-        .alert("Couldn't Load Check-In", isPresented: Binding(
+        .alert("Couldn't load check-in", isPresented: Binding(
             get: { editLoadError != nil },
             set: { if !$0 { editLoadError = nil } }
         )) {
             Button("OK", role: .cancel) { editLoadError = nil }
         } message: {
-            Text(editLoadError ?? "Connect And Try Edit Again.")
+            Text(editLoadError ?? "Connect and try Edit again.")
         }
         .task(id: companionVisitIDs) {
             guard auth.isSignedIn else { return }
@@ -19042,9 +19042,9 @@ struct PlaceActivitySection: View {
     private var emptyStateText: String {
         switch filter {
         case .all:
-            "No Activity Yet."
+            "No activity yet."
         case .myVisits:
-            "No Check-Ins Yet."
+            "No check-ins yet."
         }
     }
 
@@ -19080,14 +19080,14 @@ struct PlaceActivitySection: View {
                 guard auth.isSignedIn,
                       await store.refreshRemoteCurrentUserCalendarData(backend: backend),
                       store.currentUser.id == requestedOwnerID else {
-                    editLoadError = "Your Saved Details Couldn't Be Loaded. Connect And Try Edit Again."
+                    editLoadError = "Your saved details couldn't be loaded. Connect and try Edit again."
                     return
                 }
             }
             guard let hydrated = store.visits(for: visit.userPlaceID).first(where: {
                 $0.id == visit.id || $0.localID == visit.localID || ($0.serverID != nil && $0.serverID == visit.serverID)
             }), store.canEditVisitAnswers(visitID: hydrated.id) else {
-                editLoadError = "This Check-In Couldn't Be Loaded. Connect And Try Edit Again."
+                editLoadError = "This check-in couldn't be loaded. Connect and try Edit again."
                 return
             }
             context = MapPlaceSaveContext.editVisit(hydrated, visiblePlace: entry.summary.visiblePlace)
@@ -19426,7 +19426,7 @@ private struct PlaceActivityCard: View {
                     storageBucket: $0.metadata.storageBucket,
                     storagePath: $0.metadata.storagePath,
                     isPendingLocalCapture: !PlacePhoto(localVisitPhoto: $0.metadata).requiresAccessCheck,
-                    accessibilityLabel: "Photo From \(entry.displayName)'s Activity At \(visiblePlace.place.canonicalName)"
+                    accessibilityLabel: "Photo from \(entry.displayName)'s activity at \(visiblePlace.place.canonicalName)"
                 )
             }
         )
@@ -19469,7 +19469,7 @@ private struct PlaceActivityCard: View {
             kind: .userPlace,
             subjectID: serverID,
             reportedUserID: entry.owner.id,
-            context: "Report \(entry.owner.displayName)’s Place Memory."
+            context: "Report \(entry.owner.displayName)’s place memory."
         )
     }
 
@@ -19487,7 +19487,7 @@ private struct PlaceActivityCard: View {
         if entry.isCurrentUser {
             activityIdentityLabel
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel(entry.status == .been ? "Your Check-In" : "Your Wanna")
+                .accessibilityLabel(entry.status == .been ? "Your check-in" : "Your Wanna")
         } else {
             Button {
                 selectedProfileID = entry.owner.id
@@ -19495,7 +19495,7 @@ private struct PlaceActivityCard: View {
                 activityIdentityLabel
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open \(entry.owner.displayName)'s Profile")
+            .accessibilityLabel("Open \(entry.owner.displayName)'s profile")
         }
     }
 
@@ -19547,7 +19547,7 @@ private struct PlaceActivityCard: View {
                             VisitPhotoThumbnail(photo: photo, size: 76)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Open Check-In Photo By \(entry.owner.displayName)")
+                        .accessibilityLabel("Open check-in photo by \(entry.owner.displayName)")
                         .accessibilityIdentifier("place-activity.photo.\(entry.id).\(photo.id)")
                     }
                 }
@@ -19562,7 +19562,7 @@ private struct PlaceActivityCard: View {
                 Button {
                     isShowingPhotoMenu = true
                 } label: {
-                    Label("Add Photo", systemImage: "photo.badge.plus")
+                    Label("Add photo", systemImage: "photo.badge.plus")
                         .font(AstirTypography.label)
                         .foregroundStyle(WanderTheme.pinSocial.color)
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -19574,13 +19574,13 @@ private struct PlaceActivityCard: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .confirmationDialog("Add Photos To Your Check-In", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
+                .confirmationDialog("Add photos to your check-in", isPresented: $isShowingPhotoMenu, titleVisibility: .visible) {
                     if UIImagePickerController.isSourceTypeAvailable(.camera) {
                         Button("Take Photo") {
                             isShowingCamera = true
                         }
                     }
-                    Button("Choose From Library") {
+                    Button("Choose from Library") {
                         isShowingPhotoMenu = false
                         isShowingPhotoPicker = true
                     }
@@ -19593,7 +19593,7 @@ private struct PlaceActivityCard: View {
     private func addPhoto(_ attachment: MapPlaceSavePhotoAttachment) async {
         guard let visit = entry.visit else { return }
         guard let data = attachment.data() else {
-            photoError = "Could Not Read That Photo."
+            photoError = "Could not read that photo."
             return
         }
         photoError = nil
@@ -19627,7 +19627,7 @@ private struct PlaceActivityCard: View {
                 }
             } catch {
                 await MainActor.run {
-                    photoError = "Could Not Use One Of Those Photos."
+                    photoError = "Could not use one of those photos."
                 }
             }
         }
@@ -19670,7 +19670,7 @@ private struct VisitPhotoThumbnail: View {
         ZStack {
             PlaceProfilePhotoImage(
                 photo: PlacePhoto(localVisitPhoto: photo.metadata),
-                canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit Photo", variant: .listThumbnail
+                canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit photo", variant: .listThumbnail
             )
         }
         .frame(width: size, height: size)
@@ -19795,7 +19795,7 @@ private struct PlaceActivityPhotoViewer: View {
             kind: .visitPhoto,
             subjectID: photoID,
             reportedUserID: selectedEntry.owner.id,
-            context: "Report \(selectedEntry.owner.displayName)’s Photo."
+            context: "Report \(selectedEntry.owner.displayName)’s photo."
         )
     }
 
@@ -19835,7 +19835,7 @@ private struct VisitPhotoFullScreenImage: View {
     var body: some View {
         PlaceProfilePhotoImage(
             photo: PlacePhoto(localVisitPhoto: photo.metadata),
-            canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit Photo",
+            canonicalPlaceKey: "visit-photo:\(photo.id)", placeName: "Visit photo",
             variant: .fullscreen, contentMode: .fit
         )
     }
@@ -20115,10 +20115,10 @@ private struct SocialProofRow: View {
         let name = first.id == currentUserID ? "You" : first.displayName
         guard savers.count > 1 else {
             return first.id == currentUserID
-                ? "You Have This On Your Map"
-                : "\(name) Has This On Their Map"
+                ? "You have this on your map"
+                : "\(name) has this on their map"
         }
-        return "\(name) +\(savers.count - 1) Others Have This On Their Maps"
+        return "\(name) +\(savers.count - 1) others have this on their maps"
     }
 }
 
@@ -20250,7 +20250,7 @@ private struct StatusBadge: View {
             Rectangle()
                 .fill(astirBrandMode.accent)
                 .frame(width: 2, height: 18)
-            Text(status == .been ? CheckInCopy.noun : "Wanna")
+            Text(status == .been ? CheckInCopy.title : "Wanna")
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
                 .foregroundStyle(astirBrandMode.accentText)

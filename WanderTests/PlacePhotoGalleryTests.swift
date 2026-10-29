@@ -191,7 +191,7 @@ final class PlacePhotoGalleryTests: XCTestCase {
                 selectedID: items[99].id,
                 items: items
             ),
-            "100 Of 100"
+            "100 of 100"
         )
     }
 

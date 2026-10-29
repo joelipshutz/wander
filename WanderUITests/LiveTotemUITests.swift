@@ -55,13 +55,13 @@ final class LiveTotemUITests: XCTestCase {
         app.buttons["live.filter.activity"].tap()
         visibleButton("All", in: app).tap()
         app.buttons["live.filter.time"].tap()
-        visibleButton("Past 24 Hours", in: app).tap()
+        visibleButton("Past 24 hours", in: app).tap()
         app.buttons["live.applyFilters"].tap()
         collapseDrawer(app)
         let coffee = app.buttons["live.pin.totem_coffee"]
         wait(coffee)
         settle(coffee)
-        XCTAssertTrue(coffee.label.contains("On A List"))
+        XCTAssertTrue(coffee.label.contains("On a list"))
         coffee.tap()
         wait(app.buttons["live.placePreview.close"])
         capture("16-old-membership-recent-filter")
@@ -75,7 +75,7 @@ final class LiveTotemUITests: XCTestCase {
 
         app.buttons["Filters"].tap()
         app.buttons["live.filter.time"].tap()
-        visibleButton("All Time", in: app).tap()
+        visibleButton("All time", in: app).tap()
         app.buttons["live.applyFilters"].tap()
         collapseDrawer(app)
         let featured = app.buttons["live.pin.totem_featured"]
@@ -86,11 +86,11 @@ final class LiveTotemUITests: XCTestCase {
         wait(app.buttons["live.placePreview.add"])
         app.buttons["live.placePreview.add"].tap()
         wait(app.buttons["save.submit"])
-        app.scrollViews["save.editorScroll"].buttons["Wanna Go"].tap()
+        app.scrollViews["save.editorScroll"].buttons["Wanna go"].tap()
         capture("19-save-featured-as-wanna")
         app.buttons["save.submit"].tap()
         XCTAssertTrue(app.buttons["save.submit"].waitForNonExistence(timeout: 15))
-        let celebration = app.buttons["Got It"]
+        let celebration = app.buttons["Got it"]
         if celebration.waitForExistence(timeout: 3) {
             wait(celebration)
             celebration.tap()

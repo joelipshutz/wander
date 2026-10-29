@@ -51,7 +51,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     @State private var isCommitting = false
     @State private var commitTask: Task<Void, Never>?
     @State private var showsCommitError = false
-    @State private var commitErrorMessage = "A Place’s Details Could Not Be Saved. Review Its Details And Try Again. Any Places Already Saved Are Safe."
+    @State private var commitErrorMessage = "A place’s details could not be saved. Review its details and try again. Any places already saved are safe."
     @State private var didExpandInitialDetails = false
     @State private var rescueItem: PlaceImportItem?
     @State private var listRequest: ImportListSelectionRequest?
@@ -72,19 +72,19 @@ struct PlaceImportCanonicalReviewScreen: View {
                     processingContent
                 } else if displayItems.isEmpty && recoveryItems.isEmpty && scopedBatches.allSatisfy({ $0.receipt == nil }) {
                     ContentUnavailableView(
-                        "No Places Matched",
+                        "No places matched",
                         systemImage: "mappin.slash",
-                        description: Text("Nothing From This Import Is Ready To Add.")
+                        description: Text("Nothing from this import is ready to add.")
                     )
                 } else {
                     if !displayItems.isEmpty { reviewHeader }
                     if !scopedBatches.contains(where: { store.importNeedsNotificationChoice($0) }) {
-                        Text("This Import Keeps Its First Notification Choice. Later Selections Won't Notify.")
+                        Text("This import keeps its first notification choice. Later selections won't notify.")
                             .font(.footnote).foregroundStyle(.secondary)
                             .accessibilityIdentifier("import.notificationsConsumed")
                     }
                     if !readyItems.isEmpty {
-                        importSection("Ready To Add", showsBulkControls: true) {
+                        importSection("Ready to add", showsBulkControls: true) {
                             ForEach(readyItems) { item in
                                 resolvedPlaceCard(item)
                             }
@@ -92,7 +92,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     }
 
                     if !possibleMatchItems.isEmpty {
-                        importSection("Possible Matches", showsBulkControls: readyItems.isEmpty) {
+                        importSection("Possible matches", showsBulkControls: readyItems.isEmpty) {
                             ForEach(possibleMatchItems) { item in
                                 possibleMatchesCard(item)
                             }
@@ -147,23 +147,23 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .astirScreen()
-        .navigationTitle("Import Report")
+        .navigationTitle("Import report")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCommitting)
         .interactiveDismissDisabled(isCommitting)
-        .alert("Silence Notifications For This Import?", isPresented: $showsNotificationChoice) {
-            Button("Yes, Save Silently") { commit(itemIDs: notificationChoiceItemIDs, silent: true) }
+        .alert("Silence notifications for this import?", isPresented: $showsNotificationChoice) {
+            Button("Yes, save silently") { commit(itemIDs: notificationChoiceItemIDs, silent: true) }
                 .keyboardShortcut(.defaultAction)
-            Button("No, Notify Followers") { commit(itemIDs: notificationChoiceItemIDs, silent: false) }
+            Button("No, notify followers") { commit(itemIDs: notificationChoiceItemIDs, silent: false) }
             Button("Cancel", role: .cancel) { notificationChoiceItemIDs = [] }
         } message: {
-            Text("Visibility Stays The Same. Followers Can Be Notified Once About The Check-Ins You Save Now. Later Saves Won't Notify Again. People You Invite Still Receive Invitations.")
+            Text("Visibility stays the same. Followers can be notified once about the check-ins you save now. Later saves won't notify again. People you invite still receive invitations.")
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if privateDetailsWarningCount > 0 {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text("Check-Ins Saved")
+                        Text("Check-ins saved")
                             .font(AstirTypography.control)
                         Spacer(minLength: WanderTheme.spacing2)
                         Button("Dismiss") { privateDetailsWarningCount = 0 }
@@ -171,8 +171,8 @@ struct PlaceImportCanonicalReviewScreen: View {
                             .frame(minHeight: WanderTheme.tapMinimum)
                     }
                     Text(privateDetailsWarningCount == 1
-                         ? "One Check-In’s Private Answers Couldn’t Be Stored On This Device. The Check-In Was Saved."
-                         : "Private Answers For \(privateDetailsWarningCount) Check-Ins Couldn’t Be Stored On This Device. The Check-Ins Were Saved.")
+                         ? "One check-in’s private answers couldn’t be stored on this device. The check-in was saved."
+                         : "Private answers for \(privateDetailsWarningCount) check-ins couldn’t be stored on this device. The check-ins were saved.")
                         .font(AstirTypography.bodySmall)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -220,15 +220,15 @@ struct PlaceImportCanonicalReviewScreen: View {
                     .background(brandMode.background)
             }
         }
-        .alert("Couldn’t Add Places", isPresented: $showsCommitError) {
+        .alert("Couldn’t add places", isPresented: $showsCommitError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(commitErrorMessage)
         }
-        .alert("Check-Ins Saved", isPresented: $showsSavedDetailsWarning) {
+        .alert("Check-ins saved", isPresented: $showsSavedDetailsWarning) {
             Button("Done") { (finishPlaceImport ?? onDone)() }
         } message: {
-            Text("Your Check-Ins Were Saved, But Some Private Answers Couldn’t Be Stored On This Device.")
+            Text("Your check-ins were saved, but some private answers couldn’t be stored on this device.")
         }
         .task {
             importStore.resumePendingImports()
@@ -267,7 +267,7 @@ struct PlaceImportCanonicalReviewScreen: View {
     }
 
     private var reviewHeader: some View {
-        Text("\(displayItems.count) \(displayItems.count == 1 ? "Place" : "Places") Matched And Ready")
+        Text("\(displayItems.count) \(displayItems.count == 1 ? "place" : "places") matched and ready")
             .font(AstirTypography.sheetTitle)
             .foregroundStyle(brandMode.primaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -275,7 +275,7 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private var processingContent: some View {
         VStack(spacing: WanderTheme.spacing4) {
-            Text("Matching Your Places")
+            Text("Matching your places")
                 .font(AstirTypography.sheetTitle)
             ImportMatchingProgressBar(progress: matchingProgress, reduceMotion: reduceMotion)
                 .frame(height: 20)
@@ -298,7 +298,7 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private var applyToAllControls: some View {
         VStack(spacing: WanderTheme.spacing1) {
-            Text("Apply To All")
+            Text("Apply to all")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -388,11 +388,11 @@ struct PlaceImportCanonicalReviewScreen: View {
             }
         case .partial:
             VStack(spacing: WanderTheme.spacing3) {
-                Text("We Weren't Able To Resolve All Places")
+                Text("We weren't able to resolve all places")
                     .font(AstirTypography.sheetTitle)
                     .foregroundStyle(brandMode.primaryText)
                     .multilineTextAlignment(.center)
-                Text("\(coverage.matchedCount) Of \(coverage.totalCount) Places Have Matches. You Can Still Save Them.")
+                Text("\(coverage.matchedCount) of \(coverage.totalCount) places have matches. You can still save them.")
                     .font(AstirTypography.body)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
@@ -403,14 +403,14 @@ struct PlaceImportCanonicalReviewScreen: View {
                         UIPasteboard.general.string = sourceURL
                         restartPlaceImport()
                     } label: {
-                        Label("Try Again", systemImage: "arrow.clockwise")
+                        Label("Try again", systemImage: "arrow.clockwise")
                             .font(AstirTypography.control)
                             .frame(maxWidth: .infinity, minHeight: 48)
                             .foregroundStyle(brandMode.accentForeground)
                             .background(brandMode.accent, in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityHint("Copies The Source Link And Opens Import Places. Saved Places Stay Safe.")
+                    .accessibilityHint("Copies the source link and opens Import places. Saved places stay safe.")
                     .accessibilityIdentifier("import.try-again")
                 }
             }
@@ -442,7 +442,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     Text(item.seed.nameHint ?? item.displayName)
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text("Select Every Place You Want")
+                    Text("Select every place you want")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -461,7 +461,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                     Image(systemName: "point.3.connected.trianglepath.dotted")
                         .font(.system(size: 14, weight: .black))
                         .foregroundStyle(brandMode.accentText)
-                    Text("Possible Matches")
+                    Text("Possible matches")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.primaryText)
                     Spacer(minLength: 0)
@@ -537,7 +537,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                             .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1)
                         if isBestMatch {
-                            Text("Best Match")
+                            Text("Best match")
                                 .font(AstirTypography.metadata)
                                 .foregroundStyle(brandMode.accentText)
                                 .padding(.horizontal, 6)
@@ -558,7 +558,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             .frame(minHeight: 58)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(candidate.name), \(isSelected ? "Selected" : "Not Selected")")
+        .accessibilityLabel("\(candidate.name), \(isSelected ? "selected" : "not selected")")
     }
 
     private func cardActions(_ item: PlaceImportItem) -> some View {
@@ -580,7 +580,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             toggleDetails(item, candidate: item.selectedCandidate)
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
-                Text("Add Details")
+                Text("Add details")
                 Image(systemName: "chevron.down")
                     .rotationEffect(.degrees(expandedDetailItemIDs.contains(item.id) ? 180 : 0))
             }
@@ -632,7 +632,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityRemoveTraits(isSelected ? [] : .isSelected)
-        .accessibilityValue(isSelected ? "Selected" : "Not Selected")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
     }
 
     private func chooseSavedLists(entryID: String) {
@@ -662,10 +662,10 @@ struct PlaceImportCanonicalReviewScreen: View {
                 .modifier(ImportListButtonOutline(isSelected: selected))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Add To List")
+        .accessibilityLabel("Add to list")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityRemoveTraits(selected ? [] : .isSelected)
-        .accessibilityValue(selected ? "Selected" : "Not Selected")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 
     private func reconcileListSaves() {
@@ -809,7 +809,7 @@ struct PlaceImportCanonicalReviewScreen: View {
             return
         }
 
-        commitErrorMessage = "A Place’s Details Could Not Be Saved. Review Its Details And Try Again. Any Places Already Saved Are Safe."
+        commitErrorMessage = "A place’s details could not be saved. Review its details and try again. Any places already saved are safe."
         isCommitting = true
         commitTask = Task { @MainActor in
             let didSave = await commitScopedImports(expectedUserID: expectedUserID, itemIDs: itemIDs, silent: silent)
@@ -1068,7 +1068,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         let name = PlaceImportDestinationListName.unique(sourceListName, existingNames: existingNames)
         guard let list = store.createPlaceList(
             name: name,
-            description: "Imported From Google Maps",
+            description: "Imported from Google Maps",
             visibility: .stealth
         ) else { return nil }
         importStore.setDestinationListID(list.id, batchID: batch.id)
@@ -1144,7 +1144,7 @@ struct PlaceImportCanonicalReviewScreen: View {
                 return value
             }
             .joined(separator: ", ")
-            .nonEmpty ?? candidate.address ?? "Apple Maps Place"
+            .nonEmpty ?? candidate.address ?? "Apple Maps place"
     }
 
     private func statusColor(_ status: PlaceStatus) -> Color {
@@ -1302,9 +1302,9 @@ struct PlaceImportHistoryScreen: View {
         Group {
             if historyBatches.isEmpty {
                 ContentUnavailableView(
-                    "No Import History Yet",
+                    "No import history yet",
                     systemImage: "clock.arrow.circlepath",
-                    description: Text("Links You Import Will Appear Here With Their Full Report.")
+                    description: Text("Links you import will appear here with their full report.")
                 )
                 .astirScreen()
             } else {
@@ -1344,7 +1344,7 @@ struct PlaceImportHistoryScreen: View {
                 .astirScreen()
             }
         }
-        .navigationTitle("Import History")
+        .navigationTitle("Import history")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -1359,7 +1359,7 @@ struct PlaceImportHistoryScreen: View {
         .safeAreaInset(edge: .bottom) {
             if isSelecting {
                 HStack {
-                    Button("Select All") { selectedBatchIDs = Set(historyBatches.map(\.id)) }
+                    Button("Select all") { selectedBatchIDs = Set(historyBatches.map(\.id)) }
                     Spacer()
                     Button("Delete (\(selectedBatchIDs.count))", role: .destructive) { confirmsDeletion = true }
                         .disabled(selectedBatchIDs.isEmpty)
@@ -1369,8 +1369,8 @@ struct PlaceImportHistoryScreen: View {
                 .background(brandMode.background)
             }
         }
-        .confirmationDialog("Delete \(selectedBatchIDs.count) Imports?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
-            Button("Delete Imports", role: .destructive) {
+        .confirmationDialog("Delete \(selectedBatchIDs.count) imports?", isPresented: $confirmsDeletion, titleVisibility: .visible) {
+            Button("Delete imports", role: .destructive) {
                 importStore.performBatchedMutations {
                     for id in selectedBatchIDs { importStore.deleteBatch(batchID: id) }
                 }
@@ -1378,7 +1378,7 @@ struct PlaceImportHistoryScreen: View {
                 isSelecting = false
             }
         } message: {
-            Text("This Removes Their Import History And Remaining Matches. Places You Already Saved Stay In Wanna And Check In.")
+            Text("This removes their import history and remaining matches. Places you already saved stay in Wanna and Check In.")
         }
     }
 
@@ -1420,7 +1420,7 @@ private struct PlaceImportHistoryTile: View {
                         .stroke(brandMode.border, lineWidth: 1)
                 }
 
-            Text(PlaceImportHistoryPresentation.postTitle(title: batch.sourcePostTitle ?? batch.sourceName, caption: batch.sourcePostTitle == nil ? items.compactMap(\.seed.socialCaptionHint).first : nil, author: batch.sourceAuthorName) ?? "\(batch.source.canonicalName) Post")
+            Text(PlaceImportHistoryPresentation.postTitle(title: batch.sourcePostTitle ?? batch.sourceName, caption: batch.sourcePostTitle == nil ? items.compactMap(\.seed.socialCaptionHint).first : nil, author: batch.sourceAuthorName) ?? "\(batch.source.canonicalName) post")
                 .font(AstirTypography.cardTitle)
                 .lineLimit(3)
             HStack(spacing: WanderTheme.spacing2) {
@@ -1436,7 +1436,7 @@ private struct PlaceImportHistoryTile: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(batch.source.canonicalName) Import, \(placeCount) Places, \(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))")
+        .accessibilityLabel("\(batch.source.canonicalName) import, \(placeCount) places, \(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items))")
     }
 
     private var placeCount: Int {
@@ -1515,7 +1515,7 @@ private struct PlaceImportHistoryArtwork: View {
         } else {
             VStack(spacing: WanderTheme.spacing2) {
                 CanonicalImportSourceMark(source: batch.source, color: batch.source == .tiktok ? .white.opacity(0.8) : brandMode.primaryText.opacity(0.8), size: 38)
-                Text("Post Preview Unavailable")
+                Text("Post preview unavailable")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(batch.source == .tiktok ? Color.white.opacity(0.8) : brandMode.primaryText.opacity(0.8))
                     .multilineTextAlignment(.center)
@@ -1561,7 +1561,7 @@ private struct ImportSourceHeader: View {
                 .frame(width: batch.source == .googleMaps ? 288 : 180, height: batch.source == .googleMaps ? 180 : 320)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("Original \(batch.source.canonicalName) Post Preview")
+                .accessibilityLabel("Original \(batch.source.canonicalName) post preview")
 
             if let author = batch.sourceAuthorName, !author.isEmpty {
                 Text(author)
@@ -1597,7 +1597,7 @@ private struct ImportSourceHeader: View {
                             .wanderGlassCapsule(tone: copiedLink ? .selected : .neutral)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(copiedLink ? "Link Copied" : "Copy Source Link")
+                    .accessibilityLabel(copiedLink ? "Link copied" : "Copy source link")
                 }
             }
             .padding(WanderTheme.spacing3)
@@ -1619,7 +1619,7 @@ private struct ImportRetryContent: View {
 
     var body: some View {
         VStack(spacing: WanderTheme.spacing4) {
-            Text("Oops That Link Didn't Work")
+            Text("Oops that link didn't work")
                 .font(AstirTypography.sheetTitle)
                 .foregroundStyle(brandMode.primaryText)
                 .multilineTextAlignment(.center)
@@ -1735,7 +1735,7 @@ struct PlaceImportReportScreen: View {
         .sheet(item: $savedListTarget) { target in
             MapPlaceListPickerSheet(target: target, analyticsSurface: "import") { _ in }
         }
-        .alert(removalConfirmation?.title ?? "Remove Selection?",
+        .alert(removalConfirmation?.title ?? "Remove selection?",
                isPresented: $showsRemovalConfirmation, presenting: removalConfirmation) { confirmation in
             Button(confirmation.buttonTitle, role: .destructive) {
                 expandedDetailEntryIDs.remove(confirmation.entryID)
@@ -1745,7 +1745,7 @@ struct PlaceImportReportScreen: View {
                 }
             }
             if confirmation.offersListPicker {
-                Button("Choose More Lists") { onChooseLists?(confirmation.entryID) }
+                Button("Choose more lists") { onChooseLists?(confirmation.entryID) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { confirmation in
@@ -1803,7 +1803,7 @@ struct PlaceImportReportScreen: View {
             }
         }
         .accessibilityIdentifier("import.saved-card.\(entry.itemID)")
-        .accessibilityValue(hasPendingChanges(entry) ? "Unsaved Changes" : "Saved")
+        .accessibilityValue(hasPendingChanges(entry) ? "Unsaved changes" : "Saved")
     }
 
     private func hasPendingChanges(_ entry: PlaceImportReceiptEntry) -> Bool {
@@ -1822,7 +1822,7 @@ struct PlaceImportReportScreen: View {
             }
         } label: {
             HStack(spacing: WanderTheme.spacing2) {
-                Text("Add Details")
+                Text("Add details")
                 Image(systemName: "chevron.down")
                     .rotationEffect(.degrees(expandedDetailEntryIDs.contains(entry.id) ? 180 : 0))
             }
@@ -1856,9 +1856,9 @@ struct PlaceImportReportScreen: View {
                     var removal = pendingRemovals[entry.id] ?? .init(itemID: entry.itemID)
                     removal.listIDs = selection.listIDs
                     removalConfirmation = ImportSelectionRemovalConfirmation(
-                        entryID: entry.id, title: "Remove From Lists?",
-                        message: "Saving Will Remove This Place From \(lists.map(\.name).joined(separator: ", ")) And Discard Its Details In Those Lists. Your Wanna And Check In Selections Will Stay As They Are.",
-                        buttonTitle: "Remove From Lists", removal: removal, offersListPicker: true)
+                        entryID: entry.id, title: "Remove from lists?",
+                        message: "Saving will remove this place from \(lists.map(\.name).joined(separator: ", ")) and discard its details in those lists. Your Wanna and Check In selections will stay as they are.",
+                        buttonTitle: "Remove from lists", removal: removal, offersListPicker: true)
                     showsRemovalConfirmation = true
                 } else { onChooseLists?(entry.id) }
             } label: {
@@ -1867,9 +1867,9 @@ struct PlaceImportReportScreen: View {
                     .modifier(ImportListButtonOutline(isSelected: isInList))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add To List")
+            .accessibilityLabel("Add to list")
             .accessibilityAddTraits(isInList ? .isSelected : [])
-            .accessibilityValue(isInList ? "Selected" : "Not Selected")
+            .accessibilityValue(isInList ? "Selected" : "Not selected")
             .accessibilityIdentifier("import.saved-list.\(entry.itemID)")
         }
         .frame(width: 148)
@@ -1922,12 +1922,12 @@ struct PlaceImportReportScreen: View {
                             [$0.id, $0.localID, $0.serverID].contains(selection.visitID)
                         }
                     }
-                    let visitDate = visit.map { " From " + $0.visitedAt.formatted(date: .abbreviated, time: .omitted) } ?? ""
+                    let visitDate = visit.map { " from " + $0.visitedAt.formatted(date: .abbreviated, time: .omitted) } ?? ""
                     removalConfirmation = ImportSelectionRemovalConfirmation(
                         entryID: entry.id, title: status == .been ? "Remove Check In?" : "Remove Wanna?",
                         message: status == .been
-                            ? "Saving Will Delete This Check-In\(visitDate) And Its Notes, Ratings, Photos And Other Details. Other Check-Ins At This Place Will Remain."
-                            : "Saving Will Remove This Wanna And Its Notes, Planned Date And Other Saved Details. Your List Selections Will Remain.",
+                            ? "Saving will delete this check-in\(visitDate) and its notes, ratings, photos and other details. Other check-ins at this place will remain."
+                            : "Saving will remove this Wanna and its notes, planned date and other saved details. Your list selections will remain.",
                         buttonTitle: status == .been ? "Remove Check In" : "Remove Wanna", removal: removal)
                     showsRemovalConfirmation = true
                 }
@@ -1947,9 +1947,9 @@ struct PlaceImportReportScreen: View {
                 let oldName = previous == .been ? "Check In" : "Wanna"
                 let newName = status == .been ? "Check In" : "Wanna"
                 removalConfirmation = ImportSelectionRemovalConfirmation(
-                    entryID: entry.id, title: "Change To \(newName)?",
-                    message: "Saving Will Remove This Tile’s \(oldName) And Its Notes, Dates, Photos And Other Details, And Create A New \(newName). Other Visits And Your List Selections Will Remain.",
-                    buttonTitle: "Change To \(newName)", removal: removal, replacementStatus: status)
+                    entryID: entry.id, title: "Change to \(newName)?",
+                    message: "Saving will remove this tile’s \(oldName) and its notes, dates, photos and other details, and create a new \(newName). Other visits and your list selections will remain.",
+                    buttonTitle: "Change to \(newName)", removal: removal, replacementStatus: status)
                 showsRemovalConfirmation = true
             } else { onStageStatus?(entry.id, status) }
         } label: {
@@ -1967,7 +1967,7 @@ struct PlaceImportReportScreen: View {
         .accessibilityLabel(status == .been ? "Check In" : "Wanna")
         .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityRemoveTraits(selected ? [] : .isSelected)
-        .accessibilityValue(selected ? "Selected" : "Not Selected")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
         .accessibilityIdentifier("import.saved-\(status == .been ? "checkin" : "wanna").\(itemID)")
     }
 
@@ -2162,19 +2162,19 @@ struct PlaceImportSaveSyncBanner: View {
 
     private var title: String {
         if notice.kind == .failed {
-            return "\(notice.count) Place\(notice.count == 1 ? "" : "s") Still Need Saving"
+            return "\(notice.count) place\(notice.count == 1 ? "" : "s") still need saving"
         }
-        return "Saved On This Phone"
+        return "Saved on this phone"
     }
 
     private var detail: String {
         if notice.kind == .failed {
-            return "Your Places And Choices Are Safe. Retry When You’re Ready."
+            return "Your places and choices are safe. Retry when you’re ready."
         }
         if isOffline {
-            return "\(notice.count) Place\(notice.count == 1 ? "" : "s") Will Sync When You’re Back Online."
+            return "\(notice.count) place\(notice.count == 1 ? "" : "s") will sync when you’re back online."
         }
-        return "Syncing \(notice.count) Place\(notice.count == 1 ? "" : "s") In The Background."
+        return "Syncing \(notice.count) place\(notice.count == 1 ? "" : "s") in the background."
     }
 }
 

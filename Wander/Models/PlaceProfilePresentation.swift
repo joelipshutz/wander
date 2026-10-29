@@ -39,11 +39,11 @@ struct PlaceActualRating: Equatable {
     var title: String {
         switch source {
         case .own:
-            "Your Rating"
+            "Your rating"
         case .friends:
-            "Friends Rating"
+            "Friends rating"
         case .community:
-            "Astir Rating"
+            "Astir rating"
         }
     }
 
@@ -52,9 +52,9 @@ struct PlaceActualRating: Equatable {
         case .own:
             CheckInCopy.count(count)
         case .friends:
-            count == 1 ? "1 Person You Follow" : "\(count) People You Follow"
+            count == 1 ? "1 person you follow" : "\(count) people you follow"
         case .community:
-            count == 1 ? "1 Community Rating" : "\(count) Community Ratings"
+            count == 1 ? "1 community rating" : "\(count) community ratings"
         }
     }
 }
@@ -257,7 +257,7 @@ enum PlaceProfilePresenter {
             weightedTotal += ratingFit * weight
             totalWeight += weight
             evidence += ratingEvidence.source == .own ? 2 : 1
-            reasons.append(ratingEvidence.source == .own ? "You Rated This \(ratingEvidence.displayScore)/5." : "\(ratingEvidence.subtitle) Average \(ratingEvidence.displayScore)/5.")
+            reasons.append(ratingEvidence.source == .own ? "You rated this \(ratingEvidence.displayScore)/5." : "\(ratingEvidence.subtitle) average \(ratingEvidence.displayScore)/5.")
         }
 
         let tasteProfile = TasteProfile(
@@ -287,7 +287,7 @@ enum PlaceProfilePresenter {
             weightedTotal += socialFit * 0.10
             totalWeight += 0.10
             evidence += 1
-            reasons.append("\(trustedSaveCount) Trusted People Saved It.")
+            reasons.append("\(trustedSaveCount) trusted people saved it.")
         }
 
         guard totalWeight > 0, evidence >= 2 else { return nil }
@@ -322,9 +322,8 @@ enum PlaceProfileAttributePresentation {
         }
 
         let label = PlaceCheckInQuestionCatalog.question(id: attribute.questionKey)?.displayLabel
-            ?? "Saved Detail"
-        let knownOptions = Set(PlaceCheckInQuestionCatalog.question(id: attribute.questionKey)?.acceptedOptions ?? [])
-        return values.map { "\(label): \(knownOptions.contains($0) ? AppCopy.capitalizingWords($0) : $0)" }
+            ?? "Saved detail"
+        return values.map { "\(label): \($0)" }
     }
 
     /// Only the catalog's explicit meaning is eligible for matching. Display
@@ -417,9 +416,9 @@ private struct TasteProfile {
 
         let affinity = Double(count) / Double(likedSaveCount)
         let score = 6.5 + min(1, affinity) * 3.5
-        let displayCategory = AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: normalizedCategory))
-        let label = normalizedCategory == "place" ? "Places Like This" : "\(displayCategory) Places"
-        return (score, "Matches \(label) You Save.")
+        let displayCategory = WanderPlaceCategory.broadCategory(for: normalizedCategory).lowercased()
+        let label = normalizedCategory == "place" ? "places like this" : "\(displayCategory) places"
+        return (score, "Matches \(label) you save.")
     }
 
     func tagAffinity(for selectedTags: [String]) -> (score: Double, reason: String)? {
@@ -432,7 +431,7 @@ private struct TasteProfile {
         guard !matches.isEmpty else { return nil }
         let score = 7.0 + min(1, Double(matches.count) / 3.0) * 3.0
         let display = matches.prefix(2).joined(separator: " + ")
-        return (score, "Matches Your \(display) Saves.")
+        return (score, "Matches your \(display) saves.")
     }
 }
 

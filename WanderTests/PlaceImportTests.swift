@@ -47,7 +47,7 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
     func testOpeningEmptyOrFailedReportDoesNotCompleteIt() {
         var batch = PlaceImportBatch(id: "opened", source: .instagram, sourceName: nil, state: .ready, totalCount: 1)
         batch.reviewOpenedAt = .now
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: []), "Ready To Review")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: []), "Ready to review")
         let item = PlaceImportItem(batchID: batch.id, source: .instagram,
             seed: PlaceImportSeed(rawText: "test", nameHint: nil, areaHint: nil, sourceURLString: nil, sourceLine: 1), state: .failed)
         XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: [item]), "Retry")
@@ -55,8 +55,8 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
 
     func testPartialHistoryUsesStrictMajorityOfKnownPlaces() {
         for (matched, total, expected) in [(0, 10, "Retry"), (4, 10, "Retry"),
-                                          (5, 10, "Retry"), (6, 10, "Partially Imported"),
-                                          (9, 10, "Partially Imported"), (10, 10, "Partially Imported")] {
+                                          (5, 10, "Retry"), (6, 10, "Partially imported"),
+                                          (9, 10, "Partially imported"), (10, 10, "Partially imported")] {
             let batch = historyBatch()
             let items = historyItems(matched: matched, total: total)
             XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), expected)
@@ -67,9 +67,9 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
         var batch = historyBatch()
         batch.reviewOpenedAt = .now
         var items = historyItems(matched: 6, total: 10)
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially Imported")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially imported")
         for index in 0..<5 { items[index].state = .saved }
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially Imported")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially imported")
         items[5].state = .saved
         XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Done")
     }
@@ -78,7 +78,7 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
         var batch = historyBatch()
         batch.reviewOpenedAt = .now
         var items = historyItems(matched: 2, total: 2)
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially Imported")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially imported")
         items[0].state = .saved
         items[1].state = .dismissed
         XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Done")
@@ -89,7 +89,7 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
         var items = historyItems(matched: 2, total: 2)
         items.append(PlaceImportItem(id: "source-retry", batchID: batch.id, source: .instagram,
             kind: .sourceRetry, seed: items[0].seed, state: .needsHelp))
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially Imported")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially imported")
         items[0].state = .saved
         items[1].state = .duplicate
         XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Done")
@@ -126,7 +126,7 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
             PlaceImportReceiptEntry(itemID: items[0].id, displayName: "Saved alternative", displayArea: nil,
                 status: .wannaGo, outcome: .added, userPlaceID: "save-id")
         ], destinationListID: nil)
-        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially Imported")
+        XCTAssertEqual(PlaceImportHistoryPresentation.statusLabel(batch: batch, items: items), "Partially imported")
     }
 
     func testMatchingAndCancellationTakePriorityOverSuccessfulReceipts() {
@@ -195,7 +195,7 @@ final class PlaceImportHistoryPresentationTests: XCTestCase {
 
         XCTAssertEqual(
             PlaceImportHistoryPresentation.statusLabel(batch: ready, items: []),
-            "Ready To Review"
+            "Ready to review"
         )
     }
 
@@ -842,7 +842,7 @@ final class PlaceImportMatchingProgressTests: XCTestCase {
         XCTAssertTrue(progress.isDiscovering)
         XCTAssertEqual(progress.totalCount, 0)
         XCTAssertEqual(progress.resolvedCount, 0)
-        XCTAssertEqual(progress.label, "Resolved 0 Places · Finding The Total…")
+        XCTAssertEqual(progress.label, "Resolved 0 places · finding the total…")
     }
 
     func testRealResolverProgressReplacesTheSourcePlaceholderCount() {
@@ -852,7 +852,7 @@ final class PlaceImportMatchingProgressTests: XCTestCase {
             inFlight: [source.id: .init(totalCount: 12, completedCount: 5, resolvedCount: 4)]
         )
         XCTAssertFalse(progress.isDiscovering)
-        XCTAssertEqual(progress.label, "Resolved 4 Out Of 12 Places")
+        XCTAssertEqual(progress.label, "Resolved 4 out of 12 places")
         XCTAssertEqual(progress.fraction, 5.0 / 12.0, accuracy: 0.001)
     }
 
@@ -864,7 +864,7 @@ final class PlaceImportMatchingProgressTests: XCTestCase {
         XCTAssertEqual(progress.totalCount, 3)
         XCTAssertEqual(progress.completedCount, 2)
         XCTAssertEqual(progress.resolvedCount, 1)
-        XCTAssertEqual(progress.label, "Resolved 1 Out Of 3 Places")
+        XCTAssertEqual(progress.label, "Resolved 1 out of 3 places")
     }
 
     func testSourceRetryAndStaleTelemetryDoNotInflateKnownPlaces() {
@@ -1068,9 +1068,9 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
         XCTAssertEqual(notice.matchedCount, 2)
         XCTAssertEqual(notice.needsReviewCount, 2)
         XCTAssertEqual(notice.sourceRetryCount, 0)
-        XCTAssertEqual(notice.sourceName, "Multiple Sources")
-        XCTAssertEqual(notice.bannerTitle, "Your Import Is Ready")
-        XCTAssertEqual(notice.bannerDetail, "2 Matched · 2 Need A Look")
+        XCTAssertEqual(notice.sourceName, "Multiple sources")
+        XCTAssertEqual(notice.bannerTitle, "Your import is ready")
+        XCTAssertEqual(notice.bannerDetail, "2 matched · 2 need a look")
     }
 
     func testResolvedNoticeUsesSingleSourceNameAndMatchedCopy() throws {
@@ -1105,7 +1105,7 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
         )
 
         XCTAssertEqual(notice.sourceName, "Google Maps")
-        XCTAssertEqual(notice.bannerDetail, "1 Place Matched")
+        XCTAssertEqual(notice.bannerDetail, "1 place matched")
     }
 
     func testResolvedNoticeKeepsSourceRetrySeparateFromPlaceCounts() throws {
@@ -1144,8 +1144,8 @@ final class PlaceImportCompletionNoticeTests: XCTestCase {
         XCTAssertEqual(notice.matchedCount, 0)
         XCTAssertEqual(notice.needsReviewCount, 0)
         XCTAssertEqual(notice.sourceRetryCount, 1)
-        XCTAssertEqual(notice.bannerTitle, "Import Needs A Retry")
-        XCTAssertEqual(notice.bannerDetail, "Source Scan Needs A Retry")
+        XCTAssertEqual(notice.bannerTitle, "Import needs a retry")
+        XCTAssertEqual(notice.bannerDetail, "Source scan needs a retry")
     }
 }
 
@@ -1275,8 +1275,8 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
             sourceRetryCount: 1
         )
 
-        XCTAssertEqual(copy.title, "3 Places Saved")
-        XCTAssertTrue(copy.body.contains("Retry The Incomplete Source Scan"))
+        XCTAssertEqual(copy.title, "3 places saved")
+        XCTAssertTrue(copy.body.contains("retry the incomplete source scan"))
         XCTAssertFalse(copy.body.contains("review 1 more"))
     }
 
@@ -1287,8 +1287,8 @@ final class PlaceImportAutoSavePolicyTests: XCTestCase {
             sourceRetryCount: 2
         )
 
-        XCTAssertEqual(copy.title, "2 Source Scans Need A Retry")
-        XCTAssertEqual(copy.body, "Open Astir To Retry 2 Incomplete Source Scans.")
+        XCTAssertEqual(copy.title, "2 source scans need a retry")
+        XCTAssertEqual(copy.body, "Open Astir to retry 2 incomplete source scans.")
     }
 
     func testWannaAutoSavesEverySelectedConfidentMatch() {
@@ -2238,7 +2238,7 @@ final class PlaceImportMultiMatchSelectionTests: XCTestCase {
         let review = PlaceImportReviewPlan(items: [item])
 
         XCTAssertEqual(review.committableCount, 2)
-        XCTAssertEqual(review.primaryActionTitle, "Add 2 Places")
+        XCTAssertEqual(review.primaryActionTitle, "Add 2 places")
     }
 
     func testDuplicateReconciliationKeepsMixedMultiMatchRowsSelectable() throws {
@@ -2513,7 +2513,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
 
         XCTAssertEqual(review.surface, .batch)
         XCTAssertEqual(review.committableCount, 1)
-        XCTAssertEqual(review.primaryActionTitle, "Add 1 Of 100 Places")
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 of 100 places")
     }
 
     func testProcessingItemsSuppressCommitUntilTheWholeCaptureFinishesResolving() {
@@ -2620,7 +2620,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
     }
 
     func testSingleNewCandidateUsesExplicitWannaAction() {
-        XCTAssertEqual(plan(ready: 1).primaryActionTitle, "Add As Wanna")
+        XCTAssertEqual(plan(ready: 1).primaryActionTitle, "Add as Wanna")
     }
 
     func testCheckedSubsetControlsCommitCountWithoutChangingBatchSurface() {
@@ -2675,7 +2675,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
         XCTAssertEqual(review.totalCount, 3)
         XCTAssertEqual(review.selectedCount, 1)
         XCTAssertEqual(review.committableCount, 1)
-        XCTAssertEqual(review.primaryActionTitle, "Add 1 Place")
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 place")
     }
 
     func testCheckedUnresolvedRowsRemainInTheSelectedDenominator() {
@@ -2711,7 +2711,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
 
         XCTAssertEqual(review.selectedCount, 2)
         XCTAssertEqual(review.committableCount, 1)
-        XCTAssertEqual(review.primaryActionTitle, "Add 1 Of 2 Places")
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 of 2 places")
     }
 
     func testSourceRetryStatusIsNotASelectedPlaceAndKeepsTheCompactSurfaceVisible() {
@@ -2753,7 +2753,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
         XCTAssertEqual(review.totalCount, 1)
         XCTAssertEqual(review.selectedCount, 1)
         XCTAssertEqual(review.needsHelpCount, 0)
-        XCTAssertEqual(review.primaryActionTitle, "Add 1 Place")
+        XCTAssertEqual(review.primaryActionTitle, "Add 1 place")
     }
 
     func testSingleBeenCandidateUsesExplicitBeenAction() {
@@ -2774,7 +2774,7 @@ final class PlaceImportReviewPlanTests: XCTestCase {
             stagedStatus: .been
         )
 
-        XCTAssertEqual(PlaceImportReviewPlan(items: [item]).primaryActionTitle, "Add As Been")
+        XCTAssertEqual(PlaceImportReviewPlan(items: [item]).primaryActionTitle, "Add as Been")
     }
 
     func testDestinationListNameNormalizesBoundsAndCollisionsWithoutSplittingGraphemes() {
@@ -2873,7 +2873,7 @@ final class PlaceImportStoreTests: XCTestCase {
         resolver.didReport = {
             observedLiveProgress = true
             let progress = store.matchingProgress(batchIDs: store.batches.map(\.id))
-            XCTAssertEqual(progress.label, "Resolved 2 Out Of 5 Places")
+            XCTAssertEqual(progress.label, "Resolved 2 out of 5 places")
             XCTAssertEqual(store.items.first?.state, .resolving)
         }
         let batchID = try store.enqueue(source: .instagram, text: "https://www.instagram.com/p/progress-test/")
@@ -4613,7 +4613,7 @@ final class PlaceImportStoreTests: XCTestCase {
         let outcome = await search.value
         XCTAssertEqual(
             outcome,
-            .failed("This Import Is No Longer Waiting For A Place Match.")
+            .failed("This import is no longer waiting for a place match.")
         )
         XCTAssertEqual(store.item(id: "rec-106-farson-manual-search")?.state, .dismissed)
         XCTAssertNil(store.item(id: "rec-106-farson-manual-search")?.selectedCandidateID)
@@ -5293,7 +5293,7 @@ final class PlaceImportStoreTests: XCTestCase {
         await store.waitForProcessing(batchID: batch.id)
 
         let items = store.items(for: batch.id)
-        XCTAssertEqual(items.map(\.displayName), ["Existing Place", "Recovered Place", "Instagram Post"])
+        XCTAssertEqual(items.map(\.displayName), ["Existing Place", "Recovered Place", "Instagram post"])
         XCTAssertEqual(items.map(\.state), [.ready, .ready, .needsHelp])
         XCTAssertEqual(items.first?.id, existingItem.id)
         XCTAssertEqual(persistence.snapshot.items.map(\.displayName), items.map(\.displayName))
@@ -5738,7 +5738,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         XCTAssertEqual(
             resolution,
-            .needsHelp("The Only Apple Maps Result Was Not A Confident Venue Match. Search For The Correct Place.")
+            .needsHelp("The only Apple Maps result was not a confident venue match. Search for the correct place.")
         )
     }
 
@@ -6449,7 +6449,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
         XCTAssertNotNil(entries.first?.selectedCandidateID)
         XCTAssertNil(entries.last?.seed.nameHint)
         XCTAssertTrue(entries.last?.candidates.isEmpty == true)
-        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry Automatic Matching") == true)
+        XCTAssertTrue(entries.last?.helpMessage?.contains("Retry automatic matching") == true)
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Fremont Lake"])
     }
 
@@ -6698,7 +6698,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected one unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.count, 1)
-        XCTAssertEqual(entries[0].helpMessage, "This Place Was Named In The Post. Wander Needs Your Help Matching It.")
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
@@ -6740,7 +6740,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
             return XCTFail("Expected clean unresolved review row, got \(resolution)")
         }
         XCTAssertEqual(placeResolver.manualInputs.map(\.name), ["Cafe Nivah", "Cafe", "Cafe", "Cafe"])
-        XCTAssertEqual(entries[0].helpMessage, "This Place Was Named In The Post. Wander Needs Your Help Matching It.")
+        XCTAssertEqual(entries[0].helpMessage, "This place was named in the post. Wander needs your help matching it.")
         XCTAssertFalse(entries[0].helpMessage?.contains("temporarily unavailable") == true)
     }
 
@@ -7329,7 +7329,7 @@ final class DevicePlaceImportResolverTests: XCTestCase {
 
         XCTAssertEqual(
             resolution,
-            .needsHelp("No Destination Was Explicitly Identified In This Post. Add A Place Name And Nearby City To Match It.")
+            .needsHelp("No destination was explicitly identified in this post. Add a place name and nearby city to match it.")
         )
         XCTAssertTrue(placeResolver.manualInputs.isEmpty)
     }

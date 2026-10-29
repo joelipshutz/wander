@@ -5,7 +5,7 @@ import XCTest
 final class PlaceCheckInDetailPresentationTests: XCTestCase {
     func testDietaryArrayDisplaysAndIndexesOnlyExplicitSelections() {
         let value = LocalPlaceAttribute(localID: "diet", userPlaceID: "save", questionKey: "place_detail_dietary_options", valueType: "multi_tag", valueJSON: #"["Vegan","Gluten free"]"#)
-        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: value), ["Dietary Options: Vegan", "Dietary Options: Gluten Free"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: value), ["Dietary options: Vegan", "Dietary options: Gluten free"])
         XCTAssertEqual(PlaceProfileAttributePresentation.searchTerms(from: value), ["vegan options", "gluten free options"])
         XCTAssertTrue(PlaceProfileTagParser.tags(from: value).isEmpty)
         value.valueJSON = #""Vegan""#
@@ -16,14 +16,14 @@ final class PlaceCheckInDetailPresentationTests: XCTestCase {
         let outlets = attribute(key: "place_detail_outlets", answer: "None found")
         let binary = attribute(key: "place_detail_everyday_quiet_work", answer: "No")
 
-        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: outlets), ["Outlets: None Found"])
-        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: binary), ["Quiet Work: No"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: outlets), ["Outlets: None found"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: binary), ["Quiet work: No"])
     }
 
     func testUnknownDetailRemainsReadableWithoutBecomingAStandaloneTag() {
         let unknown = attribute(key: "place_detail_future_facility", answer: "Yes")
 
-        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: unknown), ["Saved Detail: Yes"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: unknown), ["Saved detail: Yes"])
         XCTAssertTrue(PlaceProfileAttributePresentation.searchTerms(from: unknown).isEmpty)
         XCTAssertTrue(PlaceProfileTagParser.tags(from: unknown).isEmpty)
     }
@@ -49,7 +49,7 @@ final class PlaceCheckInDetailPresentationTests: XCTestCase {
 
         XCTAssertEqual(results.map(\.place.id), [positive.id])
         let evidence = try XCTUnwrap(results.first?.evidence.first { $0.field == .attribute })
-        XCTAssertEqual(evidence.displayValue, "Outlets: A Few")
+        XCTAssertEqual(evidence.displayValue, "Outlets: A few")
         XCTAssertTrue(TrustedPlaceSearch.matches(query: "none", in: [negative]).isEmpty)
         XCTAssertTrue(TrustedPlaceSearch.matches(query: "few", in: [positive]).isEmpty)
     }

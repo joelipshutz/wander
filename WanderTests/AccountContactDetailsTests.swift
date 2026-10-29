@@ -71,7 +71,7 @@ import XCTest
         let model = AccountContactDetailsModel(userID: "denied", repository: repo, location: location, defaultCountry: "US")
         await model.load()
         XCTAssertFalse(model.canSave)
-        XCTAssertEqual(model.phoneValidationMessage, "Enter Your Phone Number To Continue.")
+        XCTAssertEqual(model.phoneValidationMessage, "Enter your phone number to continue.")
         model.selectMetro("los-angeles")
         let emptySave = await model.save()
         XCTAssertFalse(emptySave)

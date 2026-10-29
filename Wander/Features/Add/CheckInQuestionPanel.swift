@@ -72,7 +72,7 @@ struct CheckInQuestionPanel: View {
             }
 
             if preferredQuestions.isEmpty {
-                Text("No Recurring Questions For This Place Type. Add Any You Want In Customize.")
+                Text("No recurring questions for this place type. Add any you want in Customize.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -86,7 +86,7 @@ struct CheckInQuestionPanel: View {
                     showsAdditionalQuestions.toggle()
                 } label: {
                     HStack {
-                        Text("Also Noted (\(additionalQuestions.count))")
+                        Text("Also noted (\(additionalQuestions.count))")
                             .font(AstirTypography.control)
                         Spacer()
                         Image(systemName: showsAdditionalQuestions ? "chevron.down" : "chevron.right")
@@ -154,7 +154,7 @@ struct CheckInQuestionPanel: View {
     }
 
     private var sectionTitle: some View {
-        Text("Useful Details")
+        Text("Useful details")
             .font(AstirTypography.label)
             .foregroundStyle(brandMode.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -170,7 +170,7 @@ struct CheckInQuestionPanel: View {
         }
         .foregroundStyle(brandMode.accentText)
         .disabled(ownerUserID.isEmpty)
-        .accessibilityLabel("Customize Questions For \(subtypeTitle)")
+        .accessibilityLabel("Customize questions for \(subtypeTitle)")
         .accessibilityIdentifier("save.questions.customize")
     }
 
@@ -356,7 +356,7 @@ struct CheckInPrivateAnswerSummary: View {
                             Text(row.prompt)
                                 .font(AstirTypography.bodySmall)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Text(AppCopy.capitalizingWords(row.answer))
+                            Text(AppCopy.capitalizingInitial(row.answer))
                                 .font(AstirTypography.control)
                         }
                         .accessibilityElement(children: .combine)
@@ -365,7 +365,7 @@ struct CheckInPrivateAnswerSummary: View {
                 .foregroundStyle(brandMode.primaryText)
                 .accessibilityIdentifier("checkIn.privateAnswers")
             } else if loadedIdentity == identity, loadFailed {
-                Text("Your Private Answers Couldn’t Be Loaded On This Device.")
+                Text("Your private answers couldn’t be loaded on this device.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -467,11 +467,11 @@ private struct CheckInQuestionAnswerRow: View {
             .opacity(isDismissed ? 0.4 : 1)
 
             if !selectedValues.isEmpty && !isDismissed {
-                Button("Clear Answer", action: onClear)
+                Button("Clear answer", action: onClear)
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.accentText)
                     .frame(minHeight: WanderTheme.tapMinimum)
-                    .accessibilityLabel("Clear Answer To \(question.prompt)")
+                    .accessibilityLabel("Clear answer to \(question.prompt)")
             }
         }
         .accessibilityElement(children: .contain)
@@ -497,7 +497,7 @@ private struct CheckInQuestionAnswerRow: View {
 
     private var usefulnessButton: some View {
         Button(action: onToggleUseful) {
-            Text(isDismissed ? "Undo" : "Not Useful")
+            Text(isDismissed ? "Undo" : "Not useful")
                 .font(AstirTypography.label)
                 .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
@@ -505,8 +505,8 @@ private struct CheckInQuestionAnswerRow: View {
         }
             .buttonStyle(.plain)
             .foregroundStyle(brandMode.accentText)
-            .accessibilityLabel("\(isDismissed ? "Undo Hiding" : "Not Useful:") \(question.prompt)")
-            .accessibilityValue(isDismissed ? "Hidden From Future Prompts" : "Shown")
+            .accessibilityLabel("\(isDismissed ? "Undo hiding" : "Not useful:") \(question.prompt)")
+            .accessibilityValue(isDismissed ? "Hidden from future prompts" : "Shown")
             .accessibilityIdentifier("save.question.useful.\(question.id)")
     }
 
@@ -520,7 +520,7 @@ private struct CheckInQuestionAnswerRow: View {
                     Image(systemName: "checkmark")
                         .accessibilityHidden(true)
                 }
-                Text(AppCopy.capitalizingWords(option))
+                Text(AppCopy.capitalizingInitial(option))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .font(AstirTypography.control)
@@ -536,9 +536,9 @@ private struct CheckInQuestionAnswerRow: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(question.prompt) \(AppCopy.capitalizingWords(option))")
+        .accessibilityLabel("\(question.prompt) \(AppCopy.capitalizingInitial(option))")
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityHint(selected ? "Tap Again To Clear This Answer." : "Select This Answer.")
+        .accessibilityHint(selected ? "Tap again to clear this answer." : "Select this answer.")
         .accessibilityIdentifier("save.question.\(question.id).\(option)")
     }
 }
@@ -600,11 +600,11 @@ struct CheckInQuestionCustomizationSheet: View {
                 questionList
             }
         }
-        .alert("Are You Sure?", isPresented: $showsRestoreConfirmation) {
-            Button("Yes, Restore") { update { $0.restoreSuggestedQuestions(defaultQuestions.map(\.id)) } }
-            Button("No, Cancel", role: .cancel) {}
+        .alert("Are you sure?", isPresented: $showsRestoreConfirmation) {
+            Button("Yes, restore") { update { $0.restoreSuggestedQuestions(defaultQuestions.map(\.id)) } }
+            Button("No, cancel", role: .cancel) {}
         } message: {
-            Text("Replace This List With Suggested Questions? Your Previous Answers Will Be Kept.")
+            Text("Replace this list with suggested questions? Your previous answers will be kept.")
         }
         .tint(brandMode.accentText)
     }
@@ -626,9 +626,9 @@ struct CheckInQuestionCustomizationSheet: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Stealth For \(prompt(for: id))")
-                        .accessibilityValue(displayedStealth(questionID: id) ? "On, Only You" : "Off, Check-In Audience")
-                        .accessibilityHint("Toggle Who Can See This Question And Answer")
+                        .accessibilityLabel("Stealth for \(prompt(for: id))")
+                        .accessibilityValue(displayedStealth(questionID: id) ? "On, only you" : "Off, check-in audience")
+                        .accessibilityHint("Toggle who can see this question and answer")
                         .accessibilityIdentifier("save.questions.stealth.\(id)")
                     }
                     .listRowBackground(brandMode.raisedBackground)
@@ -641,10 +641,10 @@ struct CheckInQuestionCustomizationSheet: View {
                 Text("For \(subtypeTitle)")
             } footer: {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Drag To Reorder.")
-                    Text("Removing A Question Changes Future Prompts And Keeps Previous Answers.")
-                    Label("This Symbol Means Those Questions Only Stay With You", systemImage: "eye.slash")
-                        .accessibilityLabel("Slashed Eye. This Symbol Means Those Questions Only Stay With You")
+                    Text("Drag to reorder.")
+                    Text("Removing a question changes future prompts and keeps previous answers.")
+                    Label("This symbol means those questions only stay with you", systemImage: "eye.slash")
+                        .accessibilityLabel("Slashed eye. This symbol means those questions only stay with you")
                 }
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
@@ -656,12 +656,12 @@ struct CheckInQuestionCustomizationSheet: View {
                 // Native NavigationLinks are disabled by active List edit
                 // mode. Buttons keep navigation available while reordering.
                 Button { showsCatalog = true } label: {
-                    Label("Add A Question", systemImage: "plus")
+                    Label("Add a question", systemImage: "plus")
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .accessibilityIdentifier("save.questions.addCatalog")
                 Button { showsCustomEditor = true } label: {
-                    Label("Create Your Own", systemImage: "square.and.pencil")
+                    Label("Create your own", systemImage: "square.and.pencil")
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .accessibilityIdentifier("save.questions.createCustom")
@@ -669,7 +669,7 @@ struct CheckInQuestionCustomizationSheet: View {
             .listRowBackground(brandMode.raisedBackground)
 
             Section {
-                Button("Restore Suggested Questions") { showsRestoreConfirmation = true }
+                Button("Restore suggested questions") { showsRestoreConfirmation = true }
                     .frame(minHeight: WanderTheme.tapMinimum)
                 .accessibilityIdentifier("save.questions.restore")
             }
@@ -688,7 +688,7 @@ struct CheckInQuestionCustomizationSheet: View {
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
-        .navigationTitle("Customize Questions")
+        .navigationTitle("Customize questions")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .navigationDestination(isPresented: $showsCatalog) {
@@ -722,7 +722,7 @@ struct CheckInQuestionCustomizationSheet: View {
     private func prompt(for id: String) -> String {
         PlaceCheckInQuestionCatalog.question(id: id)?.prompt
             ?? configuration.customQuestions.first(where: { $0.id == id })?.prompt
-            ?? "Saved Question"
+            ?? "Saved question"
     }
 
     private func displayedStealth(questionID: String) -> Bool {
@@ -775,7 +775,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
         List {
             Section {
                 CheckInQuestionSearchField(
-                    placeholder: "Find A Question",
+                    placeholder: "Find a question",
                     text: $search,
                     isFocused: $isSearchFocused,
                     accessibilityIdentifier: "save.questions.catalogSearch"
@@ -791,7 +791,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
                     .listRowBackground(brandMode.raisedBackground)
             }
             if matches.isEmpty {
-                Text("No Matching Questions. You Can Create Your Own From Customize.")
+                Text("No matching questions. You can create your own from Customize.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .listRowBackground(brandMode.raisedBackground)
@@ -817,7 +817,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
                     .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .disabled(selectedIDs.contains(question.id))
-                .accessibilityLabel("\(question.prompt)\(selectedIDs.contains(question.id) ? ", Already Added" : "")")
+                .accessibilityLabel("\(question.prompt)\(selectedIDs.contains(question.id) ? ", already added" : "")")
                 .accessibilityIdentifier("save.questions.catalog.\(question.id)")
                 .listRowBackground(brandMode.raisedBackground)
             }
@@ -828,7 +828,7 @@ private struct CheckInAddCatalogQuestionScreen: View {
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
-        .navigationTitle("Add A Question")
+        .navigationTitle("Add a question")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
     }
@@ -871,7 +871,7 @@ struct CheckInQuestionSearchField: View {
                         .frame(minWidth: WanderTheme.tapMinimum, minHeight: WanderTheme.tapMinimum)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Clear Search")
+                .accessibilityLabel("Clear search")
                 .accessibilityIdentifier(accessibilityIdentifier + ".clear")
             }
         }
@@ -889,11 +889,11 @@ private struct CheckInCreateCustomQuestionScreen: View {
     var body: some View {
         Form {
             Section {
-                TextField("Lots Of Plants Indoors?", text: $prompt, axis: .vertical)
+                TextField("Lots of plants indoors?", text: $prompt, axis: .vertical)
                     .font(AstirTypography.body)
                     .lineLimit(2...5)
                     .focused($isFocused)
-                    .accessibilityLabel("Your Recurring Question")
+                    .accessibilityLabel("Your recurring question")
                     .accessibilityIdentifier("save.questions.customPrompt")
                     .onChange(of: prompt) { _, value in
                         if value.count > CheckInCustomQuestion.maximumPromptLength {
@@ -901,9 +901,9 @@ private struct CheckInCreateCustomQuestionScreen: View {
                         }
                     }
             } header: {
-                Text("Your Question")
+                Text("Your question")
             } footer: {
-                Text("Ask Something You Can Answer With Yes Or No.")
+                Text("Ask something you can answer with Yes or No.")
             }
             .listRowBackground(brandMode.raisedBackground)
             if let errorMessage {
@@ -917,7 +917,7 @@ private struct CheckInCreateCustomQuestionScreen: View {
         .scrollContentBackground(.hidden)
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
-        .navigationTitle("Create A Question")
+        .navigationTitle("Create a question")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

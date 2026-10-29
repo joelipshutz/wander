@@ -159,7 +159,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         guard let sourceURLString = seed.sourceURLString,
               let sourceURL = URL(string: sourceURLString)
         else {
-            return .needsHelp("Add A Place Name And Nearby City To Match This Item.")
+            return .needsHelp("Add a place name and nearby city to match this item.")
         }
 
         switch source {
@@ -170,7 +170,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             case .namedPlace(let placeSeed):
                 return .expanded([placeSeed], sourceName: nil)
             case .singlePlace:
-                return .needsHelp("This Google Maps Link Did Not Expose A Place Name. Add The Name And Nearby City To Match It.")
+                return .needsHelp("This Google Maps link did not expose a place name. Add the name and nearby city to match it.")
             case .unavailable(let message):
                 return .needsHelp(message)
             }
@@ -186,7 +186,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return candidateResolution(candidates, seed: seed)
             } catch {
                 return .needsHelp(
-                    "This Link Did Not Expose A Place. Add A Place Name And Nearby City To Match It."
+                    "This link did not expose a place. Add a place name and nearby city to match it."
                 )
             }
         }
@@ -197,7 +197,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         source _: PlaceImportSource
     ) async throws -> PlaceImportResolution {
         guard let name = normalized(seed.nameHint) else {
-            return .needsHelp("Enter A Place Name Before Searching.")
+            return .needsHelp("Enter a place name before searching.")
         }
         return try await manualResolution(
             name: name,
@@ -233,7 +233,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     seed: seed,
                     candidates: [],
                     selectedCandidateID: nil,
-                    helpMessage: "Automatic Matching Is Temporarily Unavailable. Retry The Source Scan."
+                    helpMessage: "Automatic matching is temporarily unavailable. Retry the source scan."
                 )
             ],
             sourceName: nil
@@ -291,7 +291,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         "social import understanding source=\(source.rawValue, privacy: .public) path=\(understandingPath, privacy: .public) outcome=no_places discovered_media_count=\(discoveredMediaCount, privacy: .public)"
                     )
                     return .needsHelp(
-                        "No Destination Was Explicitly Identified In This Post. Add A Place Name And Nearby City To Match It."
+                        "No destination was explicitly identified in this post. Add a place name and nearby city to match it."
                     )
                 case .fallback:
                     if remote.diagnostics.failureCategory == "feature_disabled" {
@@ -350,11 +350,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 }
                 if understandingWasPartial {
                     return .needsHelp(
-                        "This Post Is Still Being Processed. Wait A Moment, Then Retry Automatic Matching."
+                        "This post is still being processed. Wait a moment, then retry automatic matching."
                     )
                 }
                 return .needsHelp(
-                    "This Public Post Did Not Expose Readable Place Evidence. Check The Link And Retry Automatic Matching."
+                    "This public post did not expose readable place evidence. Check the link and retry automatic matching."
                 )
             }
             recognition = try await recognizeSocialMedia(in: metadata)
@@ -465,7 +465,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                         recoveryHints.append(
                             SocialRecoveryHint(
                                 hint: hint,
-                                helpMessage: "This Place Was Named In The Post, But Place Matching Was Temporarily Unavailable. Retry This Item Later."
+                                helpMessage: "This place was named in the post, but place matching was temporarily unavailable. Retry this item later."
                             )
                         )
                     } else {
@@ -499,7 +499,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This Place Was Named In The Post. Wander Needs Your Help Matching It."
+                            helpMessage: "This place was named in the post. Wander needs your help matching it."
                         )
                     )
                 } else {
@@ -548,7 +548,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                             seed: socialSeed(from: seed, hint: hint, candidate: nil),
                             candidates: match.candidates,
                             selectedCandidateID: nil,
-                            helpMessage: "Choose The Matching Venue From This Post."
+                            helpMessage: "Choose the matching venue from this post."
                         )
                     )
                     unresolvedCount += 1
@@ -559,7 +559,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     recoveryHints.append(
                         SocialRecoveryHint(
                             hint: hint,
-                            helpMessage: "This Place Was Named In The Post. Wander Needs Your Help Matching It."
+                            helpMessage: "This place was named in the post. Wander needs your help matching it."
                         )
                     )
                 } else {
@@ -606,7 +606,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                     seed: seed,
                     candidates: [],
                     selectedCandidateID: nil,
-                    helpMessage: "Some Media In This Post Could Not Be Read. Retry Automatic Matching To Look For More Places."
+                    helpMessage: "Some media in this post could not be read. Retry automatic matching to look for more places."
                 )
             )
         }
@@ -619,7 +619,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
                 return .partialExpandedResolved(entries, sourceName: nil)
             }
             return .needsHelp(
-                "Place Matching Was Temporarily Unavailable. Retry Later."
+                "Place matching was temporarily unavailable. Retry later."
             )
         }
         if understandingWasPartial, !entries.isEmpty {
@@ -639,11 +639,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         }
         if understandingWasPartial {
             return .needsHelp(
-                "Some Media In This Post Could Not Be Read. Retry Automatic Matching To Look For Places."
+                "Some media in this post could not be read. Retry automatic matching to look for places."
             )
         }
         return .needsHelp(
-            "No Confident Place Match Was Found From This Post's Caption Or Cover Image. Retry Automatic Matching."
+            "No confident place match was found from this post's caption or cover image. Retry automatic matching."
         )
     }
 
@@ -794,7 +794,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         originalSeed: PlaceImportSeed,
         to entries: inout [PlaceImportResolvedEntry],
         seenHints: inout Set<String>,
-        helpMessage: String = "This Place Was Named In The Post. Wander Needs Your Help Matching It."
+        helpMessage: String = "This place was named in the post. Wander needs your help matching it."
     ) -> Bool {
         guard hint.evidence.shouldRemainVisibleWithoutCandidates else { return false }
         let identity = hintIdentity(hint)
@@ -847,15 +847,15 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             }
             return candidateResolution(match)
         } catch let error as LocalizedError {
-            return .needsHelp(error.errorDescription ?? "No Matching Apple Maps Place Was Found.")
+            return .needsHelp(error.errorDescription ?? "No matching Apple Maps place was found.")
         } catch {
-            return .needsHelp("No Matching Apple Maps Place Was Found. Try A Nearby City Or Neighborhood.")
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
         }
     }
 
     private func candidateResolution(_ candidates: [PlaceCandidate], seed: PlaceImportSeed) -> PlaceImportResolution {
         guard !candidates.isEmpty else {
-            return .needsHelp("No Matching Apple Maps Place Was Found. Try A Nearby City Or Neighborhood.")
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
         }
         let match = PlaceImportCandidateMatcher.match(
             candidates,
@@ -869,7 +869,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
 
     private func candidateResolution(_ match: PlaceImportCandidateMatch) -> PlaceImportResolution {
         guard !match.candidates.isEmpty else {
-            return .needsHelp("No Matching Apple Maps Place Was Found. Try A Nearby City Or Neighborhood.")
+            return .needsHelp("No matching Apple Maps place was found. Try a nearby city or neighborhood.")
         }
         if let selectedCandidateID = match.selectedCandidateID {
             return .candidates(match.candidates, selectedCandidateID: selectedCandidateID)
@@ -878,13 +878,13 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
             return .candidates(match.candidates, selectedCandidateID: nil)
         }
         return .needsHelp(
-            "The Only Apple Maps Result Was Not A Confident Venue Match. Search For The Correct Place."
+            "The only Apple Maps result was not a confident venue match. Search for the correct place."
         )
     }
 
     private func googleSeedResolution(_ seed: PlaceImportSeed, name: String) async -> PlaceImportResolution {
         guard normalized(seed.areaHint) != nil || (seed.latitude != nil && seed.longitude != nil) else {
-            return .needsHelp("The Google Maps Place Name Was Found, But Its Location Could Not Be Confirmed. Search For The Correct Place.")
+            return .needsHelp("The Google Maps place name was found, but its location could not be confirmed. Search for the correct place.")
         }
         var candidates: [PlaceCandidate] = []
 
@@ -948,7 +948,7 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
         guard let latitude = candidate.latitude, let longitude = candidate.longitude,
               CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
         else {
-            return .needsHelp("The Google Maps Place Name Was Found, But Its Location Could Not Be Confirmed. Search For The Correct Place.")
+            return .needsHelp("The Google Maps place name was found, but its location could not be confirmed. Search for the correct place.")
         }
         return .candidates([candidate], selectedCandidateID: candidate.id)
     }
@@ -1193,7 +1193,7 @@ final class PlaceImportStore: ObservableObject {
             items = []
             ownerUserID = nil
             replacedSocialItemsByPlaceholderID = [:]
-            persistenceError = "Import History Could Not Be Restored. New Imports Will Still Work In This Session."
+            persistenceError = "Import history could not be restored. New imports will still work in this session."
         }
         synchronizeAllBatches(persist: false)
         // Historical terminal imports belong in History, not a fresh toast on
@@ -1809,11 +1809,11 @@ final class PlaceImportStore: ObservableObject {
 
     func search(itemID: String, name: String, area: String?) async -> PlaceImportManualSearchOutcome {
         guard queueManualSearch(itemID: itemID, name: name, area: area) != nil else {
-            return .failed("Enter A Place Name Before Searching.")
+            return .failed("Enter a place name before searching.")
         }
         await waitForResolution(itemID: itemID)
         guard let item = item(id: itemID) else {
-            return .failed("This Import Is No Longer Available.")
+            return .failed("This import is no longer available.")
         }
         switch item.state {
         case .ready:
@@ -1823,12 +1823,12 @@ final class PlaceImportStore: ObservableObject {
         case .needsHelp, .failed:
             return .failed(
                 item.helpMessage
-                    ?? "No Matching Apple Maps Place Was Found. Try A Nearby City Or Neighborhood."
+                    ?? "No matching Apple Maps place was found. Try a nearby city or neighborhood."
             )
         case .queued, .resolving:
-            return .failed("Apple Maps Is Still Searching. Try Again In A Moment.")
+            return .failed("Apple Maps is still searching. Try again in a moment.")
         case .duplicate, .saved, .dismissed:
-            return .failed("This Import Is No Longer Waiting For A Place Match.")
+            return .failed("This import is no longer waiting for a place match.")
         }
     }
 
@@ -1838,11 +1838,11 @@ final class PlaceImportStore: ObservableObject {
         area: String?
     ) async -> PlaceImportCandidateSearchOutcome {
         guard let item = item(id: itemID) else {
-            return .failed("This Import Is No Longer Available.")
+            return .failed("This import is no longer available.")
         }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            return .failed("Enter A Place Name Before Searching.")
+            return .failed("Enter a place name before searching.")
         }
         let normalizedArea = area?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedArea = normalizedArea.flatMap { $0.isEmpty ? nil : $0 }
@@ -1869,24 +1869,24 @@ final class PlaceImportStore: ObservableObject {
                 source: item.source
             )
             guard self.item(id: itemID) != nil else {
-                return .failed("This Import Is No Longer Available.")
+                return .failed("This import is no longer available.")
             }
             switch resolution {
             case .candidates(let candidates, selectedCandidateID: _):
                 guard !candidates.isEmpty else {
-                    return .failed("No Matching Apple Maps Place Was Found. Try A More Specific Search.")
+                    return .failed("No matching Apple Maps place was found. Try a more specific search.")
                 }
                 return .results(candidates)
             case .needsHelp(let message):
                 return .failed(message)
             case .retrySocialUnderstanding, .expanded, .partialExpanded,
                  .expandedResolved, .partialExpandedResolved:
-                return .failed("No Matching Apple Maps Place Was Found. Try A More Specific Search.")
+                return .failed("No matching Apple Maps place was found. Try a more specific search.")
             }
         } catch let error as LocalizedError {
-            return .failed(error.errorDescription ?? "Apple Maps Search Is Temporarily Unavailable.")
+            return .failed(error.errorDescription ?? "Apple Maps search is temporarily unavailable.")
         } catch {
-            return .failed("Apple Maps Search Is Temporarily Unavailable.")
+            return .failed("Apple Maps search is temporarily unavailable.")
         }
     }
 
@@ -2466,7 +2466,7 @@ final class PlaceImportStore: ObservableObject {
             } else {
                 items[index].state = .needsHelp
                 items[index].helpMessage =
-                    "The Only Apple Maps Result Was Not A Confident Venue Match. Search For The Correct Place."
+                    "The only Apple Maps result was not a confident venue match. Search for the correct place."
             }
         case .needsHelp(let message):
             items[index].candidates = []
@@ -2522,7 +2522,7 @@ final class PlaceImportStore: ObservableObject {
                 kind: .sourceRetry,
                 seed: retrySeed,
                 state: .needsHelp,
-                helpMessage: "Some Media In This Post Could Not Be Read. Retry Automatic Matching To Look For More Places.",
+                helpMessage: "Some media in this post could not be read. Retry automatic matching to look for more places.",
                 resolverVersion: PlaceImportItem.currentResolverVersion,
                 stagedStatus: original.stagedStatus,
                 stagedRatingScore: original.stagedRatingScore,
@@ -2837,7 +2837,7 @@ final class PlaceImportStore: ObservableObject {
             )
             persistenceError = nil
         } catch {
-            persistenceError = "Import Progress Could Not Be Saved. Keep Astir Open And Try Again."
+            persistenceError = "Import progress could not be saved. Keep Astir open and try again."
         }
     }
 

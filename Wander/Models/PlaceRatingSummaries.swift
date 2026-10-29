@@ -101,7 +101,7 @@ enum PlaceRatingsState: Equatable {
     case unavailable
 
     var metrics: [PlaceRatingMetric] {
-        let titles = ["Your Rating", "Friends Rating", "Astir Rating"]
+        let titles = ["Your rating", "Friends rating", "Astir rating"]
         guard case .loaded(let summaries) = self else {
             return titles.map {
                 PlaceRatingMetric(title: $0, value: "—", subtitle: self == .loading ? "Loading…" : "Unavailable")
@@ -111,11 +111,11 @@ enum PlaceRatingsState: Equatable {
             let (title, aggregate) = pair
             let subtitle: String
             switch index {
-            case 0: subtitle = aggregate.count == 0 ? "No Rating Yet" : CheckInCopy.count(aggregate.count)
-            case 1: subtitle = aggregate.count == 0 ? "No Visible Ratings Yet"
-                : aggregate.count == 1 ? "1 Person You Follow" : "\(aggregate.count) People You Follow"
-            default: subtitle = aggregate.count == 0 ? "No Ratings Yet"
-                : aggregate.count == 1 ? "1 Rating" : "\(aggregate.count) Ratings"
+            case 0: subtitle = aggregate.count == 0 ? "No rating yet" : CheckInCopy.count(aggregate.count)
+            case 1: subtitle = aggregate.count == 0 ? "No visible ratings yet"
+                : aggregate.count == 1 ? "1 person you follow" : "\(aggregate.count) people you follow"
+            default: subtitle = aggregate.count == 0 ? "No ratings yet"
+                : aggregate.count == 1 ? "1 rating" : "\(aggregate.count) ratings"
             }
             return PlaceRatingMetric(title: title, value: aggregate.score.map(PlaceRating.averageDisplay) ?? "—", subtitle: subtitle)
         }

@@ -98,7 +98,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             waitForAppearanceTransition(to: appearance)
             XCTAssertTrue(note.isHittable)
             XCTAssertEqual(note.frame.minY, originalY, accuracy: 4)
-            XCTAssertFalse(app.buttons["History Could Not Refresh. Tap To Retry."].exists)
+            XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
             capture("History appearance transition \(index)")
             try assertAppearance(of: note, expected: appearance)
         }
@@ -111,7 +111,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             reopenHistoryAfterOrdinaryForegroundReturn(in: app)
             XCTAssertTrue(note.waitForExistence(timeout: 5))
             XCTAssertTrue(note.isHittable)
-            XCTAssertFalse(app.buttons["History Could Not Refresh. Tap To Retry."].exists)
+            XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
             capture("History foreground return \(index)")
             try assertAppearance(of: note, expected: appearance)
         }
@@ -206,7 +206,7 @@ final class PlaceProfileAppearanceUITests: XCTestCase {
             waitForAppearanceTransition(to: appearance)
             reopenHistoryAfterOrdinaryForegroundReturn(in: app)
             XCTAssertTrue(note.isHittable)
-            XCTAssertFalse(app.buttons["History Could Not Refresh. Tap To Retry."].exists)
+            XCTAssertFalse(app.buttons["History could not refresh. Tap to retry."].exists)
             capture("History after Settings \(appearance)")
             try assertAppearance(of: note, expected: appearance)
         }

@@ -35,7 +35,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
         let app = application()
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
-        let share = app.buttons["Share Profile"]
+        let share = app.buttons["Share profile"]
         XCTAssertTrue(share.waitForExistence(timeout: 20))
         for attempt in 0..<3 {
             let start = Date()
@@ -47,7 +47,7 @@ final class ProfileResponsivenessUITests: XCTestCase {
             // tap() also waits for XCTest quiescence. Record that end-to-end
             // duration, but enforce readiness with the sheet wait above.
             capture("Profile share attempt \(attempt)")
-            app.buttons["Close Share Preview"].tap()
+            app.buttons["Close share preview"].tap()
             XCTAssertTrue(sheet.waitForNonExistence(timeout: 3))
             XCTAssertTrue(share.waitForExistence(timeout: 3))
             XCTAssertTrue(share.isHittable)
@@ -86,10 +86,10 @@ final class ProfileResponsivenessUITests: XCTestCase {
             XCTAssertTrue(back.waitForExistence(timeout: 3))
 
             for (row, title) in [
-                ("settings.map.defaultFilter", "Default Map Filter"),
-                ("Privacy And Trust", "Privacy And Trust"),
-                ("Blocked And Muted Accounts", "Blocked And Muted"),
-                ("settings.importHistory", "Import History"),
+                ("settings.map.defaultFilter", "Default map filter"),
+                ("Privacy and trust", "Privacy and trust"),
+                ("Blocked and muted accounts", "Blocked and muted"),
+                ("settings.importHistory", "Import history"),
                 ("settings.resources", "Resources")
             ] {
                 let link = app.descendants(matching: .any).matching(

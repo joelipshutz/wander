@@ -181,19 +181,19 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
 
     var narrativeTitle: String {
         switch linkage {
-        case .sharedRegulars: "You’re Both Regulars At \(name)"
-        case .sharedLove: "\(name) Won You Both Over"
-        case .mutualWanna: "You Both Want To Go To \(name)"
-        case .viewerBeenPartnerWanna: "You’ve Been To \(name)\n\(partner.shortName) Wants To Go"
-        case .partnerBeenViewerWanna: "\(partner.shortName)’s Been To \(name)\nYou Wanna Go"
-        case .partnerLoves: "\(partner.shortName) Loves \(name)"
-        case .viewerLoves: "You Love \(name)\nShow \(partner.shortName)"
-        case .bothBeen: "You’ve Both Been To \(name)"
-        case .viewerBeen: "You’ve Been To \(name)\nBring \(partner.shortName) Along"
-        case .partnerBeen: "\(partner.shortName)’s Been To \(name)\nGo Together?"
-        case .viewerWanna: "You Want To Go To \(name)\nBring \(partner.shortName) Along"
-        case .partnerWanna: "\(partner.shortName) Wants To Go To \(name)"
-        case .sharedPlace: "Make A Plan At \(name)"
+        case .sharedRegulars: "You’re both regulars at \(name)"
+        case .sharedLove: "\(name) won you both over"
+        case .mutualWanna: "You both want to go to \(name)"
+        case .viewerBeenPartnerWanna: "You’ve been to \(name)\n\(partner.shortName) wants to go"
+        case .partnerBeenViewerWanna: "\(partner.shortName)’s been to \(name)\nYou wanna go"
+        case .partnerLoves: "\(partner.shortName) loves \(name)"
+        case .viewerLoves: "You love \(name)\nShow \(partner.shortName)"
+        case .bothBeen: "You’ve both been to \(name)"
+        case .viewerBeen: "You’ve been to \(name)\nBring \(partner.shortName) along"
+        case .partnerBeen: "\(partner.shortName)’s been to \(name)\nGo together?"
+        case .viewerWanna: "You want to go to \(name)\nBring \(partner.shortName) along"
+        case .partnerWanna: "\(partner.shortName) wants to go to \(name)"
+        case .sharedPlace: "Make a plan at \(name)"
         }
     }
 
@@ -203,18 +203,18 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
             "You: \(visitsText(youVisits)) · \(partner.shortName): \(visitsText(joeVisits))"
         case .sharedLove:
             "You: \(PlaceRating.averageDisplay(youRating!))/5 · \(partner.shortName): \(PlaceRating.averageDisplay(joeRating!))/5"
-        case .mutualWanna: "In Both Of Your Wannas"
+        case .mutualWanna: "In both of your Wannas"
         case .viewerBeenPartnerWanna:
             "You: \(visitsText(youVisits)) · In \(partner.shortName)’s Wannas"
         case .partnerBeenViewerWanna:
-            "\(partner.shortName): \(visitsText(joeVisits)) · In Your Wannas"
-        case .partnerLoves: "\(partner.shortName) Rated It \(PlaceRating.averageDisplay(joeRating!))/5"
-        case .viewerLoves: "You Rated It \(PlaceRating.averageDisplay(youRating!))/5"
+            "\(partner.shortName): \(visitsText(joeVisits)) · In your Wannas"
+        case .partnerLoves: "\(partner.shortName) rated it \(PlaceRating.averageDisplay(joeRating!))/5"
+        case .viewerLoves: "You rated it \(PlaceRating.averageDisplay(youRating!))/5"
         case .viewerBeen: "You: \(visitsText(youVisits))"
         case .partnerBeen: "\(partner.shortName): \(visitsText(joeVisits))"
-        case .viewerWanna: "In Your Wannas"
+        case .viewerWanna: "In your Wannas"
         case .partnerWanna: "In \(partner.shortName)’s Wannas"
-        case .sharedPlace: "A Place On Both Your Maps"
+        case .sharedPlace: "A place on both your maps"
         }
     }
 
@@ -230,7 +230,7 @@ struct CommonGroundMockPlace: Identifiable, Hashable, Sendable {
     }
 
     private func visitsText(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "Check-In" : "Check-Ins")"
+        "\(count) \(count == 1 ? "check-in" : "check-ins")"
     }
 
 }

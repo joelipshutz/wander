@@ -10,7 +10,7 @@ final class SharedVisitPostcardPresentationTests: XCTestCase {
             posts: [accepted, source]))
         let presentation = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection, viewerID: "viewer", permits: { _ in true }))
         XCTAssertEqual(presentation.context.actor.id, "alex")
-        XCTAssertEqual(presentation.attribution, "Alex Example Checked-In With Sam Example")
+        XCTAssertEqual(presentation.attribution, "Alex Example checked-in with Sam Example")
         XCTAssertEqual(Set(presentation.posts.compactMap(\.note)), ["Source note", "Accepted note"])
         XCTAssertEqual(Set(presentation.context.media.map(\.id)), ["source-photo", "accepted-photo"])
         XCTAssertEqual(presentation.mediaAuthors["accepted-photo"]?.id, "sam")
@@ -23,7 +23,7 @@ final class SharedVisitPostcardPresentationTests: XCTestCase {
         let collection = try XCTUnwrap(SharedVisitPostCollection(groupID: "group", commentActivityID: source.id,
             posts: [source], companions: [pending]))
         let owner = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection, viewerID: "alex", permits: { _ in true }))
-        XCTAssertEqual(owner.attribution, "Alex Example Checked-In With Sam Example")
+        XCTAssertEqual(owner.attribution, "Alex Example checked-in with Sam Example")
         XCTAssertFalse(owner.attribution.localizedCaseInsensitiveContains("pending"))
         XCTAssertEqual(owner.posts.count, 1)
         XCTAssertEqual(owner.context.media.map(\.id), ["source-photo"])
@@ -38,7 +38,7 @@ final class SharedVisitPostcardPresentationTests: XCTestCase {
                 posts: [source], companions: [.init(profile: profile("sam", "Sam Example"), status: status)]))
             let presentation = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection, viewerID: "alex", permits: { _ in true }))
             XCTAssertTrue(presentation.companions.isEmpty)
-            XCTAssertEqual(presentation.attribution, "Alex Example Checked-In")
+            XCTAssertEqual(presentation.attribution, "Alex Example checked-in")
         }
     }
 

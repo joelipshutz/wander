@@ -13,8 +13,8 @@ enum LiveSelectedArea: Equatable {
         if case .mapViewport = self { return true }
         return false
     }
-    var summary: String { isMapViewport ? "Map Area" : "Drawn Area" }
-    var drawActionTitle: String { isMapViewport ? "Draw Area" : "Redraw" }
+    var summary: String { isMapViewport ? "Map area" : "Drawn area" }
+    var drawActionTitle: String { isMapViewport ? "Draw area" : "Redraw" }
 }
 
 /// The exposed rectangle is in the stable Map's local coordinates. Controls

@@ -37,14 +37,14 @@ import XCTest
         let phone = app.textFields["accountContactDetails.phone"]
         phone.tap()
         phone.typeText("2025550123")
-        let privacyNote = app.staticTexts["Your Phone Number Is Private."]
+        let privacyNote = app.staticTexts["Your phone number is private."]
         let phoneSectionIsVisible = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: privacyNote)
         XCTAssertEqual(XCTWaiter.wait(for: [phoneSectionIsVisible], timeout: 5), .completed)
         capture(app, name: "02 — Phone keyboard")
         XCTAssertFalse(app.buttons["Done"].exists)
         XCTAssertTrue(app.buttons["accountContactDetails.continue"].isHittable)
         app.buttons["accountContactDetails.continue"].tap()
-        XCTAssertTrue(app.staticTexts["Connect With Your People"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Connect with your people"].waitForExistence(timeout: 5))
     }
 
     func testInvalidPhoneCannotAdvanceAndCountryPickerIsEditable() {
@@ -67,16 +67,16 @@ import XCTest
         let app = launch()
         let city = app.textFields["accountContactDetails.city"]
         app.buttons["accountContactDetails.clearCity"].tap()
-        XCTAssertEqual(city.value as? String, "Search Any City")
+        XCTAssertEqual(city.value as? String, "Search any city")
         XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
         XCTAssertFalse(app.buttons["Done"].exists)
         XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
         capture(app, name: "Typeahead 02 — Cleared city")
         city.typeText("loading")
-        XCTAssertTrue(app.staticTexts["Finding Cities…"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Finding cities…"].waitForExistence(timeout: 2))
         capture(app, name: "Typeahead 03 — Typing")
         app.buttons["accountContactDetails.clearCity"].tap()
-        XCTAssertTrue(app.staticTexts["Finding Cities…"].waitForNonExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Finding cities…"].waitForNonExistence(timeout: 2))
         city.typeText("Par")
         let paris = app.buttons["accountContactDetails.cityResult.Paris.FR"]
         XCTAssertTrue(paris.waitForExistence(timeout: 5))
@@ -110,11 +110,11 @@ import XCTest
         capture(app, name: "Typeahead 06 — Kyoto selected")
         app.buttons["accountContactDetails.clearCity"].tap()
         city.typeText("zzzzcity")
-        XCTAssertTrue(app.staticTexts["No Matching Cities. Try Another Spelling."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["No matching cities. Try another spelling."].waitForExistence(timeout: 5))
         capture(app, name: "Typeahead 07 — No matches")
         app.buttons["accountContactDetails.clearCity"].tap()
         city.typeText("offline")
-        XCTAssertTrue(app.buttons["Try Again"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Try again"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["accountContactDetails.continue"].isEnabled)
         capture(app, name: "Typeahead 08 — Connection unavailable")
     }
@@ -122,12 +122,12 @@ import XCTest
     func testContinueIsTheOnlyActionAndBlankPhoneCannotAdvance() {
         let app = launch()
         XCTAssertFalse(app.buttons["accountContactDetails.skip"].exists)
-        XCTAssertFalse(app.buttons["Not Now"].exists)
+        XCTAssertFalse(app.buttons["Not now"].exists)
         XCTAssertFalse(app.buttons["Done"].exists)
         let primary = app.buttons["accountContactDetails.continue"]
         XCTAssertFalse(primary.isEnabled)
-        XCTAssertTrue(app.staticTexts["Enter Your Phone Number To Continue."].exists)
-        XCTAssertFalse(app.staticTexts["Connect With Your People"].exists)
+        XCTAssertTrue(app.staticTexts["Enter your phone number to continue."].exists)
+        XCTAssertFalse(app.staticTexts["Connect with your people"].exists)
     }
 
     private func capture(_ app: XCUIApplication, name: String) {

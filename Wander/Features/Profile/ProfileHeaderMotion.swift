@@ -26,10 +26,10 @@ enum ProfileHeaderMotionVariant: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .solid: "01 · Compact Arc"
-        case .blur: "02 · Blurred Arc"
-        case .leading: "03 · Name Beside Photo"
-        case .compact: "04 · Inline Blur"
+        case .solid: "01 · Compact arc"
+        case .blur: "02 · Blurred arc"
+        case .leading: "03 · Name beside photo"
+        case .compact: "04 · Inline blur"
         }
     }
 

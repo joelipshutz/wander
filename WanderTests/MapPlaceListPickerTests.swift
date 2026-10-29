@@ -503,7 +503,7 @@ final class MapPlaceListPickerTests: XCTestCase {
 
         XCTAssertEqual(result.addedCount, 2)
         XCTAssertEqual(result.companionSave, .createdWanna(userPlaceID: "created"))
-        XCTAssertEqual(result.message, "Added To 2 Lists And Wanna Go.")
+        XCTAssertEqual(result.message, "Added to 2 lists and Wanna Go.")
     }
 
     func testListActionsUsePlainBulletsDistinctFromWanna() {

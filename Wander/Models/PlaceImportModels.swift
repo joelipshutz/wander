@@ -53,12 +53,12 @@ enum PlaceImportHistoryPresentation {
             return "Done"
         }
         if coverage.matchedCount > coverage.totalCount / 2 {
-            return "Partially Imported"
+            return "Partially imported"
         }
         if coverage.hasRecovery || coverage.matchedCount < coverage.totalCount {
             return "Retry"
         }
-        return "Ready To Review"
+        return "Ready to review"
     }
 
     static func postTitle(title: String?, caption: String? = nil, author: String? = nil) -> String? {
@@ -244,16 +244,16 @@ struct PlaceImportReviewPlan: Equatable {
     var primaryActionTitle: String? {
         guard processingCount == 0, committableCount > 0 else { return nil }
         if surface == .quickAdd, committableCount == 1 {
-            return quickAddStatus == .been ? "Add As Been" : "Add As Wanna"
+            return quickAddStatus == .been ? "Add as Been" : "Add as Wanna"
         }
         if surface == .duplicate {
-            return "Add To Imported List"
+            return "Add to imported list"
         }
         if selectedNeedsHelpCount > 0 {
-            let denominatorNoun = selectedCount == 1 ? "Place" : "Places"
-            return "Add \(committableCount) Of \(selectedCount) \(denominatorNoun)"
+            let denominatorNoun = selectedCount == 1 ? "place" : "places"
+            return "Add \(committableCount) of \(selectedCount) \(denominatorNoun)"
         }
-        let noun = committableCount == 1 ? "Place" : "Places"
+        let noun = committableCount == 1 ? "place" : "places"
         return "Add \(committableCount) \(noun)"
     }
 }
@@ -297,25 +297,25 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
     }
 
     var bannerTitle: String {
-        foundCount == 0 && sourceRetryCount > 0 ? "Import Needs A Retry" : "Your Import Is Ready"
+        foundCount == 0 && sourceRetryCount > 0 ? "Import needs a retry" : "Your import is ready"
     }
 
     var bannerDetail: String {
         if foundCount == 0, sourceRetryCount > 0 {
             return sourceRetryCount == 1
-                ? "Source Scan Needs A Retry"
-                : "\(sourceRetryCount) Source Scans Need A Retry"
+                ? "Source scan needs a retry"
+                : "\(sourceRetryCount) source scans need a retry"
         }
         if sourceRetryCount > 0 {
             let placeSummary = needsReviewCount > 0
-                ? "\(matchedCount) Matched · \(needsReviewCount) Need A Look"
-                : matchedCount == 1 ? "1 Place Matched" : "\(matchedCount) Places Matched"
-            return "\(placeSummary) · Scan Incomplete"
+                ? "\(matchedCount) matched · \(needsReviewCount) need a look"
+                : matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
+            return "\(placeSummary) · scan incomplete"
         }
         if needsReviewCount > 0 {
-            return "\(matchedCount) Matched · \(needsReviewCount) Need A Look"
+            return "\(matchedCount) matched · \(needsReviewCount) need a look"
         }
-        return matchedCount == 1 ? "1 Place Matched" : "\(matchedCount) Places Matched"
+        return matchedCount == 1 ? "1 place matched" : "\(matchedCount) places matched"
     }
 
     static func resolved(
@@ -349,10 +349,10 @@ struct PlaceImportCompletionNotice: Equatable, Identifiable {
             case .instagram: "Instagram"
             case .tiktok: "TikTok"
             case .snapchat: "Snapchat"
-            case .textNotes: "Your Notes"
+            case .textNotes: "Your notes"
             }
         } else {
-            sourceName = "Multiple Sources"
+            sourceName = "Multiple sources"
         }
 
         return PlaceImportCompletionNotice(
@@ -804,7 +804,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
               seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false,
               candidates.isEmpty,
               helpMessage?.localizedCaseInsensitiveContains("some media") == true,
-              helpMessage?.localizedCaseInsensitiveContains("Retry Automatic Matching") == true
+              helpMessage?.localizedCaseInsensitiveContains("retry automatic matching") == true
         else { return false }
         return true
     }
@@ -858,7 +858,7 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
             ?? candidates.first?.name
             ?? socialSourceFallbackName
             ?? sourceURLHost
-            ?? "Imported Place"
+            ?? "Imported place"
     }
 
     var displayArea: String? {
@@ -884,9 +884,9 @@ struct PlaceImportItem: Codable, Equatable, Identifiable {
 
     private var socialSourceFallbackName: String? {
         switch source {
-        case .instagram: "Instagram Post"
-        case .tiktok: "TikTok Post"
-        case .snapchat: "Snapchat Post"
+        case .instagram: "Instagram post"
+        case .tiktok: "TikTok post"
+        case .snapchat: "Snapchat post"
         case .googleMaps, .textNotes: nil
         }
     }
@@ -983,8 +983,8 @@ struct PlaceImportMatchingProgress: Equatable, Sendable {
 
     var label: String {
         isDiscovering
-            ? "Resolved \(resolvedCount) Places · Finding The Total…"
-            : "Resolved \(resolvedCount) Out Of \(totalCount) Places"
+            ? "Resolved \(resolvedCount) places · finding the total…"
+            : "Resolved \(resolvedCount) out of \(totalCount) places"
     }
 
     static func summarize(

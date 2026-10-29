@@ -1,9 +1,9 @@
 import SwiftUI
 
 enum ContactDiscoveryContent {
-    static let title = "Connect With Your People"
-    static let explanation = "Find Friends On Astir By Securely Comparing Phone Numbers And Email Addresses From The Contacts You Allow. Your Address Book Isn’t Saved On Our Servers."
-    static let discoverability = "Finding Friends Also Lets People Who Have Your Verified Email Or Phone Number Find Your Public Astir Profile. You Choose Whom To Follow. Turn This Off Anytime In Settings."
+    static let title = "Connect with your people"
+    static let explanation = "Find friends on Astir by securely comparing phone numbers and email addresses from the contacts you allow. Your address book isn’t saved on our servers."
+    static let discoverability = "Finding friends also lets people who have your verified email or phone number find your public Astir profile. You choose whom to follow. Turn this off anytime in Settings."
 }
 
 struct OnboardingContactsView: View {
@@ -35,7 +35,7 @@ struct OnboardingContactsView: View {
             }
         } footer: {
             VStack(spacing: WanderTheme.spacing2) {
-                WanderPrimaryButton(title: isWorking ? "Connecting…" : "Find Friends", isDisabled: isWorking) {
+                WanderPrimaryButton(title: isWorking ? "Connecting…" : "Find friends", isDisabled: isWorking) {
                     Task {
                         isWorking = true; errorMessage = nil
                         defer { isWorking = false }
@@ -49,7 +49,7 @@ struct OnboardingContactsView: View {
                         }
                     }
                 }.accessibilityIdentifier("onboarding.contacts.findFriends")
-                Button("Not Now", action: continueAction)
+                Button("Not now", action: continueAction)
                     .font(AstirTypography.control).foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 44)
                     .disabled(isWorking).accessibilityIdentifier("onboarding.contacts.skip")
@@ -76,25 +76,25 @@ struct ContactDiscoverySettingsScreen: View {
             Section {
                 if let userID = auth.state.session?.userID {
                     if backend.contactDiscovery.hasConsent(userID: userID) {
-                        Label("Contact Suggestions Are On", systemImage: "checkmark.circle")
+                        Label("Contact suggestions are on", systemImage: "checkmark.circle")
                     } else {
-                        Button("Find Friends On This Device") { Task { await enable(userID) } }
+                        Button("Find friends on this device") { Task { await enable(userID) } }
                             .accessibilityIdentifier("contacts.settings.enable")
                     }
                     if enabled || backend.contactDiscovery.hasConsent(userID: userID) {
-                        Button("Turn Off Contact Matching", role: .destructive) { Task { await disable(userID) } }
+                        Button("Turn off contact matching", role: .destructive) { Task { await disable(userID) } }
                             .accessibilityIdentifier("contacts.settings.disable")
                     }
                 }
                 if isWorking { ProgressView() }
                 if let errorMessage { Text(errorMessage).font(.footnote) }
             } footer: {
-                Text("Turning This Off Removes Your Matching Identifiers And Contact Suggestions. Existing Follows Stay. Manage Which Contacts Are Allowed In iOS Settings.")
+                Text("Turning this off removes your matching identifiers and contact suggestions. Existing follows stay. Manage which contacts are allowed in iOS Settings.")
             }
         }
         .id(revision)
         .disabled(isWorking)
-        .navigationTitle("Find Friends")
+        .navigationTitle("Find friends")
         .task { await refresh() }
         .onChange(of: scenePhase) { _, value in if value == .active { Task { await refresh() } } }
     }
@@ -104,7 +104,7 @@ struct ContactDiscoverySettingsScreen: View {
         isWorking = true
         defer { isWorking = false }
         do { enabled = try await backend.contactDiscovery.reconcile(userID: userID) }
-        catch { errorMessage = "Couldn’t Check Contact Matching. Try Again When You’re Connected." }
+        catch { errorMessage = "Couldn’t check contact matching. Try again when you’re connected." }
     }
     private func enable(_ userID: String) async {
         isWorking = true; errorMessage = nil
@@ -116,6 +116,6 @@ struct ContactDiscoverySettingsScreen: View {
         isWorking = true; errorMessage = nil
         defer { isWorking = false }
         do { try await backend.contactDiscovery.disable(userID: userID); enabled = false; revision += 1 }
-        catch { errorMessage = "Contact Uploads Are Off On This Device. Reconnect To Finish Turning Off Discovery For Your Account."; revision += 1 }
+        catch { errorMessage = "Contact uploads are off on this device. Reconnect to finish turning off discovery for your account."; revision += 1 }
     }
 }

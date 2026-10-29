@@ -30,7 +30,7 @@ import Foundation
         let key = next.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         if let cached = cache[key], !force {
             suggestions = cached
-            if cached.isEmpty { message = "No Matching Cities. Try Another Spelling." }
+            if cached.isEmpty { message = "No matching cities. Try another spelling." }
             return
         }
         isSearching = true
@@ -46,12 +46,12 @@ import Foundation
                 recentQueries.removeAll { $0 == key }
                 recentQueries.append(key)
                 if recentQueries.count > 20 { cache.removeValue(forKey: recentQueries.removeFirst()) }
-                if suggestions.isEmpty { message = "No Matching Cities. Try Another Spelling." }
+                if suggestions.isEmpty { message = "No matching cities. Try another spelling." }
                 isSearching = false
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
                 isSearching = false
-                message = "Couldn’t Find Cities. Check Your Connection And Try Again."
+                message = "Couldn’t find cities. Check your connection and try again."
             }
         }
     }
@@ -72,7 +72,7 @@ import Foundation
             } catch {
                 guard !Task.isCancelled, current == generation else { return }
                 isResolving = false
-                message = "Couldn’t Select That City. Try Again."
+                message = "Couldn’t select that city. Try again."
             }
         }
     }

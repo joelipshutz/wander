@@ -17,7 +17,7 @@ import XCTest
         let friend = app.buttons["onboarding.friends.follow.user_contact_friend"]
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertEqual(friend.label, "Follow Contact Friend")
-        XCTAssertTrue(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
         XCTAssertTrue(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
         XCTAssertLessThan(friend.frame.minY, app.buttons["onboarding.friends.follow.user_general_friend"].frame.minY)
         XCTAssertEqual(app.buttons.matching(identifier: "onboarding.friends.follow.user_contact_friend").count, 1)
@@ -31,7 +31,7 @@ import XCTest
         let skip = app.buttons["onboarding.contacts.skip"]
         XCTAssertTrue(skip.waitForExistence(timeout: 15)); skip.tap()
         XCTAssertTrue(app.buttons["onboarding.friends.follow.user_general_friend"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
         XCTAssertFalse(app.staticTexts["3 of your contacts follow General Friend"].firstMatch.exists)
     }
     func testDeniedPermissionCanContinueAndSearch() {
@@ -42,7 +42,7 @@ import XCTest
         capture("Denied contacts fallback")
         app.buttons["onboarding.contacts.skip"].tap()
         XCTAssertTrue(app.textFields["onboarding.friends.search"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
     }
     func testMatchingFailureKeepsGeneralFollowSuggestionsUsable() {
         let app = launch(["-WanderContactDiscoveryFailure"])
@@ -50,7 +50,7 @@ import XCTest
         XCTAssertTrue(find.waitForExistence(timeout: 15)); find.tap()
         let general = app.buttons["onboarding.friends.follow.user_general_friend"]
         XCTAssertTrue(general.waitForExistence(timeout: 10))
-        XCTAssertFalse(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
         general.tap()
         XCTAssertTrue(app.buttons["Following General Friend"].waitForExistence(timeout: 5))
     }
@@ -96,7 +96,7 @@ import XCTest
         backToFeed(app)
         let friend = app.scrollViews["feed.places.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
         capture("Following screen contact suggestions")
         friend.tap()
         XCTAssertEqual(friend.label, "Following Contact Friend")
@@ -105,7 +105,7 @@ import XCTest
         app.buttons["contacts.settings.disable"].tap()
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
         backToFeed(app)
-        XCTAssertFalse(app.staticTexts["In Your Contacts"].firstMatch.exists)
+        XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
         app.buttons["feed.searchLauncher"].tap()
         let search = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
@@ -123,12 +123,12 @@ import XCTest
         XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
-        XCTAssertTrue(app.staticTexts["In Your Contacts"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         backgroundApplication(app)
         app.activate()
         completeNotificationPromptIfPresented(app)
         XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
-        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In Your Contacts"].firstMatch)
+        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
         openContactSettings(app)
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 5))

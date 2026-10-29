@@ -33,7 +33,7 @@ final class OnboardingConnectionTests: XCTestCase {
         )
         await model.load()
         XCTAssertEqual(model.recommendations, suggestions)
-        XCTAssertEqual(suggestions[1].reason.displayText(for: person("social")), "3 Of Your Contacts Follow Social")
+        XCTAssertEqual(suggestions[1].reason.displayText(for: person("social")), "3 of your contacts follow Social")
         model.clearContactRecommendations()
         XCTAssertEqual(model.recommendations.map(\.id), ["local"])
     }

@@ -162,7 +162,7 @@ struct PersonMentionField: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel("\(PersonMentionCandidates.name(for: profile)), @\(profile.handle)")
-                            .accessibilityHint("Insert This Person")
+                            .accessibilityHint("Insert this person")
                             .accessibilityIdentifier("\(accessibilityIdentifier).person.\(profile.id)")
                         }
                     }
@@ -171,13 +171,13 @@ struct PersonMentionField: View {
                 .scrollDismissesKeyboard(.never)
                 .frame(height: min(CGFloat(profiles.count) * rowHeight, min(rowHeight * 3.5, 220) - (results.failed ? 44 : 0)))
             } else if results.isLoading {
-                ProgressView("Finding People…").font(AstirTypography.caption).padding(12)
+                ProgressView("Finding people…").font(AstirTypography.caption).padding(12)
             } else if !results.failed {
-                Text("No People Found").font(AstirTypography.bodySmall).padding(12)
+                Text("No people found").font(AstirTypography.bodySmall).padding(12)
             }
             if results.failed {
                 HStack {
-                    Text(profiles.isEmpty ? "Couldn't Load People." : "Showing Available People.")
+                    Text(profiles.isEmpty ? "Couldn't load people." : "Showing available people.")
                         .font(AstirTypography.caption)
                     Spacer(minLength: 4)
                     Button("Retry") { retry += 1 }.frame(minHeight: 44)

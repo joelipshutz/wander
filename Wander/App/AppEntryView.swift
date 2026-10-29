@@ -135,7 +135,7 @@ struct AppEntryView: View {
                 .id(session.userID)
             case .recoverableFailure(_, let message, let canContinueOffline):
                 AppEntryRecoveryView(
-                    title: "Your Map Is Still Here",
+                    title: "Your map is still here",
                     message: message,
                     canContinueOffline: canContinueOffline,
                     retry: coordinator.retry,
@@ -143,7 +143,7 @@ struct AppEntryView: View {
                 )
             case .unavailable(let message):
                 AppEntryRecoveryView(
-                    title: "Sign In Isn’t Available",
+                    title: "Sign in isn’t available",
                     message: message,
                     canContinueOffline: false,
                     retry: coordinator.retry,
@@ -338,9 +338,9 @@ private struct AppEntryRecoveryView: View {
             Spacer()
 
             VStack(spacing: WanderTheme.spacing1) {
-                WanderPrimaryButton(title: "Try Again") { retry() }
+                WanderPrimaryButton(title: "Try again") { retry() }
                 if canContinueOffline {
-                    Button("Continue Offline") { continueOffline() }
+                    Button("Continue offline") { continueOffline() }
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)

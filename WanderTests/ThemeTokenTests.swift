@@ -124,7 +124,7 @@ final class PlaceRatingReactionTests: XCTestCase {
             (3, "Mid"),
             (3.5, "Okayyy"),
             (4, "Yeah"),
-            (4.5, "Oh Baby"),
+            (4.5, "Oh baby"),
             (5, "Wow")
         ]
 
@@ -136,14 +136,14 @@ final class PlaceRatingReactionTests: XCTestCase {
 
     func testReactionResolutionNormalizesAndClampsScores() {
         XCTAssertEqual(PlaceRatingReaction.resolve(0.5), PlaceRatingReaction(score: 1, label: "Oof"))
-        XCTAssertEqual(PlaceRatingReaction.resolve(4.74), PlaceRatingReaction(score: 4.5, label: "Oh Baby"))
+        XCTAssertEqual(PlaceRatingReaction.resolve(4.74), PlaceRatingReaction(score: 4.5, label: "Oh baby"))
         XCTAssertEqual(PlaceRatingReaction.resolve(5.5), PlaceRatingReaction(score: 5, label: "Wow"))
     }
 
     func testReactionAccessibilityValueIncludesScoreAndCopy() {
         XCTAssertEqual(
             PlaceRatingReaction.resolve(4.5).accessibilityValue,
-            "4.5 Out Of 5, Oh Baby"
+            "4.5 out of 5, oh baby"
         )
     }
 

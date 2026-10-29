@@ -18,8 +18,8 @@ struct WanderShareContent: Equatable {
         else { return nil }
         return WanderShareContent(
             item: item,
-            subject: "Discover \(displayName.split(separator: " ").first.map(String.init) ?? displayName)’s World",
-            message: "See @\(handle) On Astir"
+            subject: "Discover \(displayName.split(separator: " ").first.map(String.init) ?? displayName)’s world",
+            message: "See @\(handle) on Astir"
         )
     }
 
@@ -40,9 +40,9 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             additionalItems: [imageFileURL],
-            subject: normalizedFilterTitle.map { "\(displayName)'s \($0) Map" } ?? "\(displayName)'s Map",
-            message: normalizedFilterTitle.map { "Explore \($0) On @\(handle)'s Astir Map" }
-                ?? "Explore @\(handle)'s Saved Places On Astir"
+            subject: normalizedFilterTitle.map { "\(displayName)'s \($0) map" } ?? "\(displayName)'s map",
+            message: normalizedFilterTitle.map { "Explore \($0) on @\(handle)'s Astir map" }
+                ?? "Explore @\(handle)'s saved places on Astir"
         )
     }
 
@@ -81,7 +81,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             subject: name,
-            message: "See \(name) On Astir"
+            message: "See \(name) on Astir"
         )
     }
 
@@ -90,7 +90,7 @@ struct WanderShareContent: Equatable {
         return WanderShareContent(
             item: item,
             subject: "Join \(name)",
-            message: "You’re Invited To Build \(name) Together On Astir"
+            message: "You’re invited to build \(name) together on Astir"
         )
     }
 
@@ -102,18 +102,18 @@ struct WanderShareContent: Equatable {
         let profileURL = senderProfileID.flatMap {
             WanderDeepLinkRoute.sharedProfile(profileID: $0).url
         }
-        let opening = contextMessage ?? "Join Me On Astir."
+        let opening = contextMessage ?? "Join me on Astir."
         let message: String
         if includeInstallPrompt {
             message = profileURL == nil
-                ? "\(opening) Install The TestFlight Beta To Get Started."
-                : "\(opening) Install The TestFlight Beta, Then Open My Profile To Connect."
+                ? "\(opening) Install the TestFlight beta to get started."
+                : "\(opening) Install the TestFlight beta, then open my profile to connect."
         } else {
             message = opening
         }
         return WanderShareContent(
             item: profileURL ?? publicTestFlightURL,
-            subject: "Join Me On Astir",
+            subject: "Join me on Astir",
             message: message
         )
     }

@@ -139,7 +139,7 @@ final class FeedActivityGroupingUITests: XCTestCase {
         send.tap()
         let heart = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity.comment.like.")).firstMatch
         XCTAssertTrue(heart.waitForExistence(timeout: 5))
-        XCTAssertEqual(heart.label, "Like Comment")
+        XCTAssertEqual(heart.label, "Like comment")
         XCTAssertEqual(heart.value as? String, "0 likes")
         XCTAssertGreaterThanOrEqual(heart.frame.width, 44)
         XCTAssertGreaterThanOrEqual(heart.frame.height, 44)
@@ -148,16 +148,16 @@ final class FeedActivityGroupingUITests: XCTestCase {
         XCTAssertLessThanOrEqual(heart.frame.maxX, actions.frame.minX + 1)
         XCTAssertEqual(heart.frame.midY, actions.frame.midY, accuracy: 1)
         XCTAssertGreaterThan(heart.frame.midX, app.frame.midX)
-        let activity = app.buttons["Like Activity"].firstMatch
+        let activity = app.buttons["Like activity"].firstMatch
         let activityValue = activity.value as? String
         capture("REC-564-comment-unliked")
         heart.tap()
-        XCTAssertEqual(heart.label, "Unlike Comment")
-        XCTAssertEqual(heart.value as? String, "1 Like")
+        XCTAssertEqual(heart.label, "Unlike comment")
+        XCTAssertEqual(heart.value as? String, "1 like")
         XCTAssertEqual(activity.value as? String, activityValue)
         capture("REC-564-comment-liked")
         heart.tap()
-        XCTAssertEqual(heart.label, "Like Comment")
+        XCTAssertEqual(heart.label, "Like comment")
         XCTAssertEqual(heart.value as? String, "0 likes")
         capture("REC-564-comment-unliked-again")
     }
@@ -274,9 +274,9 @@ final class FeedActivityGroupingUITests: XCTestCase {
         XCTAssertTrue(actions.isHittable)
         XCTAssertEqual(actions.frame.height, 44, accuracy: 0.001)
         actions.tap()
-        let report = app.buttons["Report Activity"]
+        let report = app.buttons["Report activity"]
         XCTAssertTrue(report.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Reply Privately"].exists)
+        XCTAssertFalse(app.buttons["Reply privately"].exists)
         capture("REC-652-nonmutual-activity-menu")
         report.tap()
         let submit = app.buttons["communityReport.submit"]

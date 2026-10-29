@@ -11,10 +11,10 @@ struct LiveDrawerActions: View {
     var body: some View {
         HStack(spacing: 0) {
             if eventsAvailable {
-                action("Upcoming Events", symbol: "calendar", identifier: "live.utility.events", perform: onEvents)
+                action("Upcoming events", symbol: "calendar", identifier: "live.utility.events", perform: onEvents)
             }
             Spacer(minLength: 0)
-            action("Invite People To Astir", symbol: "person.badge.plus", identifier: "live.utility.invite", perform: onInvite)
+            action("Invite people to Astir", symbol: "person.badge.plus", identifier: "live.utility.invite", perform: onInvite)
                 .walkthroughTarget(.feedInvite)
         }
         .foregroundStyle(brand.primaryText)

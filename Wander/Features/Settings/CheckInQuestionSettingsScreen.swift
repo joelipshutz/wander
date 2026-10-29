@@ -26,7 +26,7 @@ struct CheckInQuestionSettingsScreen: View {
         List {
             Section {
                 CheckInQuestionSearchField(
-                    placeholder: "Find A Category Or Place Type",
+                    placeholder: "Find a category or place type",
                     text: $search,
                     isFocused: $isSearchFocused,
                     accessibilityIdentifier: "questions.settings.search"
@@ -36,7 +36,7 @@ struct CheckInQuestionSettingsScreen: View {
 
             if query.isEmpty {
                 Section {
-                    Text("Choose The Questions You See For Each Place Type.")
+                    Text("Choose the questions you see for each place type.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
                         .listRowBackground(brandMode.background)
@@ -49,7 +49,7 @@ struct CheckInQuestionSettingsScreen: View {
                             scopes: scopes.filter { $0.categoryID == category }
                         )
                     } label: {
-                        Text(AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category)))
+                        Text(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)))
                             .font(AstirTypography.body)
                             .frame(minHeight: WanderTheme.tapMinimum)
                     }
@@ -57,7 +57,7 @@ struct CheckInQuestionSettingsScreen: View {
                     .listRowBackground(brandMode.raisedBackground)
                 }
             } else if matchingScopes.isEmpty {
-                Text("No Matching Place Types. Try A Category Or A More General Name.")
+                Text("No matching place types. Try a category or a more general name.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .listRowBackground(brandMode.raisedBackground)
@@ -65,7 +65,7 @@ struct CheckInQuestionSettingsScreen: View {
                 ForEach(categoryIDs, id: \.self) { category in
                     let matches = matchingScopes.filter { $0.categoryID == category }
                     if !matches.isEmpty {
-                        Section(AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: category))) {
+                        Section(AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category))) {
                             ForEach(matches) { scope in
                                 scopeButton(scope)
                             }
@@ -78,7 +78,7 @@ struct CheckInQuestionSettingsScreen: View {
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
         .tint(brandMode.accentText)
-        .navigationTitle("Check-In Questions")
+        .navigationTitle("Check-in questions")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)
@@ -156,7 +156,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
         List {
             Section {
                 CheckInQuestionSearchField(
-                    placeholder: "Find A Place Type",
+                    placeholder: "Find a place type",
                     text: $search,
                     isFocused: $isSearchFocused,
                     accessibilityIdentifier: "questions.settings.typeSearch"
@@ -165,7 +165,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
             .listRowBackground(brandMode.raisedBackground)
 
             if matches.isEmpty {
-                Text("No Matching Place Types.")
+                Text("No matching place types.")
                     .foregroundStyle(brandMode.secondaryText)
                     .listRowBackground(brandMode.raisedBackground)
             }
@@ -186,7 +186,7 @@ private struct CheckInQuestionTypeSettingsScreen: View {
         .background(brandMode.background)
         .foregroundStyle(brandMode.primaryText)
         .tint(brandMode.accentText)
-        .navigationTitle(AppCopy.capitalizingWords(categoryTitle))
+        .navigationTitle(AppCopy.capitalizingInitial(categoryTitle))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
         .scrollDismissesKeyboard(.interactively)

@@ -29,8 +29,8 @@ struct PlaceProfilePlanPresentation: ViewModifier {
                     } else {
                         VStack(spacing: 16) {
                             Image(systemName: "calendar.badge.plus").font(.largeTitle)
-                            Text("Start With A Wanna").font(AstirTypography.screenTitle)
-                            Text("Save This Place, Then Choose A Mutual Friend To Invite.")
+                            Text("Start with a Wanna").font(AstirTypography.screenTitle)
+                            Text("Save this place, then choose a mutual friend to invite.")
                                 .font(AstirTypography.body).foregroundStyle(brand.secondaryText)
                             Button("Save Wanna") { wantsSave = true; isPresented = false }
                                 .font(AstirTypography.control).foregroundStyle(brand.accentText)

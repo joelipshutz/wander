@@ -41,7 +41,7 @@ final class PlaceCheckInObservationProjectionTests: XCTestCase {
         let answer = try XCTUnwrap(project([older, newer]).first)
 
         XCTAssertEqual(value(answer), "A few")
-        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: answer), ["Outlets: A Few"])
+        XCTAssertEqual(PlaceProfileAttributePresentation.displayValues(from: answer), ["Outlets: A few"])
         XCTAssertTrue(PlaceProfileAttributePresentation.searchTerms(from: answer).contains("outlets"))
     }
 

@@ -157,30 +157,30 @@ enum FirstVisitWalkthroughContent {
 
     static let stepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .map: [
-            overview(.mapFeatured, "A Place To Start", "Discover Places Through Your People And The Astir Community"),
-            overview(.mapFriends, "See Where Your People Go", "Friends Shows Places Saved By The People You Follow", theme: .social),
-            overview(.mapMoreFilters, "Make The Map Your Own", "Filter By Category, People, Check Ins, Or Wanna Go"),
-            overview(.mapSearch, "Find The Place You Have In Mind", "Search For A Place—Or Places From Your People"),
-            overview(.mapAdd, "Keep A Place For Later", "Tap + To Save A Place Or Bring In Saves From Another App"),
-            overview(.mapPinLegend, "Read The Rings", "Solid Rings Mean Check Ins. Dotted Rings Mean Wanna Go")
+            overview(.mapFeatured, "A place to start", "Discover places through your people and the Astir community"),
+            overview(.mapFriends, "See where your people go", "Friends shows places saved by the people you follow", theme: .social),
+            overview(.mapMoreFilters, "Make the map your own", "Filter by category, people, Check Ins, or Wanna Go"),
+            overview(.mapSearch, "Find the place you have in mind", "Search for a place—or places from your people"),
+            overview(.mapAdd, "Keep a place for later", "Tap + to save a place or bring in saves from another app"),
+            overview(.mapPinLegend, "Read the rings", "Solid rings mean Check Ins. Dotted rings mean Wanna Go")
         ],
         .sendoff: [],
         .add: [
-            context(.add, .addNearby, "Search Nearby Places", "Search Nearby Places", theme: .save),
-            context(.add, .addImport, "Import Your Saved Places", "Import Your Saved Places From Instagram, TikTok And Google Maps", theme: .save)
+            context(.add, .addNearby, "Search nearby places", "Search nearby places", theme: .save),
+            context(.add, .addImport, "Import your saved places", "Import your saved places from Instagram, TikTok and Google Maps", theme: .save)
         ],
         .saveFlow: [
             step(
                 .saveFlow,
                 .saveStatus,
-                "Have You Been Here Before?",
-                "If So, Select Check In. If Not, Select Wanna Go."
+                "Have you been here before?",
+                "If so, select Check In. If not, select Wanna Go."
             ),
             step(
                 .saveFlow,
                 .saveDate,
-                "A Date Makes It A Memory",
-                "We’ll Choose One For This Demo.",
+                "A date makes it a memory",
+                "We’ll choose one for this demo.",
                 allowsTargetInteraction: false,
                 allowsBackNavigation: false,
                 automaticallyAdvances: true
@@ -188,8 +188,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveNote,
-                "Leave A Note For Future You",
-                "We’ll Add One Useful Detail You’ll Recognize Later.",
+                "Leave a note for future you",
+                "We’ll add one useful detail you’ll recognize later.",
                 allowsTargetInteraction: false,
                 coachTheme: .memory,
                 automaticallyAdvances: true
@@ -197,8 +197,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveRating,
-                "A Rating Helps Future You",
-                "Watch How A Quick Score Captures How This Place Felt.",
+                "A rating helps future you",
+                "Watch how a quick score captures how this place felt.",
                 allowsTargetInteraction: false,
                 coachTheme: .rating,
                 automaticallyAdvances: true
@@ -206,8 +206,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveMoreOptions,
-                "Add The Detail You’ll Remember",
-                "A Useful Tag And Short Note Make This Place Easier To Rediscover.",
+                "Add the detail you’ll remember",
+                "A useful tag and short note make this place easier to rediscover.",
                 allowsTargetInteraction: false,
                 coachTheme: .tags,
                 automaticallyAdvances: true
@@ -215,8 +215,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveQuestions,
-                "Why This Place Fits",
-                "We’ll Choose One Useful Answer In Each Section For This Park.",
+                "Why this place fits",
+                "We’ll choose one useful answer in each section for this park.",
                 allowsTargetInteraction: false,
                 coachTheme: .tags,
                 automaticallyAdvances: true
@@ -224,8 +224,8 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveTags,
-                "Tag It For Later",
-                "One Accurate Tag Makes This Park Easier To Rediscover.",
+                "Tag it for later",
+                "One accurate tag makes this park easier to rediscover.",
                 allowsTargetInteraction: false,
                 coachTheme: .tags,
                 automaticallyAdvances: true
@@ -233,30 +233,30 @@ enum FirstVisitWalkthroughContent {
             step(
                 .saveFlow,
                 .saveSubmit,
-                "Ready To Save",
-                "The Highlighted Button Puts Everything You Just Watched Onto Your Map.",
+                "Ready to save",
+                "The highlighted button puts everything you just watched onto your map.",
                 allowsTargetInteraction: false,
                 coachTheme: .save,
                 automaticallyAdvances: true
             )
         ],
         .feed: [
-            context(.feed, .feedActivity, "Connect With Your Circle", "Keep Up With Their Moments", theme: .social)
+            context(.feed, .feedActivity, "Connect with your circle", "Keep up with their moments", theme: .social)
         ],
         .feedSearch: [
             step(
                 .feedSearch,
                 .feedSearchField,
-                "Search With The Details You Remember",
-                "Try A Place Name, Category, Neighborhood, Person Or @Handle—Or A Saved Tag Like Date Night Or Work-Friendly.",
+                "Search with the details you remember",
+                "Try a place name, category, neighborhood, person or @handle—or a saved tag like date night or work-friendly.",
                 advance: .next,
                 coachTheme: .map
             ),
             step(
                 .feedSearch,
                 .feedSmartSearch,
-                "Search The Way You Think",
-                "Tap An Example Or Type Your Own Search To Turn A Real-Life Need Into Trusted Results.",
+                "Search the way you think",
+                "Tap an example or type your own search to turn a real-life need into trusted results.",
                 allowsBackNavigation: false,
                 coachTheme: .map
             ),
@@ -278,7 +278,7 @@ enum FirstVisitWalkthroughContent {
         .events: [],
         .profile: [],
         .placeDetail: [
-            context(.placeDetail, .placeSaveActions, "Been There? Or Want To Go?", "Check In Is For Places You’ve Been. Wanna Is For Places You Wanna Go.")
+            context(.placeDetail, .placeSaveActions, "Been there? Or want to go?", "Check In is for places you’ve been. Wanna is for places you wanna go.")
         ]
     ]
 
@@ -291,29 +291,29 @@ enum FirstVisitWalkthroughContent {
     static let suppressedMapExplorationSteps: [WalkthroughStep] = [
         step(.map, .mapFeatured, MapSource.featured.subtitle, "", advance: .next, coachTheme: .map),
         step(.map, .mapFriends, MapSource.friends.subtitle, "", advance: .next, coachTheme: .social),
-        step(.map, .mapYou, "Only Your Check Ins And Wanna Places", "", advance: .next, coachTheme: .map),
+        step(.map, .mapYou, "Only your Check Ins and Wanna places", "", advance: .next, coachTheme: .map),
         step(
             .map,
             .mapMoreFilters,
-            "Narrow In With More",
-            "Filter By Category, Specific Friends In Your Network, And Distinguish Between A Check-In, Wanna Go, Or Both.",
+            "Narrow in with More",
+            "Filter by category, specific friends in your network, and distinguish between a check-in, wanna go, or both.",
             advance: .next,
             coachTheme: .map
         ),
-        step(.map, .mapSearch, "Search Your Trusted Map", "Try A Place, Neighborhood, Or Person.", advance: .next, coachTheme: .map),
+        step(.map, .mapSearch, "Search your trusted map", "Try a place, neighborhood, or person.", advance: .next, coachTheme: .map),
         step(
             .map,
             .mapTabs,
-            "Your Places, All Connected",
-            "Map, Feed, Lists, And Profile Work Together To Help You Find, Plan, And Remember. Events Is Coming Soon.",
+            "Your places, all connected",
+            "Map, Feed, Lists, and Profile work together to help you find, plan, and remember. Events is coming soon.",
             advance: .next,
             coachTheme: .map
         ),
         step(
             .map,
             .mapMemory,
-            "Open The Place Memory",
-            "Tap The Highlighted Place To Revisit Everything You Just Saved.",
+            "Open the place memory",
+            "Tap the highlighted place to revisit everything you just saved.",
             allowsTargetInteraction: true,
             allowsBackNavigation: false,
             coachTheme: .memory
@@ -335,17 +335,17 @@ enum FirstVisitWalkthroughContent {
     // target anchors remain in the Lists UI, but suppressedSurfaces keeps them dormant.
     static let suppressedListsStepsBySurface: [WalkthroughSurface: [WalkthroughStep]] = [
         .lists: [
-            step(.lists, .listsCreate, "Make A List", "Tap + To Turn Saved Places Into A Plan You Can Use."),
-            step(.lists, .listsScope, "Plans From Your People", "Switch Between Your Own Lists, Friends' Lists, And Shared Collabs."),
-            step(.lists, .listsOpenPlan, "Open A Plan", "Tap Any List To See Its Places, Map, Privacy, And Collaborators.")
+            step(.lists, .listsCreate, "Make a list", "Tap + to turn saved places into a plan you can use."),
+            step(.lists, .listsScope, "Plans from your people", "Switch between your own lists, friends' lists, and shared collabs."),
+            step(.lists, .listsOpenPlan, "Open a plan", "Tap any list to see its places, map, privacy, and collaborators.")
         ],
         .listDetail: [
-            step(.listDetail, .listMap, "See The Whole Plan", "Open The Map To Understand How Every Place Fits Together."),
+            step(.listDetail, .listMap, "See the whole plan", "Open the map to understand how every place fits together."),
             step(
                 .listDetail,
                 .listMapPlace,
-                "A Place Card At A Glance",
-                "The Focused Card Keeps The Place Type, Who Saved It, And Whether It’s A Check In Or Wanna Go Together.",
+                "A place card at a glance",
+                "The focused card keeps the place type, who saved it, and whether it’s a Check In or Wanna Go together.",
                 advance: .next,
                 coachTheme: .lists
             )
@@ -354,22 +354,22 @@ enum FirstVisitWalkthroughContent {
             step(
                 .listEditor,
                 .listEditorTitle,
-                "Name The Plan",
-                "Give This List A Title You'll Recognize When The Moment Comes.",
+                "Name the plan",
+                "Give this list a title you'll recognize when the moment comes.",
                 advance: .next
             ),
             step(
                 .listEditor,
                 .listEditorCollaborators,
-                "Plan It Together",
-                "Add Collaborators So Everyone Can Keep The List Current.",
+                "Plan it together",
+                "Add collaborators so everyone can keep the list current.",
                 advance: .next
             ),
             step(
                 .listEditor,
                 .listEditorPrivacy,
-                "Choose Who Can See It",
-                "Stealth Is The Final Choice: Keep The List Private Or Share It With People Who Follow You.",
+                "Choose who can see it",
+                "Stealth is the final choice: keep the list private or share it with people who follow you.",
                 advance: .next
             )
         ]
@@ -1992,9 +1992,9 @@ enum WalkthroughHelpDestination {
 }
 
 enum ImportWalkthroughContent {
-    static let title = "Bring Every Saved Place With You"
-    static let message = "Paste One Place, A Few Links, Or A Whole List From Maps, Instagram, TikTok, Or Notes. Choose What To Keep And Mark Each Check In Or Wanna Before Anything Reaches Your Map"
-    static let actionTitle = "Open Import Form"
+    static let title = "Bring every saved place with you"
+    static let message = "Paste one place, a few links, or a whole list from Maps, Instagram, TikTok, or Notes. Choose what to keep and mark each Check In or Wanna before anything reaches your map"
+    static let actionTitle = "Open import form"
     static let helpURL = ImportHelpDestination.url
 }
 
@@ -2030,8 +2030,8 @@ private struct ImportWalkthroughOverlay: View {
                             .background(brandMode.recessedBackground, in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Import Help")
-                    .accessibilityHint("Opens Import Help On astirmovement.com")
+                    .accessibilityLabel("Import help")
+                    .accessibilityHint("Opens import help on astirmovement.com")
 
                 }
 
@@ -2114,11 +2114,11 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     .frame(width: 44, height: 44)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Astir, One Press Away")
+                        Text("Astir, one press away")
                             .font(AstirTypography.sectionTitle)
                             .foregroundStyle(brandMode.primaryText)
 
-                        Text("Set These Up Once For Faster Saves")
+                        Text("Set these up once for faster saves")
                             .font(AstirTypography.caption)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2136,7 +2136,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
                     DeviceFeatureInstruction(
                         systemImage: "button.programmable",
                         title: "Action Button + Controls",
-                        instruction: "Choose Astir Check In For A One-Press Save",
+                        instruction: "Choose Astir Check In for a one-press save",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.actionButton"
                     )
 
@@ -2146,8 +2146,8 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     DeviceFeatureInstruction(
                         systemImage: "square.grid.2x2.fill",
-                        title: "Home + Lock Screen Widgets",
-                        instruction: "Keep Quick Add, Search, Activity, Or Nearby In View",
+                        title: "Home + Lock Screen widgets",
+                        instruction: "Keep Quick Add, Search, Activity, or Nearby in view",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.widgets"
                     )
 
@@ -2157,15 +2157,15 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     DeviceFeatureInstruction(
                         systemImage: "square.and.arrow.up.fill",
-                        title: "Share Extension",
-                        instruction: "Send Places From Maps, Instagram, TikTok, Or Safari",
+                        title: "Share extension",
+                        instruction: "Send places from Maps, Instagram, TikTok, or Safari",
                         accessibilityIdentifier: "walkthrough.deviceFeatures.shareExtension"
                     )
                 }
 
                 HStack(spacing: WanderTheme.spacing2) {
                     Link(destination: WalkthroughHelpDestination.extensions) {
-                        Label("Setup Guide", systemImage: "arrow.up.right")
+                        Label("Setup guide", systemImage: "arrow.up.right")
                             .font(AstirTypography.label)
                             .foregroundStyle(brandMode.accentText)
                             .frame(minHeight: 44)
@@ -2179,7 +2179,7 @@ private struct DeviceFeaturesWalkthroughOverlay: View {
 
                     Button(action: onComplete) {
                         HStack(spacing: 6) {
-                            Text("Got It")
+                            Text("Got it")
                             Image(systemName: "arrow.right")
                         }
                         .font(AstirTypography.control)
@@ -2706,7 +2706,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                 }
 
                 if delayedTargetMilliseconds != nil, hasRevealedDelayedTarget {
-                    Text("Highlighted Walkthrough Action Is Ready")
+                    Text("Highlighted walkthrough action is ready")
                         .font(.system(size: 1))
                         .frame(width: 1, height: 1)
                         .opacity(0.01)
@@ -2838,7 +2838,7 @@ private struct FirstVisitWalkthroughOverlay: View {
                                         .wanderGlassCapsule(tone: .neutral)
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel("Previous Walkthrough Step")
+                                .accessibilityLabel("Previous walkthrough step")
                                 .accessibilityIdentifier("walkthrough.back.\(step.id)")
                             }
 

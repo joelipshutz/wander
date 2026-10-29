@@ -28,40 +28,40 @@ final class SaveSyncFeedbackTests: XCTestCase {
     func testSyncedSaveUsesSuccessPresentation() {
         let feedback = SaveSyncFeedback(syncState: .synced, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "Saved To Your Map")
+        XCTAssertEqual(feedback.title, "Saved to your map")
         XCTAssertEqual(feedback.systemImage, "checkmark")
         XCTAssertFalse(feedback.usesWarningHaptic)
-        XCTAssertEqual(feedback.mapMessage(successMessage: "Added To Your Map."), "Added To Your Map.")
+        XCTAssertEqual(feedback.mapMessage(successMessage: "Added to your map."), "Added to your map.")
     }
 
     func testFailedSaveClearlySaysRemoteSyncFailed() {
         let feedback = SaveSyncFeedback(syncState: .failed, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "Sync Failed")
-        XCTAssertEqual(feedback.message, "Saved On This Phone. We'll Retry Automatically.")
+        XCTAssertEqual(feedback.title, "Sync failed")
+        XCTAssertEqual(feedback.message, "Saved on this phone. We'll retry automatically.")
         XCTAssertEqual(feedback.systemImage, "exclamationmark.triangle")
         XCTAssertTrue(feedback.usesWarningHaptic)
         XCTAssertEqual(feedback.dismissDelayNanoseconds, 5_000_000_000)
         XCTAssertEqual(
             feedback.mapMessage(successMessage: "Added to your map."),
-            "Saved On This Phone, But Sync Failed. We'll Retry."
+            "Saved on this phone, but sync failed. We'll retry."
         )
     }
 
     func testQueuedSaveDistinguishesLocalPersistenceFromRemoteSync() {
         let feedback = SaveSyncFeedback(syncState: .pendingCreate, canSignIn: false)
 
-        XCTAssertEqual(feedback.title, "Saved On This Phone")
-        XCTAssertEqual(feedback.message, "Sync Is Queued.")
+        XCTAssertEqual(feedback.title, "Saved on this phone")
+        XCTAssertEqual(feedback.message, "Sync is queued.")
         XCTAssertFalse(feedback.usesWarningHaptic)
-        XCTAssertEqual(feedback.mapMessage(successMessage: "Visit saved."), "Saved On This Phone. Sync Is Queued.")
+        XCTAssertEqual(feedback.mapMessage(successMessage: "Visit saved."), "Saved on this phone. Sync is queued.")
     }
 
     func testSignedOutLocalSaveOffersSignInWithoutClaimingSync() {
         let feedback = SaveSyncFeedback(syncState: .localOnly, canSignIn: true)
 
-        XCTAssertEqual(feedback.title, "Saved On This Phone")
-        XCTAssertEqual(feedback.message, "Sign In To Back It Up.")
+        XCTAssertEqual(feedback.title, "Saved on this phone")
+        XCTAssertEqual(feedback.message, "Sign in to back it up.")
         XCTAssertTrue(feedback.canSignIn)
         XCTAssertFalse(feedback.usesWarningHaptic)
     }

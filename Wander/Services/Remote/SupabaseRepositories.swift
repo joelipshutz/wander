@@ -799,7 +799,7 @@ struct SupabaseFeedRepository: FeedRepository, LiveMapPinStateRepository {
                         urlString: nil,
                         storageBucket: nil,
                         storagePath: nil,
-                        accessibilityLabel: "Activity Photo Loading"
+                        accessibilityLabel: "Activity photo loading"
                     )]
                 )
             },

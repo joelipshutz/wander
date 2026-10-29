@@ -120,7 +120,7 @@ final class InCommonDesignMockupTests: XCTestCase {
         XCTAssertTrue(source.contains("action: openSharedMap"))
         XCTAssertFalse(
             source.contains(
-                "InCommonPrimaryButton(title: \"Open Your Shared Map\", systemImage: \"map.fill\", action: performPrimaryAction)"
+                "InCommonPrimaryButton(title: \"Open your shared map\", systemImage: \"map.fill\", action: performPrimaryAction)"
             )
         )
     }

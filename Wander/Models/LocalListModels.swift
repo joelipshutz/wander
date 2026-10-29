@@ -204,7 +204,7 @@ enum ListSuggestionReasonFormatter {
             visiblePlace.effectiveCompactType,
             visiblePlace.place.region
         ].compactMap { $0 })
-        guard !values.isEmpty else { return "Similar To This List" }
+        guard !values.isEmpty else { return "Similar to this list" }
         return "Fits: \(values.prefix(3).joined(separator: " + "))"
     }
 

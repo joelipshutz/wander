@@ -69,11 +69,11 @@ final class FeedModelsTests: XCTestCase {
     }
 
     func testCompactPeopleReasonsPreserveRelationshipMeaning() {
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows You")
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed By 1 Person You Follow")
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(3).compactDisplayText, "Followed By 3 People You Follow")
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(1).compactDisplayText, "Followed By 1 Contact")
-        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(3).compactDisplayText, "Followed By 3 Contacts")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.followsYou.compactDisplayText, "Follows you")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(1).compactDisplayText, "Followed by 1 person you follow")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.sharedFollows(3).compactDisplayText, "Followed by 3 people you follow")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(1).compactDisplayText, "Followed by 1 contact")
+        XCTAssertEqual(DiscoverPeopleRecommendationReason.contactFollows(3).compactDisplayText, "Followed by 3 contacts")
         XCTAssertEqual(DiscoverPeopleRecommendationReason.suggested.compactDisplayText, "")
     }
 

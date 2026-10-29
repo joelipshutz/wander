@@ -3,9 +3,9 @@ import SwiftUI
 
 enum OnboardingLocationContent {
     static let eyebrow = "AROUND YOU"
-    static let title = "Find Places Nearby"
-    static let message = "See Places Your Friends Recommend And Save Spots Around You Without Searching For An Address."
-    static let privacyMessage = "Your Location Is Yours."
+    static let title = "Find places nearby"
+    static let message = "See places your friends recommend and save spots around you without searching for an address."
+    static let privacyMessage = "Your location is yours."
     static let selectedPlaceName = "Hotchkiss Park"
 }
 
@@ -40,7 +40,7 @@ struct OnboardingLocationMapPreview: View {
         .allowsHitTesting(false)
         .clipShape(RoundedRectangle(cornerRadius: 28))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Example Astir Map With Hotchkiss Park Selected And Its Full Place Photo")
+        .accessibilityLabel("Example Astir map with Hotchkiss Park selected and its full place photo")
         .accessibilityIdentifier("onboarding.location.map")
         .task(id: scenePhase) {
             guard scenePhase == .active, !reduceMotion else { return }

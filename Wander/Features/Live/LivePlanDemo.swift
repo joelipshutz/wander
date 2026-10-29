@@ -67,7 +67,7 @@ struct LivePlanDemoComposer: View {
                                      suggestedDate: Calendar.current.date(byAdding: .day, value: 1, to: .now)),
                                      liveSharing: false, analytics: NoopAnalyticsClient())
             .safeAreaInset(edge: .top, spacing: 0) {
-                Label("Demo Plan · Nothing Is Saved Or Sent", systemImage: "testtube.2")
+                Label("Demo plan · nothing is saved or sent", systemImage: "testtube.2")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 20).padding(.vertical, 10)
                     .background(brand.background)

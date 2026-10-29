@@ -116,7 +116,7 @@ final class ShareViewController: UIViewController {
         loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
         loadingIndicator.color = Palette.terracotta
         loadingIndicator.startAnimating()
-        loadingIndicator.accessibilityLabel = "Reading Shared Link"
+        loadingIndicator.accessibilityLabel = "Reading shared link"
         cardView.addSubview(loadingIndicator)
         NSLayoutConstraint.activate([
             loadingIndicator.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
@@ -137,7 +137,7 @@ final class ShareViewController: UIViewController {
         let closeButton = UIButton(type: .system)
         closeButton.setImage(UIImage(systemName: "xmark"), for: .normal)
         closeButton.tintColor = Palette.muted
-        closeButton.accessibilityLabel = "Cancel Import"
+        closeButton.accessibilityLabel = "Cancel import"
         closeButton.addTarget(self, action: #selector(cancelShare), for: .touchUpInside)
         NSLayoutConstraint.activate([
             closeButton.widthAnchor.constraint(equalToConstant: 44),
@@ -148,7 +148,7 @@ final class ShareViewController: UIViewController {
         header.alignment = .center
 
         let title = UILabel()
-        title.text = "Import Places"
+        title.text = "Import places"
         title.font = scaledFont(size: 28, weight: .black, textStyle: .title1)
         title.textColor = Palette.ink
         title.textAlignment = .center
@@ -173,14 +173,14 @@ final class ShareViewController: UIViewController {
         ])
 
         let headline = UILabel()
-        headline.text = "Bring Your Places With You"
+        headline.text = "Bring your places with you"
         headline.font = scaledFont(size: 20, weight: .bold, textStyle: .title3)
         headline.textColor = Palette.ink
         headline.textAlignment = .center
         headline.adjustsFontForContentSizeCategory = true
 
         let detail = UILabel()
-        detail.text = "Your Shared Link Is Ready. Matching Begins The Next Time You Open Astir."
+        detail.text = "Your shared link is ready. Matching begins the next time you open Astir."
         detail.font = .preferredFont(forTextStyle: .body)
         detail.textColor = Palette.muted
         detail.numberOfLines = 0
@@ -206,8 +206,8 @@ final class ShareViewController: UIViewController {
         linkField.autocorrectionType = .no
         linkField.keyboardType = .URL
         linkField.returnKeyType = .done
-        linkField.placeholder = "Shared Link"
-        linkField.accessibilityLabel = "Import Link"
+        linkField.placeholder = "Shared link"
+        linkField.accessibilityLabel = "Import link"
         linkField.accessibilityIdentifier = "share-extension-import-link"
 
         let linkContainer = UIStackView(arrangedSubviews: [linkIcon, linkField])
@@ -231,7 +231,7 @@ final class ShareViewController: UIViewController {
         // Own the progress layers: a system glass button above the sweep
         // washes it out. The transparent button holds only its label/icon.
         startButton.configuration = .plain()
-        startButton.configuration?.title = "Start Import"
+        startButton.configuration?.title = "Start import"
         startButton.configuration?.image = UIImage(systemName: "arrow.down.doc.fill")
         startButton.configuration?.imagePadding = 8
         startButton.configuration?.cornerStyle = .capsule
@@ -241,7 +241,7 @@ final class ShareViewController: UIViewController {
         startButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 54).isActive = true
         startButton.addTarget(self, action: #selector(startImport), for: .touchUpInside)
         startButton.accessibilityIdentifier = "share-extension-start-import"
-        startButton.accessibilityHint = "Starts Automatically After Five Seconds. Cancel Import To Stop."
+        startButton.accessibilityHint = "Starts automatically after five seconds. Cancel import to stop."
 
         startContainer.backgroundColor = UIColor(white: 0.06, alpha: 1)
         startContainer.layer.cornerRadius = 27
@@ -274,7 +274,7 @@ final class ShareViewController: UIViewController {
         errorLabel.isHidden = true
 
         retryButton.configuration = .plain()
-        retryButton.configuration?.title = "Try Again"
+        retryButton.configuration?.title = "Try again"
         retryButton.configuration?.baseForegroundColor = Palette.terracotta
         retryButton.addTarget(self, action: #selector(retryCapture), for: .touchUpInside)
         retryButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -361,7 +361,7 @@ final class ShareViewController: UIViewController {
                 case .failure(let error):
                     self.showError(
                         (error as? LocalizedError)?.errorDescription
-                            ?? "Astir Could Not Read This Share. Try Copying Its Public Link Instead."
+                            ?? "Astir could not read this share. Try copying its public link instead."
                     )
                 }
             }
@@ -410,7 +410,7 @@ final class ShareViewController: UIViewController {
             startButton.configuration?.showsActivityIndicator = false
             showError(
                 (error as? LocalizedError)?.errorDescription
-                    ?? "Astir Could Not Start This Import. Try Again."
+                    ?? "Astir could not start this import. Try again."
             )
         }
     }
@@ -458,7 +458,7 @@ final class ShareViewController: UIViewController {
         // with VoiceOver or Switch Control must never race an automatic timer.
         guard !UIAccessibility.isVoiceOverRunning, !UIAccessibility.isSwitchControlRunning else {
             fillWidth?.constant = startContainer.bounds.width
-            startButton.accessibilityHint = "Start Importing The Shared Link."
+            startButton.accessibilityHint = "Start importing the shared link."
             return
         }
         fillWidth?.constant = startContainer.bounds.width

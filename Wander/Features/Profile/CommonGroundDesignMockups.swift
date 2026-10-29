@@ -331,13 +331,13 @@ struct CommonGroundMixMockup: View {
                         Spacer(minLength: 12)
                         Text(showsOneSidedRecommendations
                              ? "\(places.count) \(places.count == 1 ? "suggestion" : "suggestions")"
-                             : "\(places.count) Places")
+                             : "\(places.count) places")
                             .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                             .accessibilityIdentifier("common-ground.mix-count")
                     }
                     Rectangle().fill(brand.border).frame(height: 1)
                     if showsOneSidedRecommendations && !places.isEmpty {
-                        Text("No Shared Places Yet. Start With A Favorite.")
+                        Text("No shared places yet. Start with a favorite.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brand.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -346,13 +346,13 @@ struct CommonGroundMixMockup: View {
                 }
                 if places.isEmpty {
                     ContentUnavailableView {
-                        Label("A Little More To Discover", systemImage: "map")
+                        Label("A little more to discover", systemImage: "map")
                     } description: {
                         Text(livePlaces == nil || area != "All places"
-                             ? "There Aren’t Any Picks For You Two In This City Yet"
-                             : "Shared Places And Favorites To Try Together Will Show Up Here")
+                             ? "There aren’t any picks for you two in this city yet"
+                             : "Shared places and favorites to try together will show up here")
                     } actions: {
-                        Button(livePlaces == nil ? "Back To Los Angeles" : "All Places") { area = livePlaces == nil ? "Los Angeles" : "All places" }
+                        Button(livePlaces == nil ? "Back to Los Angeles" : "All places") { area = livePlaces == nil ? "Los Angeles" : "All places" }
                             .buttonStyle(.bordered).frame(minHeight: 44)
                     }
                 } else {
@@ -391,23 +391,23 @@ struct CommonGroundMixMockup: View {
     private var areaPicker: some View {
         Menu {
             Picker("City", selection: $area) {
-                if livePlaces != nil { Text("All Places").tag("All places") }
+                if livePlaces != nil { Text("All places").tag("All places") }
                 ForEach(cities, id: \.self) { city in
                     Text(city).tag(city)
                 }
             }
-            Text("Cities Either Of You Has Been To")
+            Text("Cities either of you has been to")
         } label: {
             HStack(spacing: 7) {
-                Text(area == "All places" ? "All Places" : area)
+                Text(area)
                 Image(systemName: "chevron.down").font(.caption2)
             }
             .font(AstirTypography.label).foregroundStyle(brand.primaryText)
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel(area == "All places" ? "All Places" : area)
-        .accessibilityHint("Choose A City Either Of You Has Visited")
+        .accessibilityLabel(area)
+        .accessibilityHint("Choose a city either of you has visited")
         .accessibilityIdentifier("common-ground.area")
     }
 }
@@ -434,7 +434,7 @@ private struct CommonGroundPlaceStory: View {
                     if place.kind == .returnTogether {
                         regulars
                     } else {
-                        Label(place.kind == .mutualWanna ? "In Both Of Your Wannas" : place.narrativeDetail,
+                        Label(place.kind == .mutualWanna ? "In both of your Wannas" : place.narrativeDetail,
                               systemImage: place.kind == .mutualWanna ? "bookmark.fill" : "mappin.and.ellipse")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brand.secondaryText)
@@ -494,7 +494,7 @@ private struct CommonGroundPlaceStory: View {
                     .foregroundStyle(brand.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 if place.isOneSidedRecommendation {
-                    Text("You Two Should Go Together.")
+                    Text("You two should go together.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brand.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -505,9 +505,9 @@ private struct CommonGroundPlaceStory: View {
 
     private var regulars: some View {
         footerLayout {
-            personEvidence(name: "You", person: place.viewer, value: "\(place.youVisits) Check-Ins")
+            personEvidence(name: "You", person: place.viewer, value: "\(place.youVisits) check-ins")
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 12) }
-            personEvidence(name: place.partner.shortName, person: place.partner, value: "\(place.joeVisits) Check-Ins")
+            personEvidence(name: place.partner.shortName, person: place.partner, value: "\(place.joeVisits) check-ins")
             if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
         }
         .accessibilityElement(children: .combine)
@@ -527,7 +527,7 @@ private struct CommonGroundPlaceStory: View {
                         .padding(.leading, 8).accessibilityHidden(true)
                 }
             }
-            Text("A Shared Soft Spot")
+            Text("A shared soft spot")
                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
         }
         .padding(.vertical, 6)
@@ -631,10 +631,10 @@ private struct CommonGroundSparkStamp: View {
 private extension CommonGroundMockKind {
     var shortLabel: String {
         switch self {
-        case .returnTogether: "Go Back Together"
-        case .mutualWanna: "In Both Of Your Wannas"
-        case .introduce: "Worth An Introduction"
-        case .history: "Both Been"
+        case .returnTogether: "Go back together"
+        case .mutualWanna: "In both of your Wannas"
+        case .introduce: "Worth an introduction"
+        case .history: "Both been"
         }
     }
     var symbol: String {

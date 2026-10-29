@@ -15,10 +15,10 @@ struct LiveTotemState: Equatable {
             if rail.ownership == .featured { return "Featured" }
             let owner = rail.ownership == .currentUser ? "You" : "Social"
             let status = rail.secondaryStatus == nil
-                ? (rail.status == .been ? "Been" : "Wanna") : "Been And Wanna"
+                ? (rail.status == .been ? "Been" : "Wanna") : "Been and Wanna"
             return "\(owner), \(status)"
         }
-        if hasListMembership { labels.append("On A List") }
+        if hasListMembership { labels.append("On a list") }
         return labels.joined(separator: ", ")
     }
 }

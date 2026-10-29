@@ -32,29 +32,29 @@ enum SaveStreakReminderCopyVariant: String, CaseIterable, Equatable {
         case .current:
             return SaveStreakReminderCopy(
                 title: streakCount == 1
-                    ? "Keep Your Streak Going"
-                    : "Your \(streakCount)-Day Streak Is Waiting",
-                body: "Where Did You Go Today? Check In Or Save A Place To Keep Your Streak."
+                    ? "Keep your streak going"
+                    : "Your \(streakCount)-day streak is waiting",
+                body: "Where did you go today? Check in or save a place to keep your streak."
             )
         case .anythingWorthRemembering:
             return SaveStreakReminderCopy(
-                title: "Anything Worth Remembering Today?",
-                body: "Save It Now And Keep Your Streak Going."
+                title: "Anything worth remembering today?",
+                body: "Save it now and keep your streak going."
             )
         case .onePlaceKeepsStreakAlive:
             return SaveStreakReminderCopy(
-                title: "One Place Keeps The Streak Alive",
-                body: "Check In Or Save Somewhere Before The Day Ends."
+                title: "One place keeps the streak alive",
+                body: "Check in or save somewhere before the day ends."
             )
         case .mapHasRoom:
             return SaveStreakReminderCopy(
-                title: "Your Map Has Room For Today",
-                body: "Add Somewhere You Went Or Somewhere You Want To Go."
+                title: "Your map has room for today",
+                body: "Add somewhere you went or somewhere you want to go."
             )
         case .recovery:
             return SaveStreakReminderCopy(
-                title: "Keep Your Streak Alive",
-                body: "Save A Place Today To Bring Back Your \(streakCount)-Day Streak."
+                title: "Keep your streak alive",
+                body: "Save a place today to bring back your \(streakCount)-day streak."
             )
         }
     }

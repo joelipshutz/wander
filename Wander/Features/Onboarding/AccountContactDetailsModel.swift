@@ -40,9 +40,9 @@ import Combine
 
     var phoneValidationMessage: String {
         if phoneText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Enter Your Phone Number To Continue."
+            return "Enter your phone number to continue."
         }
-        return phoneCountryCode == "US" ? "Enter A Valid 10-Digit Phone Number." : "Check The Number And Country Code."
+        return phoneCountryCode == "US" ? "Enter a valid 10-digit phone number." : "Check the number and country code."
     }
 
     var canSave: Bool { didLoad && !isLoading && !isSaving && phoneIsValid && homeCity != nil }
@@ -96,7 +96,7 @@ import Combine
         errorMessage = nil
         defer { isLoading = false }
         guard let repository else {
-            errorMessage = "Your Details Aren’t Available Right Now. Try Again Later."
+            errorMessage = "Your details aren’t available right now. Try again later."
             return
         }
         do {
@@ -121,7 +121,7 @@ import Combine
             }
         } catch {
             guard !Task.isCancelled, isCurrentAccount() else { return }
-            errorMessage = "Couldn’t Load Your Saved Details. Try Again."
+            errorMessage = "Couldn’t load your saved details. Try again."
             return // Never overwrite an unread saved phone/home with empty defaults.
         }
         isLoading = false
@@ -164,7 +164,7 @@ import Combine
             return true
         } catch {
             guard !Task.isCancelled, isCurrentAccount() else { return false }
-            errorMessage = "Couldn’t Save Your Details. Try Again."
+            errorMessage = "Couldn’t save your details. Try again."
             return false
         }
     }

@@ -302,7 +302,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         XCTAssertEqual(
             WanderPlaceCategory.display(for: assignment).compactType(),
-            "Coffee Shop"
+            "Coffee shop"
         )
     }
 
@@ -1297,7 +1297,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
         XCTAssertEqual(restaurant.category, "Restaurants & Food")
         XCTAssertEqual(restaurant.subcategory, "Restaurant")
         XCTAssertEqual(restaurant.primaryCategory, WanderPlaceCategory.restaurantsFood)
-        XCTAssertEqual(restaurant.compactType(foodType: "Hot dogs"), "Hot Dogs")
+        XCTAssertEqual(restaurant.compactType(foodType: "Hot dogs"), "Hot dogs")
         XCTAssertEqual(restaurant.compactType(), "Restaurant")
         XCTAssertEqual(
             restaurant.compactType(foodType: "Restaurants & Food"),
@@ -1308,8 +1308,8 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         let transit = WanderPlaceCategory.display(for: "transportation")
         XCTAssertEqual(transit.category, "Travel & Transit")
-        XCTAssertEqual(transit.subcategory, "Transit Stop")
-        XCTAssertEqual(transit.compactType(), "Transit Stop")
+        XCTAssertEqual(transit.subcategory, "Transit stop")
+        XCTAssertEqual(transit.compactType(), "Transit stop")
 
         let nightlifeWithoutSubcategory = PlaceCategoryDisplay(
             rawCategory: "nightlife",
@@ -1335,7 +1335,7 @@ final class WanderPlaceCategoryTests: XCTestCase {
 
         let providerStore = WanderPlaceCategory.display(for: "art supply store")
         XCTAssertEqual(providerStore.category, "Shopping")
-        XCTAssertEqual(providerStore.subcategory, "Art Supply Store")
+        XCTAssertEqual(providerStore.subcategory, "Art supply store")
     }
 
     func testQuestionCategoryRoutesProviderSubcategoriesToSmartQuestions() {

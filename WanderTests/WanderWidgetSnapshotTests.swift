@@ -105,14 +105,14 @@ final class WanderWidgetDeepLinkTests: XCTestCase {
                 generatedAt: generatedAt,
                 now: generatedAt.addingTimeInterval(60)
             ).minuteAgeLabel,
-            "Updated 1 min Ago"
+            "Updated 1 min ago"
         )
         XCTAssertEqual(
             WanderNearbyWidgetFreshness(
                 generatedAt: generatedAt,
                 now: generatedAt.addingTimeInterval(179)
             ).minuteAgeLabel,
-            "Updated 2 mins Ago"
+            "Updated 2 mins ago"
         )
     }
 
@@ -515,14 +515,14 @@ final class WanderNearbyWidgetSnapshotTests: XCTestCase {
                 generatedAt: generatedAt,
                 now: generatedAt.addingTimeInterval(30 * 60)
             ),
-            "35 ft Away"
+            "35 ft away"
         )
         XCTAssertEqual(
             place.distanceLabel(
                 generatedAt: generatedAt,
                 now: generatedAt.addingTimeInterval(30 * 60 + 1)
             ),
-            "Near You"
+            "Near you"
         )
         XCTAssertTrue(
             WanderNearbyWidgetFreshness(

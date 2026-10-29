@@ -129,6 +129,6 @@ enum PlacePhotoGalleryPresenter {
         let selectedIndex = selectedID
             .flatMap { selectedID in items.firstIndex(where: { $0.id == selectedID }) }
             ?? 0
-        return "\(selectedIndex + 1) Of \(items.count)"
+        return "\(selectedIndex + 1) of \(items.count)"
     }
 }

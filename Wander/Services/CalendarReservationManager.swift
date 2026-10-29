@@ -139,9 +139,9 @@ enum CalendarPermissionPolicy {
         case .request:
             "Continue"
         case .sync:
-            "Sync Now"
+            "Sync now"
         case .openSettings:
-            "Open Settings"
+            "Open settings"
         }
     }
 }
@@ -193,8 +193,8 @@ final class CalendarReservationManager: ObservableObject {
     var statusTitle: String {
         switch authorizationStatus {
         case .fullAccess: "Connected"
-        case .denied, .restricted: "Off In iOS Settings"
-        case .notDetermined, .writeOnly: "Not Connected"
+        case .denied, .restricted: "Off in iOS Settings"
+        case .notDetermined, .writeOnly: "Not connected"
         @unknown default: "Unavailable"
         }
     }
@@ -212,7 +212,7 @@ final class CalendarReservationManager: ObservableObject {
             return granted && hasFullAccess
         } catch {
             authorizationStatus = EKEventStore.authorizationStatus(for: .event)
-            lastErrorMessage = "Could Not Connect Apple Calendar."
+            lastErrorMessage = "Could not connect Apple Calendar."
             return false
         }
     }
@@ -311,7 +311,7 @@ final class CalendarReservationManager: ObservableObject {
                 ]
             ))
         } catch {
-            lastErrorMessage = "Calendar Reservations Could Not Sync. Try Again Later."
+            lastErrorMessage = "Calendar reservations could not sync. Try again later."
             #if DEBUG
             WanderDebugLog.remote.error("calendar reservation sync failed error=\(WanderDebugLog.errorSummary(error), privacy: .public)")
             #endif

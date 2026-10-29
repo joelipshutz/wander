@@ -182,10 +182,10 @@ struct ListsScreen: View {
                 await handleNotificationRoute(request)
             }
         }
-        .alert("Couldn’t Open Invitation", isPresented: listInviteErrorBinding) {
+        .alert("Couldn’t open invitation", isPresented: listInviteErrorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(listInviteErrorMessage ?? "This Invitation Is No Longer Available.")
+            Text(listInviteErrorMessage ?? "This invitation is no longer available.")
         }
         .blocksProductUpsells(
             while: editorPresentation != nil
@@ -267,7 +267,7 @@ struct ListsScreen: View {
             )
         } catch {
             pushNotifications.consumeNavigationRequest(id: requestID)
-            listInviteErrorMessage = "This Invitation Could Not Be Checked. Try Opening The Link Again."
+            listInviteErrorMessage = "This invitation could not be checked. Try opening the link again."
         }
     }
 
@@ -456,7 +456,7 @@ struct ListsScreen: View {
 
                     AstirIconActionButton(
                         systemImage: "plus",
-                        accessibilityLabel: "New List",
+                        accessibilityLabel: "New list",
                         accessibilityIdentifier: "lists.headerAdd",
                         isAddAction: true,
                         action: {
@@ -523,7 +523,7 @@ struct ListsScreen: View {
             ),
             interactive: true
         )
-        .accessibilityLabel("List Type")
+        .accessibilityLabel("List type")
         .walkthroughTarget(.listsScope)
     }
 
@@ -617,7 +617,7 @@ struct ListsScreen: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    Text("New List")
+                    Text("New list")
                         .font(AstirTypography.control)
                         .padding(.horizontal, WanderTheme.spacing4)
                         .frame(minHeight: 48)
@@ -635,7 +635,7 @@ struct ListsScreen: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Create Your First List")
+            .accessibilityLabel("Create your first list")
             .walkthroughTarget(.listsCreate)
 
             emptyHintRow
@@ -646,22 +646,22 @@ struct ListsScreen: View {
     private var emptyStateTitle: String {
         switch selectedScope {
         case .mine:
-            "Make Your First List"
+            "Make your first list"
         case .friends:
-            "No Friend Lists Yet"
+            "No friend lists yet"
         case .collabs:
-            "Make A New List"
+            "Make a new list"
         }
     }
 
     private var emptyStateSubtitle: String {
         switch selectedScope {
         case .mine:
-            "Create A Plan, Then Add Places From Map Or Search."
+            "Create a plan, then add places from map or search."
         case .friends:
-            "Lists From People You Follow Will Show Up Here When They Share Them."
+            "Lists from people you follow will show up here when they share them."
         case .collabs:
-            "Create A List And Add A Friend To Make It Collaborative."
+            "Create a list and add a friend to make it collaborative."
         }
     }
 
@@ -674,10 +674,10 @@ struct ListsScreen: View {
                 .foregroundStyle(astirBrandMode.accentText)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("Coming Next")
+                Text("Coming next")
                     .font(AstirTypography.label)
                     .foregroundStyle(astirBrandMode.primaryText)
-                Text("Saved Places Will Get An Add-To-List Action From Map Surfaces.")
+                Text("Saved places will get an add-to-list action from map surfaces.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(astirBrandMode.secondaryText)
             }
@@ -709,7 +709,7 @@ struct ListsScreen: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(
                     list.isCollaborative
-                        ? "Open \(list.name), Collaborative List"
+                        ? "Open \(list.name), collaborative list"
                         : "Open \(list.name)"
                 )
                 .walkthroughTarget(index == 0 ? .listsOpenPlan : nil)
@@ -816,7 +816,7 @@ enum ListsScope: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .mine: "My Lists"
+        case .mine: "My lists"
         case .friends: "Friends"
         case .collabs: "Collabs"
         }
@@ -961,7 +961,7 @@ private struct ListTile: View {
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 11, weight: .black))
                             .foregroundStyle(astirBrandMode.accentText)
-                            .accessibilityLabel("Collaborative List")
+                            .accessibilityLabel("Collaborative list")
                     }
                 }
 
@@ -1163,7 +1163,7 @@ private struct ListDetailScreen: View {
                         ListDetailHeaderActionLabel(systemImage: "plus")
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Add Places To List")
+                    .accessibilityLabel("Add places to list")
                 }
 
                 if !renderedList.isOwnedByCurrentUser {
@@ -1171,7 +1171,7 @@ private struct ListDetailScreen: View {
                         ProgressView()
                             .tint(brandMode.accent)
                             .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                            .accessibilityLabel("Leaving List")
+                            .accessibilityLabel("Leaving list")
                     } else {
                         Menu {
                             if canLeaveList {
@@ -1185,12 +1185,12 @@ private struct ListDetailScreen: View {
                             Button {
                                 presentListReport(renderedList)
                             } label: {
-                                Label("Report List", systemImage: "exclamationmark.bubble")
+                                Label("Report list", systemImage: "exclamationmark.bubble")
                             }
                         } label: {
                             ListDetailHeaderActionLabel(systemImage: "ellipsis")
                         }
-                        .accessibilityLabel("List Actions")
+                        .accessibilityLabel("List actions")
                     }
                 }
             }
@@ -1262,12 +1262,12 @@ private struct ListDetailScreen: View {
             }
         }
         .firstVisitWalkthroughOverlay(walkthroughs, surface: .listDetail)
-        .confirmationDialog("Add To List", isPresented: $showsSuggestionNotificationChoice, titleVisibility: .visible) {
-            Button("Add To List") { confirmSuggestion(silent: false) }
-            Button("Add Silently") { confirmSuggestion(silent: true) }
+        .confirmationDialog("Add to list", isPresented: $showsSuggestionNotificationChoice, titleVisibility: .visible) {
+            Button("Add to list") { confirmSuggestion(silent: false) }
+            Button("Add silently") { confirmSuggestion(silent: true) }
             Button("Cancel", role: .cancel) { pendingSuggestion = nil }
         } message: {
-            Text("A Silent Addition Skips List And Companion-Save Notifications. Visibility Stays The Same.")
+            Text("A silent addition skips list and companion-save notifications. Visibility stays the same.")
         }
         .alert("Leave List?", isPresented: $isShowingLeaveConfirmation) {
             Button("Leave List", role: .destructive) {
@@ -1277,12 +1277,12 @@ private struct ListDetailScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Are You Sure? You’ll Lose Collaborator Access. You May Still See This List In Friends If The Owner Continues Sharing It.")
+            Text("Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it.")
         }
-        .alert("Couldn't Leave List", isPresented: $isShowingLeaveError) {
+        .alert("Couldn't leave list", isPresented: $isShowingLeaveError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Try Again Later")
+            Text("Try again later")
         }
         .sheet(item: $reportSubject) { subject in
             CommunityReportSheet(subject: subject)
@@ -1316,19 +1316,19 @@ private struct ListDetailScreen: View {
                 Button {
                     onEdit(renderedList)
                 } label: {
-                    AstirIdentityActionLabel(title: "Edit List")
+                    AstirIdentityActionLabel(title: "Edit list")
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Edit List")
+                .accessibilityLabel("Edit list")
             }
             if let listShareContent {
                 ShareCardButton(content: listShareContent,
                                 card: displayList.shareCard(owner: displayList.isOwnedByCurrentUser ? store.currentUser.displayName : displayList.ownerName),
                                 loadImages: { await displayList.shareImages(backend: backend) }) {
-                    AstirIdentityActionLabel(title: "Share List")
+                    AstirIdentityActionLabel(title: "Share list")
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Share List")
+                .accessibilityLabel("Share list")
             }
         }
         .padding(.top, WanderTheme.spacing2)
@@ -1378,7 +1378,7 @@ private struct ListDetailScreen: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(owner.displayName)'s Profile")
+                    .accessibilityLabel("Open \(owner.displayName)'s profile")
                 }
                 FacePileView(
                     collaborators: renderedList.collaborators,
@@ -1403,13 +1403,13 @@ private struct ListDetailScreen: View {
                                     .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
                             }
                     }
-                    .accessibilityLabel("Manage Collaborators")
+                    .accessibilityLabel("Manage collaborators")
                     .disabled(!canManageCollaborators(for: renderedList))
                     .opacity(canManageCollaborators(for: renderedList) ? 1 : 0.48)
                     .accessibilityHint(collaboratorAccessibilityHint(for: renderedList))
                 }
                 Spacer()
-                Text("\(renderedList.itemCount) Places")
+                Text("\(renderedList.itemCount) places")
                     .font(AstirTypography.metadata)
                     .foregroundStyle(brandMode.accentText)
             }
@@ -1425,7 +1425,7 @@ private struct ListDetailScreen: View {
         ListMapPreview(
             list: renderedList,
             height: 168,
-            label: "View Map"
+            label: "View map"
         ) {
             onOpenMap(renderedList)
         }
@@ -1443,7 +1443,7 @@ private struct ListDetailScreen: View {
                 .foregroundStyle(brandMode.primaryText)
 
             if visiblePlaces.isEmpty {
-                Text("There Are No Places Added To This List Yet.")
+                Text("There are no places added to this list yet.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1596,7 +1596,7 @@ private struct ListDetailScreen: View {
                 kind: .placeList,
                 subjectID: sourceList?.serverID ?? list.sourceListID ?? list.id,
                 reportedUserID: renderedList.ownerUserID,
-                context: "Report \(renderedList.ownerName)’s List “\(renderedList.name)”."
+                context: "Report \(renderedList.ownerName)’s list “\(renderedList.name)”."
             )
         }
     }
@@ -1715,16 +1715,16 @@ private struct ListDetailScreen: View {
 
     private func collaboratorAccessibilityHint(for renderedList: PlaceListMock) -> String {
         if !renderedList.isOwnedByCurrentUser {
-            return "Only The List Owner Can Manage Collaborators"
+            return "Only the list owner can manage collaborators"
         }
 
         guard store.isPrivateProfile else { return "" }
 
         if !renderedList.isCollaborative {
-            return "New Collaborative Lists Are Unavailable While Private Profile Is On"
+            return "New collaborative lists are unavailable while Private Profile is on"
         }
 
-        return "Add Or Remove Friends On This Existing Collaborative List"
+        return "Add or remove friends on this existing collaborative list"
     }
 }
 
@@ -1741,16 +1741,16 @@ private struct ListSuggestionsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
             HStack {
-                Text("Suggested Places")
+                Text("Suggested places")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Spacer()
             }
 
             if isLoading {
-                ListLoadingRow(title: "Finding Places That Fit This List")
+                ListLoadingRow(title: "Finding places that fit this list")
             } else if suggestions.isEmpty {
-                Text("Suggestions Will Appear As The List Gets More Specific.")
+                Text("Suggestions will appear as the list gets more specific.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1817,7 +1817,7 @@ private struct ListAddPlacesScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Add Places")
+                    Text("Add places")
                         .font(AstirTypography.screenTitle)
                         .foregroundStyle(brandMode.primaryText)
                     Text(list.name)
@@ -1895,12 +1895,12 @@ private struct ListAddPlacesScreen: View {
             suggestionBatch.cancelPendingAdditions()
             pendingSearchCandidateIDs.removeAll()
         }
-        .confirmationDialog("Add To List", isPresented: $showsAdditionNotificationChoice, titleVisibility: .visible) {
-            Button("Add To List") { confirmAddition(silent: false) }
-            Button("Add Silently") { confirmAddition(silent: true) }
+        .confirmationDialog("Add to list", isPresented: $showsAdditionNotificationChoice, titleVisibility: .visible) {
+            Button("Add to list") { confirmAddition(silent: false) }
+            Button("Add silently") { confirmAddition(silent: true) }
             Button("Cancel", role: .cancel) { pendingAddition = nil }
         } message: {
-            Text("A Silent Addition Skips List And Companion-Save Notifications. Visibility Stays The Same.")
+            Text("A silent addition skips list and companion-save notifications. Visibility stays the same.")
         }
     }
 
@@ -1910,14 +1910,14 @@ private struct ListAddPlacesScreen: View {
         let suggestions = store.availableListSuggestions(suggestionBatch.suggestions, for: list)
 
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("Suggested For This List")
+            Text("Suggested for this list")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
 
             if isLoadingSuggestions {
-                ListLoadingRow(title: "Finding Places That Fit")
+                ListLoadingRow(title: "Finding places that fit")
             } else if suggestions.isEmpty {
-                Text("Start With Search, Then Suggestions Will Get Sharper As The List Fills In.")
+                Text("Start with search, then suggestions will get sharper as the list fills in.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1966,21 +1966,21 @@ private struct ListAddPlacesScreen: View {
                 .foregroundStyle(brandMode.primaryText)
 
             if placeSearch.isSearching {
-                ListLoadingRow(title: "Searching Places")
+                ListLoadingRow(title: "Searching places")
             } else if let errorMessage = placeSearch.errorMessage {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                     Text(errorMessage)
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
-                    Button("Try Again") { searchAttempt += 1 }
+                    Button("Try again") { searchAttempt += 1 }
                         .font(AstirTypography.label)
                         .frame(minHeight: WanderTheme.tapMinimum)
                 }
                 .accessibilityIdentifier("lists.searchError")
             } else if addableSearchCandidates.isEmpty {
                 Text(placeSearch.candidates.isEmpty
-                     ? "No Matching Places Found. Try A More Specific Name Or Nearby Area."
-                     : "All Matching Places Are Already In This List.")
+                     ? "No matching places found. Try a more specific name or nearby area."
+                     : "All matching places are already in this list.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -2166,10 +2166,10 @@ private struct ListAddPlacesUnavailableScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            Text("Add Places")
+            Text("Add places")
                 .font(AstirTypography.screenTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Text("This List Is Not Connected To Local List Data Yet.")
+            Text("This list is not connected to local list data yet.")
                 .font(AstirTypography.bodySmall)
                 .foregroundStyle(brandMode.secondaryText)
         }
@@ -2286,10 +2286,10 @@ struct ListSaveToastPresentation: Equatable {
         case .none:
             return nil
         case .createdWanna:
-            message = "We Also Saved This To Your Wanna Go"
+            message = "We also saved this to your Wanna Go"
             actionTitle = "Edit"
         case .existingWanna:
-            message = "This Is Already Saved To Your Wanna Go"
+            message = "This is already saved to your Wanna Go"
             actionTitle = "Edit"
         }
     }
@@ -2322,7 +2322,7 @@ private struct ListSaveToast: View {
                 .frame(minWidth: 48, minHeight: WanderTheme.tapMinimum)
                 .contentShape(Rectangle())
                 .buttonStyle(.plain)
-                .accessibilityHint("Opens The Place Save Editor")
+                .accessibilityHint("Opens the place save editor")
         }
         .padding(.leading, WanderTheme.spacing3)
         .padding(.trailing, WanderTheme.spacing2)
@@ -2346,7 +2346,7 @@ private struct ListPlaceSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .black))
                 .foregroundStyle(brandMode.secondaryText)
-            TextField("Search Places Or Coordinates", text: $query)
+            TextField("Search places or coordinates", text: $query)
                 .font(AstirTypography.body)
                 .foregroundStyle(brandMode.primaryText)
                 .tint(brandMode.accent)
@@ -2412,7 +2412,7 @@ private struct ListVisiblePlaceAddRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("lists.openPlace.\(visiblePlace.id)")
-            .accessibilityHint("Opens The Full Place Profile")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
@@ -2428,7 +2428,7 @@ private struct ListVisiblePlaceAddRow: View {
                 .frame(width: 44, height: 44)
             }
             .disabled(isAdding)
-            .accessibilityLabel("Add \(place.name) To List")
+            .accessibilityLabel("Add \(place.name) to list")
         }
         .padding(WanderTheme.spacing3)
         .background(brandMode.raisedBackground)
@@ -2475,7 +2475,7 @@ private struct ListPlaceCandidateAddRow: View {
                             .font(AstirTypography.cardTitle)
                             .foregroundStyle(brandMode.primaryText)
                             .lineLimit(1)
-                        Text(subtitle.isEmpty ? "Map Search" : subtitle)
+                        Text(subtitle.isEmpty ? "Map search" : subtitle)
                             .font(AstirTypography.caption)
                             .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(2)
@@ -2487,7 +2487,7 @@ private struct ListPlaceCandidateAddRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("lists.openSearchPlace.\(candidate.id)")
-            .accessibilityHint("Opens The Full Place Profile")
+            .accessibilityHint("Opens the full place profile")
 
             Button(action: onAdd) {
                 Group {
@@ -2503,7 +2503,7 @@ private struct ListPlaceCandidateAddRow: View {
                 .frame(width: 44, height: 44)
             }
             .disabled(isAdding)
-            .accessibilityLabel("Add \(candidate.name) To List")
+            .accessibilityLabel("Add \(candidate.name) to list")
         }
         .padding(WanderTheme.spacing3)
         .background(brandMode.raisedBackground)
@@ -2648,8 +2648,8 @@ private struct ListMapPreview: View {
             .disabled(list.totalItemCount == 0)
             .accessibilityLabel(
                 list.totalItemCount == 0
-                    ? "\(list.name), No Places To Map Yet"
-                    : "View Map For \(list.name), \(list.mapContentState.countLabel)"
+                    ? "\(list.name), no places to map yet"
+                    : "View map for \(list.name), \(list.mapContentState.countLabel)"
             )
         }
         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
@@ -2684,26 +2684,26 @@ private struct ListMapPreview: View {
     private var previewStateTitle: String {
         switch list.mapAvailability {
         case .loading:
-            "Loading Places…"
+            "Loading places…"
         case .error:
-            "Map Places Unavailable"
+            "Map places unavailable"
         case .offline:
-            "You’re Offline"
+            "You’re offline"
         case .ready:
-            list.totalItemCount == 0 ? "No Places To Map Yet" : "Places Aren’t Mapped Yet"
+            list.totalItemCount == 0 ? "No places to map yet" : "Places aren’t mapped yet"
         }
     }
 
     private var previewStateMessage: String {
         switch list.mapAvailability {
         case .loading:
-            "This Map Will Fill In As Places Arrive."
+            "This map will fill in as places arrive."
         case .error:
-            "The List Is Still Safe. Try Again From List Detail."
+            "The list is still safe. Try again from list detail."
         case .offline:
-            "Reconnect To Load Places That Aren’t Saved Here."
+            "Reconnect to load places that aren’t saved here."
         case .ready:
-            list.totalItemCount == 0 ? "Add A Place To Start This Map." : "The List Still Shows Every Resolved Place Below."
+            list.totalItemCount == 0 ? "Add a place to start this map." : "The list still shows every resolved place below."
         }
     }
 }
@@ -2813,19 +2813,19 @@ private extension PlaceListInviteResolution {
     var unavailableMessage: String {
         switch status {
         case .expired:
-            "This Invitation Has Expired. Ask The List Owner For A New Link."
+            "This invitation has expired. Ask the list owner for a new link."
         case .revoked:
-            "The List Owner Revoked This Invitation."
+            "The list owner revoked this invitation."
         case .accepted:
-            "This Single-Use Invitation Has Already Been Accepted."
+            "This single-use invitation has already been accepted."
         case .unavailable:
-            "This List Is No Longer Available For Collaboration."
+            "This list is no longer available for collaboration."
         case .invalid:
-            "This Invitation Link Is Invalid."
+            "This invitation link is invalid."
         case .active:
             viewerIsOwner == true
-                ? "You Already Own This List."
-                : "This Invitation Cannot Be Accepted By This Account."
+                ? "You already own this list."
+                : "This invitation cannot be accepted by this account."
         }
     }
 }
@@ -2853,14 +2853,14 @@ private struct PlaceListInviteSheet: View {
                     }
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Build This List Together")
+                    Text("Build this list together")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text(prompt.resolution.listName ?? "Shared List")
+                    Text(prompt.resolution.listName ?? "Shared list")
                         .font(AstirTypography.sectionTitle)
                         .foregroundStyle(brandMode.primaryText)
                     if let owner = prompt.resolution.ownerDisplayName {
-                        Text("Invited By \(owner)")
+                        Text("Invited by \(owner)")
                             .font(AstirTypography.label)
                             .foregroundStyle(brandMode.secondaryText)
                     }
@@ -2878,7 +2878,7 @@ private struct PlaceListInviteSheet: View {
                         if await onAccept() {
                             dismiss()
                         } else {
-                            acceptanceErrorMessage = "The Invitation Could Not Be Accepted. It May Have Expired, Been Revoked, Or Already Been Used."
+                            acceptanceErrorMessage = "The invitation could not be accepted. It may have expired, been revoked, or already been used."
                         }
                         isAccepting = false
                     }
@@ -2888,7 +2888,7 @@ private struct PlaceListInviteSheet: View {
                             ProgressView()
                                 .tint(brandMode.accentForeground)
                         }
-                        Text(isAccepting ? "Joining..." : "Accept Invitation")
+                        Text(isAccepting ? "Joining..." : "Accept invitation")
                             .font(AstirTypography.control)
                     }
                     .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -2899,7 +2899,7 @@ private struct PlaceListInviteSheet: View {
                 .buttonStyle(.plain)
                 .disabled(isAccepting)
 
-                Text("You’ll Become A Collaborator Only After Accepting. The Link Is Single-Use And Can Expire Or Be Revoked.")
+                Text("You’ll become a collaborator only after accepting. The link is single-use and can expire or be revoked.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
 
@@ -2910,15 +2910,15 @@ private struct PlaceListInviteSheet: View {
             .tint(brandMode.accent)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Not Now") { dismiss() }
+                    Button("Not now") { dismiss() }
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.accentText)
                 }
             }
-            .alert("Couldn’t Join List", isPresented: acceptanceErrorBinding) {
+            .alert("Couldn’t join list", isPresented: acceptanceErrorBinding) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(acceptanceErrorMessage ?? "Try Opening The Invitation Again.")
+                Text(acceptanceErrorMessage ?? "Try opening the invitation again.")
             }
         }
     }
@@ -2973,8 +2973,8 @@ private struct CollaboratorInviteSheet: View {
                         }
                         PrivateProfileCollaborationUnavailable(
                             message: selectedCollaborators.isEmpty
-                                ? "Private Profile Prevents New Collaborative Lists. Existing Collaborative Lists Stay Unchanged."
-                                : "Existing Collaborators Stay On This List. New Collaborator Invites Are Unavailable While Private Profile Is On."
+                                ? "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
+                                : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
                         )
                     } else {
                         FriendCollaboratorSearchContent(
@@ -3006,10 +3006,10 @@ private struct CollaboratorInviteSheet: View {
                     loadImages: { await list.shareImages(backend: backend) }
                 )
             }
-            .alert("Couldn’t Create Invitation", isPresented: inviteLinkErrorBinding) {
+            .alert("Couldn’t create invitation", isPresented: inviteLinkErrorBinding) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text(inviteLinkErrorMessage ?? "Try Again In A Moment.")
+                Text(inviteLinkErrorMessage ?? "Try again in a moment.")
             }
         }
         .blocksProductUpsells(while: true, preservesForegroundEntry: true)
@@ -3029,7 +3029,7 @@ private struct CollaboratorInviteSheet: View {
 
     private var inviteByLinkSection: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-            Text("Invite By Link")
+            Text("Invite by link")
                 .font(AstirTypography.label)
                 .foregroundStyle(brandMode.secondaryText)
 
@@ -3044,10 +3044,10 @@ private struct CollaboratorInviteSheet: View {
                         .foregroundStyle(brandMode.accentText)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(isCreatingInviteLink ? "Creating Link..." : "Share Collaborator Invite")
+                        Text(isCreatingInviteLink ? "Creating link..." : "Share collaborator invite")
                             .font(AstirTypography.cardTitle)
                             .foregroundStyle(brandMode.primaryText)
-                        Text("Single-Use · Expires In 7 Days")
+                        Text("Single-use · expires in 7 days")
                             .font(AstirTypography.caption)
                             .foregroundStyle(brandMode.secondaryText)
                     }
@@ -3086,12 +3086,12 @@ private struct CollaboratorInviteSheet: View {
                     token: invite.token,
                     name: list.name
                 ) else {
-                    inviteLinkErrorMessage = "The Invitation Was Created, But Its Share Link Was Invalid."
+                    inviteLinkErrorMessage = "The invitation was created, but its share link was invalid."
                     return
                 }
                 sharePresentation = ListSharePresentation(content: content)
             } catch {
-                inviteLinkErrorMessage = "The Invitation Link Could Not Be Created. Check Your Connection And Try Again."
+                inviteLinkErrorMessage = "The invitation link could not be created. Check your connection and try again."
             }
         }
     }
@@ -3127,10 +3127,10 @@ private struct FriendCollaboratorSearchSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                    Text("Invite Collaborator")
+                    Text("Invite collaborator")
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text("Search Friends And Add The People Who Can View This List With You.")
+                    Text("Search friends and add the people who can view this list with you.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -3142,8 +3142,8 @@ private struct FriendCollaboratorSearchSheet: View {
                         }
                         PrivateProfileCollaborationUnavailable(
                             message: selectedCollaborators.isEmpty
-                                ? "Private Profile Prevents New Collaborative Lists. Existing Collaborative Lists Stay Unchanged."
-                                : "Existing Collaborators Stay On This List. New Collaborator Invites Are Unavailable While Private Profile Is On."
+                                ? "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
+                                : "Existing collaborators stay on this list. New collaborator invites are unavailable while Private Profile is on."
                         )
                     } else {
                         FriendCollaboratorSearchContent(
@@ -3206,7 +3206,7 @@ private struct FriendCollaboratorSearchContent: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 17, weight: .black))
                     .foregroundStyle(brandMode.secondaryText)
-                TextField("Search Friends", text: $query)
+                TextField("Search friends", text: $query)
                     .font(AstirTypography.body)
                     .foregroundStyle(brandMode.primaryText)
                     .tint(brandMode.accent)
@@ -3237,7 +3237,7 @@ private struct FriendCollaboratorSearchContent: View {
                     .foregroundStyle(brandMode.secondaryText)
 
                 if allFriendCandidates.isEmpty {
-                    Text("No Friends Available To Invite.")
+                    Text("No friends available to invite.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3245,7 +3245,7 @@ private struct FriendCollaboratorSearchContent: View {
                         .background(brandMode.recessedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 } else if friendCandidates.isEmpty {
-                    Text("All Available Friends Are Already Collaborators.")
+                    Text("All available friends are already collaborators.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3253,7 +3253,7 @@ private struct FriendCollaboratorSearchContent: View {
                         .background(brandMode.recessedBackground)
                         .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
                 } else if filteredFriends.isEmpty {
-                    Text("No Friends Match That Search.")
+                    Text("No friends match that search.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -3282,7 +3282,7 @@ private struct FriendCollaboratorSearchContent: View {
         LazyVStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             HStack(spacing: WanderTheme.spacing2) {
                 FacePileView(collaborators: selectedCollaborators, size: 28)
-                Text("\(selectedCollaborators.count) Selected")
+                Text("\(selectedCollaborators.count) selected")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.secondaryText)
                 Spacer()
@@ -3400,10 +3400,10 @@ private struct ExistingCollaboratorsSummary: View {
             FacePileView(collaborators: collaborators, size: 30)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(collaborators.count) Existing Collaborator\(collaborators.count == 1 ? "" : "s")")
+                Text("\(collaborators.count) existing collaborator\(collaborators.count == 1 ? "" : "s")")
                     .font(AstirTypography.label)
                     .foregroundStyle(brandMode.primaryText)
-                Text("This Collaboration Stays Unchanged.")
+                Text("This collaboration stays unchanged.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -3416,8 +3416,8 @@ private struct ExistingCollaboratorsSummary: View {
 private struct PrivateProfileCollaborationUnavailable: View {
     @Environment(\.astirBrandMode) private var brandMode
     var showsContainer = true
-    var title = "New Collaboration Is Off"
-    var message = "Private Profile Prevents New Collaborative Lists. Existing Collaborative Lists Stay Unchanged."
+    var title = "New collaboration is off"
+    var message = "Private Profile prevents new collaborative lists. Existing collaborative lists stay unchanged."
 
     var body: some View {
         if showsContainer {
@@ -3537,9 +3537,9 @@ private struct ListMapFullScreen: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel(
-                                        "\(cluster.memberIDs.count) Places Close Together"
+                                        "\(cluster.memberIDs.count) places close together"
                                     )
-                                    .accessibilityHint("Zooms In")
+                                    .accessibilityHint("Zooms in")
                                 } else if let place = place(for: cluster) {
                                     Button {
                                         focus(place)
@@ -3552,7 +3552,7 @@ private struct ListMapFullScreen: View {
                                     }
                                     .buttonStyle(.plain)
                                     .accessibilityLabel(place.accessibilitySummary)
-                                    .accessibilityHint("Shows This Place In The List Rail")
+                                    .accessibilityHint("Shows this place in the list rail")
                                 }
                             }
                         }
@@ -3648,7 +3648,7 @@ private struct ListMapFullScreen: View {
                     .shadow(color: Color.black.opacity(0.14), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Close List Map")
+            .accessibilityLabel("Close list map")
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(list.name)
@@ -3759,19 +3759,19 @@ private struct ListMapFullScreen: View {
             if list.mapAvailability == .offline && !list.places.isEmpty {
                 ListMapAvailabilityNotice(
                     systemImage: "wifi.slash",
-                    message: "Offline · Showing Saved Places"
+                    message: "Offline · showing saved places"
                 )
                 .padding(.bottom, WanderTheme.spacing2)
             } else if list.mapAvailability == .error && !list.places.isEmpty {
                 ListMapAvailabilityNotice(
                     systemImage: "exclamationmark.triangle.fill",
-                    message: "Couldn’t Refresh · Showing Saved Places"
+                    message: "Couldn’t refresh · showing saved places"
                 )
                 .padding(.bottom, WanderTheme.spacing2)
             } else if list.mappedPlaces.isEmpty && !list.places.isEmpty {
                 ListMapAvailabilityNotice(
                     systemImage: "mappin.slash",
-                    message: "No Map Location · Browse Below"
+                    message: "No map location · browse below"
                 )
                 .padding(.bottom, WanderTheme.spacing2)
             }
@@ -3946,7 +3946,7 @@ private struct ListMapMarker: View {
                 reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.82),
                 value: isSelected
             )
-            .accessibilityLabel("\(place.name) On List Map")
+            .accessibilityLabel("\(place.name) on list map")
     }
 }
 
@@ -4006,7 +4006,7 @@ private struct ListMapPlaceRail: View {
                     .foregroundStyle(brandMode.primaryText)
                 Spacer()
                 if list.places.count > 1 {
-                    Text("Swipe To Browse")
+                    Text("Swipe to browse")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -4129,7 +4129,7 @@ private struct ListMapPlaceTile: View {
             }
         }
         .accessibilityLabel(place.accessibilitySummary)
-        .accessibilityHint("Opens Place")
+        .accessibilityHint("Opens place")
     }
 }
 
@@ -4336,28 +4336,28 @@ private struct ListMapStatePanel: View {
     private var stateTitle: String {
         switch list.mapAvailability {
         case .loading:
-            "Loading Places…"
+            "Loading places…"
         case .error:
-            "Couldn’t Load These Places"
+            "Couldn’t load these places"
         case .offline:
-            "Places Aren’t Available Offline"
+            "Places aren’t available offline"
         case .ready:
-            list.totalItemCount == 0 ? "No Places To Map Yet" : "Places Aren’t Mapped Yet"
+            list.totalItemCount == 0 ? "No places to map yet" : "Places aren’t mapped yet"
         }
     }
 
     private var stateMessage: String {
         switch list.mapAvailability {
         case .loading:
-            "You Can Close The Map While This List Catches Up."
+            "You can close the map while this list catches up."
         case .error:
-            "Close The Map And Pull To Refresh The List."
+            "Close the map and pull to refresh the list."
         case .offline:
-            "Reconnect To Load Places That Aren’t Saved On This Device."
+            "Reconnect to load places that aren’t saved on this device."
         case .ready:
             list.totalItemCount == 0
-                ? "Add A Place From List Detail To Start This Map."
-                : "Resolved Places Still Appear In The List Below."
+                ? "Add a place from list detail to start this map."
+                : "Resolved places still appear in the list below."
         }
     }
 }
@@ -4479,17 +4479,17 @@ private struct ListEditorSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing6) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text(isEditing ? "Edit List" : "New List")
+                        Text(isEditing ? "Edit list" : "New list")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
-                        Text(isEditing ? "Keep The Name, Collaborators, And Privacy Current." : "Name The Plan, Invite Collaborators, Then Choose Privacy.")
+                        Text(isEditing ? "Keep the name, collaborators, and privacy current." : "Name the plan, invite collaborators, then choose privacy.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     fieldBlock(title: "Title") {
-                        TextField("LA Laptop Mornings", text: $title)
+                        TextField("LA laptop mornings", text: $title)
                             .font(AstirTypography.body)
                             .foregroundStyle(brandMode.primaryText)
                             .tint(brandMode.accent)
@@ -4500,7 +4500,7 @@ private struct ListEditorSheet: View {
                     .id(ListEditorWalkthroughAnchor.title)
 
                     fieldBlock(title: "Description") {
-                        TextField("Quiet Tables, Outlets, Places Worth Returning To", text: $description, axis: .vertical)
+                        TextField("Quiet tables, outlets, places worth returning to", text: $description, axis: .vertical)
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.primaryText)
                             .tint(brandMode.accent)
@@ -4608,7 +4608,7 @@ private struct ListEditorSheet: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(brandMode.primaryText)
-        .accessibilityLabel("Back To Lists")
+        .accessibilityLabel("Back to lists")
     }
 
     private var sourceList: LocalPlaceList? {
@@ -4622,7 +4622,7 @@ private struct ListEditorSheet: View {
                 ListSnapshotCover(data: list.snapshotCoverData, path: list.snapshotCoverPath)
                     .frame(height: 220)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                Text("Snapshot Cover Stays As Captured.")
+                Text("Snapshot cover stays as captured.")
                     .font(.footnote)
                     .foregroundStyle(WanderTheme.textMuted.color)
             }
@@ -4641,7 +4641,7 @@ private struct ListEditorSheet: View {
     private var editorActionButtons: some View {
         VStack(spacing: WanderTheme.spacing3) {
             ListPrimaryButton(
-                title: isEditing ? "Save Changes" : "Save List",
+                title: isEditing ? "Save changes" : "Save list",
                 systemImage: "checkmark",
                 isDisabled: trimmedTitle.isEmpty
             ) {
@@ -4682,10 +4682,10 @@ private struct ListEditorSheet: View {
 
     private var deleteConfirmationMessage: String {
         if stagedCollaborators.isEmpty {
-            return "Are You Sure You Want To Delete This List?"
+            return "Are you sure you want to delete this list?"
         }
 
-        return "Are You Sure You Want To Delete This List? You Will Be Deleting It For Everybody."
+        return "Are you sure you want to delete this list? You will be deleting it for everybody."
     }
 
     private var listStealthBinding: Binding<Bool> {
@@ -4716,29 +4716,29 @@ private struct ListEditorSheet: View {
     private var stealthHelperCopy: String {
         if store.isPrivateProfile {
             if !stagedCollaborators.isEmpty {
-                return "Locked On By Private Profile. Existing Collaborators Can Still See This List."
+                return "Locked on by Private Profile. Existing collaborators can still see this list."
             }
 
-            return "Locked On By Private Profile. Only You Can See This List."
+            return "Locked on by Private Profile. Only you can see this list."
         }
 
-        return isStealth ? "Only You And Invited Collaborators Can See It." : "People Who Follow You Can See This List."
+        return isStealth ? "Only you and invited collaborators can see it." : "People who follow you can see this list."
     }
 
     private var collaboratorsHelperCopy: String {
         guard isOwnedByCurrentUser else {
-            return "Only The Owner Can Manage Collaborators."
+            return "Only the owner can manage collaborators."
         }
 
         guard store.isPrivateProfile else {
-            return "Invite People Before They Can Add Places."
+            return "Invite people before they can add places."
         }
 
         if !startedAsCollaborative {
-            return "New Collaborative Lists Are Unavailable While Private Profile Is On."
+            return "New collaborative lists are unavailable while Private Profile is on."
         }
 
-        return "Existing Collaborators Stay On This List. You Can Add Or Remove Friends."
+        return "Existing collaborators stay on this list. You can add or remove friends."
     }
 
     private var canEditCollaborators: Bool {
@@ -4762,7 +4762,7 @@ private struct ListEditorSheet: View {
     private var stealthToggle: some View {
         Toggle(isOn: listStealthBinding) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                Text("Stealth Mode")
+                Text("Stealth mode")
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(brandMode.primaryText)
                 Text(stealthHelperCopy)
@@ -4809,15 +4809,15 @@ private struct ListEditorSheet: View {
                                     .stroke(brandMode.accent.opacity(0.34), lineWidth: 1)
                             }
                     }
-                    .accessibilityLabel("Invite Collaborator")
+                    .accessibilityLabel("Invite collaborator")
                 }
             }
 
             if store.isPrivateProfile && !canEditCollaborators && stagedCollaborators.isEmpty {
                 PrivateProfileCollaborationUnavailable(
                     showsContainer: false,
-                    title: "Existing Lists Stay",
-                    message: "Collaborators Already On Existing Lists Are Not Removed."
+                    title: "Existing lists stay",
+                    message: "Collaborators already on existing lists are not removed."
                 )
             } else if stagedCollaborators.isEmpty {
                 HStack(spacing: WanderTheme.spacing2) {
@@ -4825,7 +4825,7 @@ private struct ListEditorSheet: View {
                         .font(.system(size: 18, weight: .black))
                         .frame(width: 32, height: 32)
                         .foregroundStyle(brandMode.secondaryText)
-                    Text("No Collaborators Yet")
+                    Text("No collaborators yet")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                     Spacer()
@@ -4845,7 +4845,7 @@ private struct ListEditorSheet: View {
                             Text("@\(collaborator.handle)")
                                 .font(AstirTypography.label)
                                 .foregroundStyle(brandMode.primaryText)
-                            Text(isEditing ? "Can View" : "Draft Invite")
+                            Text(isEditing ? "Can view" : "Draft invite")
                                 .font(AstirTypography.caption)
                                 .foregroundStyle(brandMode.secondaryText)
                             Spacer()
@@ -4978,7 +4978,7 @@ private struct FacePileView: View {
                         collaboratorAvatar(collaborator)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Open \(collaborator.name)'s Profile")
+                    .accessibilityLabel("Open \(collaborator.name)'s profile")
                 } else {
                     collaboratorAvatar(collaborator)
                         .accessibilityLabel(collaborator.name)
@@ -5129,14 +5129,14 @@ private struct PlaceListMock: Identifiable, Hashable {
 
     var subtitle: String {
         if ownerName == "You" {
-            return "\(itemCount) Places"
+            return "\(itemCount) places"
         }
 
-        return "\(ownerName) - \(itemCount) Places"
+        return "\(ownerName) - \(itemCount) places"
     }
 
     var collaboratorSummary: String {
-        guard !collaborators.isEmpty else { return "Solo List" }
+        guard !collaborators.isEmpty else { return "Solo list" }
 
         if collaborators.count == 1 {
             return "\(collaborators[0].name)"
@@ -5430,7 +5430,7 @@ private struct ListPlaceMock: Identifiable {
         let hasBeen = statuses.contains(.been)
         let hasWanna = statuses.contains(.wannaGo)
         let statusSummary = hasBeen && hasWanna
-            ? "Checked In + Wanna Go"
+            ? "Checked in + Wanna go"
             : (hasBeen ? PlaceStatus.been.displayTitle : PlaceStatus.wannaGo.displayTitle)
         let contextLine = "\(ownershipSummary) · \(statusSummary)"
 
@@ -6079,7 +6079,7 @@ struct SnapshotListEditorScreen: View {
                 dismiss()
             }
         } else {
-            ContentUnavailableView("List Unavailable", systemImage: PlaceListSymbol.systemImage)
+            ContentUnavailableView("List unavailable", systemImage: PlaceListSymbol.systemImage)
         }
     }
 }
@@ -6106,11 +6106,11 @@ private struct ListSnapshotCover: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .accessibilityLabel("Saved Map Snapshot")
+                    .accessibilityLabel("Saved map snapshot")
             } else {
                 Image(systemName: "map")
                     .font(.largeTitle)
-                    .accessibilityLabel("Map Snapshot Cover")
+                    .accessibilityLabel("Map snapshot cover")
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

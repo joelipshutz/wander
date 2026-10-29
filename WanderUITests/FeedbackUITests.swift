@@ -8,7 +8,7 @@ import XCTest
         app.launchArguments.removeAll { $0 == "-WanderFeedbackUITest" }
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
-        XCTAssertTrue(app.buttons["Edit Profile"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.buttons["Edit profile"].waitForExistence(timeout: 20))
         XCTAssertFalse(app.buttons["profile.feedback"].exists)
         capture("Profile feedback disabled")
     }
@@ -22,7 +22,7 @@ import XCTest
         XCTAssertTrue(feedback.waitForExistence(timeout: 20))
         capture("Profile with feedback button")
         feedback.tap()
-        XCTAssertTrue(app.staticTexts["Drop Us A Line"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Drop us a line"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["feedback.tab.voice"].isSelected)
         XCTAssertTrue(app.buttons["feedback.record"].exists)
         XCTAssertFalse(app.textViews["feedback.text"].exists)
@@ -41,7 +41,7 @@ import XCTest
         capture("Feedback keyboard")
         XCTAssertTrue(app.buttons["feedback.submit"].isEnabled)
         app.buttons["feedback.submit"].tap()
-        XCTAssertTrue(app.staticTexts["You Made Astir Better."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["You made Astir better."].waitForExistence(timeout: 5))
         capture("Feedback success")
         app.buttons["Done"].tap()
         XCTAssertTrue(feedback.waitForExistence(timeout: 3))
@@ -62,11 +62,11 @@ import XCTest
         XCTAssertTrue(app.buttons["feedback.submit"].isEnabled)
         app.buttons["feedback.tab.text"].tap()
         XCTAssertEqual(field.value as? String, "Please keep this note")
-        app.buttons["Close Feedback"].tap()
-        app.buttons["Keep Editing"].tap()
+        app.buttons["Close feedback"].tap()
+        app.buttons["Keep editing"].tap()
         XCTAssertEqual(field.value as? String, "Please keep this note")
-        app.buttons["Close Feedback"].tap()
-        app.buttons["Discard Feedback"].tap()
+        app.buttons["Close feedback"].tap()
+        app.buttons["Discard feedback"].tap()
         XCTAssertTrue(app.buttons["profile.feedback"].waitForExistence(timeout: 3))
     }
 
@@ -82,22 +82,22 @@ import XCTest
         XCTAssertTrue(app.buttons["feedback.submit"].isEnabled)
         capture("Feedback recorded voice")
         play.tap()
-        XCTAssertEqual(play.label, "Pause Voice Note")
+        XCTAssertEqual(play.label, "Pause voice note")
         play.tap()
-        XCTAssertEqual(play.label, "Play Voice Note")
+        XCTAssertEqual(play.label, "Play voice note")
         app.buttons["feedback.stopPlayback"].tap()
         app.buttons["feedback.tab.text"].tap()
         let field = app.textViews["feedback.text"]
         field.tap(); field.typeText("A little context for my voice note")
         app.buttons["feedback.tab.voice"].tap()
         XCTAssertTrue(play.exists)
-        let recordAgain = app.buttons["Record Again"]
+        let recordAgain = app.buttons["Record again"]
         if !recordAgain.isHittable { app.swipeUp() }
         recordAgain.tap()
-        app.buttons["Keep Recording"].tap()
+        app.buttons["Keep recording"].tap()
         XCTAssertTrue(play.exists)
         recordAgain.tap()
-        app.buttons["Replace Recording"].tap()
+        app.buttons["Replace recording"].tap()
         XCTAssertTrue(app.buttons["feedback.record"].exists)
         XCTAssertFalse(play.exists)
         app.buttons["feedback.tab.text"].tap()
@@ -123,7 +123,7 @@ import XCTest
             let play = app.buttons["feedback.play"]
             XCTAssertTrue(play.waitForExistence(timeout: 5))
             play.tap()
-            XCTAssertEqual(play.label, "Pause Voice Note")
+            XCTAssertEqual(play.label, "Pause voice note")
             backgroundAndReturn(app)
             let paused = NSPredicate(format: "label == %@", "Play voice note")
             expectation(for: paused, evaluatedWith: play)
@@ -137,7 +137,7 @@ import XCTest
             app.buttons["feedback.tab.voice"].tap()
         }
         app.buttons["feedback.submit"].tap()
-        XCTAssertTrue(app.staticTexts["You Made Astir Better."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["You made Astir better."].waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
         XCTAssertTrue(feedback.waitForExistence(timeout: 5))
     }
@@ -156,7 +156,7 @@ import XCTest
             XCTAssertTrue(app.buttons["feedback.record"].isEnabled)
             XCTAssertTrue(app.buttons["feedback.photos"].isEnabled)
             XCTAssertFalse(app.buttons["feedback.submit"].isEnabled)
-            app.buttons["Close Feedback"].tap()
+            app.buttons["Close feedback"].tap()
             // Returning can queue the app-open reminder behind this sheet.
             // Complete that real prompt before reopening the feedback form.
             dismissStartupNotificationPromptIfNeeded(in: app)

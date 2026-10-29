@@ -88,7 +88,7 @@ enum ActivityShareInstagramPostTapAction: Equatable {
 
 enum ActivityShareInstagramPhotoAccessGuidance {
     static let acknowledgementKey = "activityShare.instagramPostFullPhotoAccessAcknowledged"
-    static let title = "Instagram Needs Full Photo Access"
+    static let title = "Instagram needs Full Photo Access"
     static let settingsPath = "Settings → Apps → Instagram → Photos → Full Access"
 
     static func action(hasAcknowledgedFullAccess: Bool) -> ActivityShareInstagramPostTapAction {
@@ -117,21 +117,21 @@ enum ActivityShareTikTokOutcomePolicy {
 
         let message = switch shareState {
         case 20_003:
-            "TikTok Did Not Grant This Account Permission To Share."
+            "TikTok did not grant this account permission to share."
         case 20_004, 22_001:
-            "Sign In To The TikTok Account Enabled For This Astir Sandbox, Then Try Again."
+            "Sign in to the TikTok account enabled for this Astir sandbox, then try again."
         case 20_005:
-            "TikTok Needs Photos Access To Import This Share Ticket."
+            "TikTok needs Photos access to import this share ticket."
         case 20_006:
-            "TikTok Could Not Connect. Check Your Connection And Try Again."
+            "TikTok could not connect. Check your connection and try again."
         case 20_008:
-            "TikTok Rejected The Share Image Resolution."
+            "TikTok rejected the share image resolution."
         case 20_019:
-            "TikTok Is Not Installed On This iPhone."
+            "TikTok is not installed on this iPhone."
         case 22_000:
-            "Update TikTok, Then Try Sharing Again."
+            "Update TikTok, then try sharing again."
         default:
-            "TikTok Could Not Finish This Share. Try Again Or Use More To Share Another Way."
+            "TikTok could not finish this share. Try again or use More to share another way."
         }
         return .failed(message: message)
     }
@@ -256,9 +256,9 @@ struct ActivitySharePreviewScreen: View {
                         Text(card.linkTitle)
                             .font(AstirTypography.body)
                     }
-                    Text("Sharing Your Own Item Publishes This Preview For Anyone With The Link. Copies May Remain After You Change Or Delete The Original.")
+                    Text("Sharing your own item publishes this preview for anyone with the link. Copies may remain after you change or delete the original.")
                         .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
-                    Text("The Link Is Copied Whenever You Share. Paste It Into A Link Sticker Or Anywhere The App Supports Links.")
+                    Text("The link is copied whenever you share. Paste it into a link sticker or anywhere the app supports links.")
                         .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
                 }.padding(20).padding(.top, 52)
             }.background(brandMode.background)
@@ -338,25 +338,25 @@ struct ActivitySharePreviewScreen: View {
             .presentationDragIndicator(.hidden)
             .presentationBackground(brandMode.background)
         }
-        .alert("Allow Astir To Access Your Photos", isPresented: $isShowingPhotoSettingsAlert) {
+        .alert("Allow Astir to access your photos", isPresented: $isShowingPhotoSettingsAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Settings") {
                 guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
                 openURL(settingsURL)
             }
         } message: {
-            Text("Please Go To Settings > Astir And Turn On Photos Access.")
+            Text("Please go to Settings > Astir and turn on Photos access.")
         }
-        .alert(preparationError?.title ?? "Couldn't Share This Item", isPresented: Binding(
+        .alert(preparationError?.title ?? "Couldn't share this item", isPresented: Binding(
             get: { preparationError != nil },
             set: { if !$0 { preparationError = nil } }
         )) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(preparationError?.message ?? "Try Sharing This Item Again.")
+            Text(preparationError?.message ?? "Try sharing this item again.")
         }
         .alert(
-            "Couldn't Share To TikTok",
+            "Couldn't share to TikTok",
             isPresented: Binding(
                 get: { tikTokFailureMessage != nil },
                 set: { isPresented in
@@ -368,7 +368,7 @@ struct ActivitySharePreviewScreen: View {
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(tikTokFailureMessage ?? "TikTok Could Not Finish This Share.")
+            Text(tikTokFailureMessage ?? "TikTok could not finish this share.")
         }
         .task(id: content.item) {
             analytics.track(
@@ -393,7 +393,7 @@ struct ActivitySharePreviewScreen: View {
         HStack {
             ActivityShareChromeButton(
                 systemImage: "chevron.left",
-                accessibilityLabel: "Close Share Preview",
+                accessibilityLabel: "Close share preview",
                 action: {
                     destinationTask?.cancel()
                     dismiss()
@@ -406,11 +406,11 @@ struct ActivitySharePreviewScreen: View {
                 ProgressView()
                     .tint(brandMode.primaryText)
                     .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
-                    .accessibilityLabel("Preparing Share Image")
+                    .accessibilityLabel("Preparing share image")
             } else {
                 ActivityShareChromeButton(
                     systemImage: "square.and.arrow.up",
-                    accessibilityLabel: "Open More Sharing Options"
+                    accessibilityLabel: "Open more sharing options"
                 ) {
                     handleDestination(.more)
                 }
@@ -443,7 +443,7 @@ struct ActivitySharePreviewScreen: View {
             runDestination {
                 guard await preparedShareContent() != nil else { return }
                 trackShareCompleted(destination: "copy_link", outcome: "copied")
-                showConfirmation("Link Copied")
+                showConfirmation("Link copied")
             }
         case .messages:
             startMessagesPresentation()
@@ -694,13 +694,13 @@ struct ActivitySharePreviewScreen: View {
         switch outcome {
         case .shared:
             trackShareCompleted(destination: "tiktok", outcome: "shared")
-            showConfirmation("Shared To TikTok")
+            showConfirmation("Shared to TikTok")
         case .savedAsDraft:
             trackShareCompleted(destination: "tiktok", outcome: "draft")
-            showConfirmation("Saved As A TikTok Draft")
+            showConfirmation("Saved as a TikTok draft")
         case .cancelled:
             trackShareCompleted(destination: "tiktok", outcome: "cancelled")
-            showConfirmation("TikTok Share Canceled")
+            showConfirmation("TikTok share canceled")
         case .failed(let message):
             trackShareCompleted(destination: "tiktok", outcome: "failed")
             tikTokFailureMessage = message
@@ -730,7 +730,7 @@ struct ActivitySharePreviewScreen: View {
         do {
             _ = try await ActivitySharePhotoWriter.save(renderedImage)
             trackShareCompleted(destination: "save_photo", outcome: "saved")
-            showConfirmation("Saved To Photos")
+            showConfirmation("Saved to photos")
         } catch {
             preparationError = .artwork
         }
@@ -840,7 +840,7 @@ private struct ActivityShareDestinationTray: View {
 
             if let instagramPhotoAccessInfoAction {
                 Button(action: instagramPhotoAccessInfoAction) {
-                    Label("Instagram Post Needs Full Photo Access", systemImage: "info.circle.fill")
+                    Label("Instagram Post needs Full Photo Access", systemImage: "info.circle.fill")
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
@@ -848,7 +848,7 @@ private struct ActivityShareDestinationTray: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, WanderTheme.spacing4)
-                .accessibilityHint("Shows The Instagram Photo Access Instructions Again.")
+                .accessibilityHint("Shows the Instagram photo access instructions again.")
             }
         }
         .padding(.top, WanderTheme.spacing4)
@@ -1022,15 +1022,15 @@ private struct ActivityShareDestinationButton: View {
 
     private var accessibilityHint: String {
         switch destination.route {
-        case .messages: "Opens Messages With The Ticket Image And Astir Link."
-        case .copyLink: "Copies The Astir Link."
-        case .instagramStory: "Opens The Instagram Story Composer With The Ticket Image."
+        case .messages: "Opens Messages with the ticket image and Astir link."
+        case .copyLink: "Copies the Astir link."
+        case .instagramStory: "Opens the Instagram Story composer with the ticket image."
         case .instagramPost:
-            "Opens The Instagram Post Composer With The Ticket Image. Instagram Needs Full Photo Access To Select The Exact Ticket."
-        case .tikTok: "Shares The Ticket Image To TikTok When Share Kit Is Configured."
-        case .snapchat: "Opens The Snapchat Preview Editor With The Ticket Image When Creative Kit Is Configured."
-        case .savePhoto: "Saves The Ticket Image To Photos."
-        case .systemShare: "Opens The Standard iOS Share Sheet."
+            "Opens the Instagram post composer with the ticket image. Instagram needs Full Photo Access to select the exact ticket."
+        case .tikTok: "Shares the ticket image to TikTok when Share Kit is configured."
+        case .snapchat: "Opens the Snapchat preview editor with the ticket image when Creative Kit is configured."
+        case .savePhoto: "Saves the ticket image to Photos."
+        case .systemShare: "Opens the standard iOS share sheet."
         }
     }
 }
@@ -1048,8 +1048,8 @@ private enum ActivityShareInstagramPhotoAccessGuidancePresentation: String, Iden
 
     var primaryTitle: String {
         switch self {
-        case .requiredBeforeFirstDirectShare: "I've Enabled Full Access"
-        case .reminder: "Continue To Instagram"
+        case .requiredBeforeFirstDirectShare: "I've enabled Full Access"
+        case .reminder: "Continue to Instagram"
         }
     }
 }
@@ -1076,7 +1076,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                         .overlay(Circle().stroke(brandMode.border, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close Instagram Photo Access Instructions")
+                .accessibilityLabel("Close Instagram photo access instructions")
             }
 
             ScrollView {
@@ -1093,7 +1093,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                         .font(AstirTypography.sheetTitle)
                         .foregroundStyle(brandMode.primaryText)
 
-                    Text("To Open This Exact Ticket Directly In Instagram, Go To:")
+                    Text("To open this exact ticket directly in Instagram, go to:")
                         .font(AstirTypography.body)
                         .foregroundStyle(brandMode.secondaryText)
 
@@ -1109,7 +1109,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                                 .stroke(brandMode.border, lineWidth: 1)
                         }
 
-                    Text("Without Full Access, Instagram May Select A Different Photo.")
+                    Text("Without Full Access, Instagram may select a different photo.")
                         .font(AstirTypography.bodySmall)
                         .foregroundStyle(WanderTheme.stateWarning.color)
                 }
@@ -1126,7 +1126,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                     compatibleAction()
                     dismiss()
                 } label: {
-                    Text("Use Compatible Sharing")
+                    Text("Use compatible sharing")
                         .font(AstirTypography.control)
                         .foregroundStyle(brandMode.primaryText)
                         .frame(maxWidth: .infinity, minHeight: 52)
@@ -1139,7 +1139,7 @@ private struct ActivityShareInstagramPhotoAccessGuidanceSheet: View {
                 }
                 .buttonStyle(.plain)
 
-                Text("Compatible Sharing Avoids Instagram's Photos Permission, But iOS May Show An Extra Chooser.")
+                Text("Compatible sharing avoids Instagram's Photos permission, but iOS may show an extra chooser.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.center)
@@ -1297,7 +1297,7 @@ enum ActivityShareProviderLauncher {
                 )
             } else {
                 outcome = .failed(
-                    message: "TikTok Could Not Finish This Share. Try Again Or Use More To Share Another Way."
+                    message: "TikTok could not finish this share. Try again or use More to share another way."
                 )
             }
             Task { @MainActor in

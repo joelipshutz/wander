@@ -66,9 +66,9 @@ final class FeedAudienceUITests: XCTestCase {
         XCTAssertTrue(actions.isHittable)
         XCTAssertEqual(actions.frame.height, 44, accuracy: 0.001)
         actions.tap()
-        XCTAssertTrue(app.buttons["No Additional Actions"].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["Report Activity"].exists)
-        XCTAssertFalse(app.buttons["Reply Privately"].exists)
+        XCTAssertTrue(app.buttons["No additional actions"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Report activity"].exists)
+        XCTAssertFalse(app.buttons["Reply privately"].exists)
         capture("REC-652-own-activity-menu")
     }
 

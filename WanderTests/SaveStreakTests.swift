@@ -84,15 +84,15 @@ final class SaveStreakCalculatorTests: XCTestCase {
         )
         XCTAssertEqual(
             SaveStreakCelebrationPresentation.accessibilityTitle(for: 4),
-            "4 Day Streak"
+            "4 day streak"
         )
         XCTAssertEqual(
             SaveStreakCelebrationPresentation.accessibilityTitle(for: 1),
-            "1 Day Streak"
+            "1 day streak"
         )
         XCTAssertEqual(
             SaveStreakCelebrationPresentation.helperText,
-            "Keep It Up 🔥"
+            "Keep it up 🔥"
         )
     }
 
@@ -162,7 +162,7 @@ final class SaveStreakCalculatorTests: XCTestCase {
             XCTAssertEqual(SaveStreakCelebrationPresentation.visualCount(for: count), "1")
             XCTAssertEqual(
                 SaveStreakCelebrationPresentation.accessibilityTitle(for: count),
-                "1 Day Streak"
+                "1 day streak"
             )
 
             let days = SaveStreakCelebrationPresentation.weekdays(
@@ -352,7 +352,7 @@ final class SaveStreakCalculatorTests: XCTestCase {
             calendar: testCalendar
         )
 
-        XCTAssertEqual(SaveStreakCelebrationPresentation.helperText(for: celebration), "Streak Saved 🔥")
+        XCTAssertEqual(SaveStreakCelebrationPresentation.helperText(for: celebration), "Streak saved 🔥")
         XCTAssertEqual(days.filter(\.isRecoveryDay).map(\.date), [recoveryDate])
         XCTAssertTrue(days.first(where: \.isRecoveryDay)?.isCovered == true)
     }

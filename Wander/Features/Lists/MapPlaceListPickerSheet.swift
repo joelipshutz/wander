@@ -123,17 +123,17 @@ struct MapPlaceListPickerResult: Equatable {
     var message: String {
         guard addedCount > 0 else {
             return deniedCount > 0
-                ? "Couldn’t Add This Place. Try Again."
-                : "This Place Is Already In That List."
+                ? "Couldn’t add this place. Try again."
+                : "This place is already in that list."
         }
 
-        let destination = addedCount == 1 ? "1 List" : "\(addedCount) Lists"
-        let base = "Added To \(destination)."
+        let destination = addedCount == 1 ? "1 list" : "\(addedCount) lists"
+        let base = "Added to \(destination)."
         if case .createdWanna = companionSave {
-            return "Added To \(destination) And Wanna Go."
+            return "Added to \(destination) and Wanna Go."
         }
         if deniedCount > 0 {
-            return "\(base) One List Needs Another Try."
+            return "\(base) One list needs another try."
         }
         return base
     }
@@ -200,10 +200,10 @@ struct MapPlaceListPickerSheet: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                        Text("Add To Lists")
+                        Text("Add to lists")
                             .font(AstirTypography.sheetTitle)
                             .foregroundStyle(brandMode.primaryText)
-                        Text(additionalTargets.isEmpty ? target.placeName : "\(targets.count) Places")
+                        Text(additionalTargets.isEmpty ? target.placeName : "\(targets.count) places")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .lineLimit(1)
@@ -215,7 +215,7 @@ struct MapPlaceListPickerSheet: View {
                         emptyState
                     } else {
                         if !yourLists.isEmpty {
-                            listSection(title: "Your Lists", lists: yourLists)
+                            listSection(title: "Your lists", lists: yourLists)
                         }
                         if !collaborationLists.isEmpty {
                             listSection(title: "Collabs", lists: collaborationLists)
@@ -223,7 +223,7 @@ struct MapPlaceListPickerSheet: View {
                     }
 
                     if let stagedSaveStatus {
-                        Text("Lists Are Updated Only When You Save This \(stagedSaveStatus == .been ? "Check-In" : "Wanna"). The Place Follows Each List’s Visibility; Your Save’s Audience Stays The Same.")
+                        Text("Lists are updated only when you save this \(stagedSaveStatus == .been ? "check-in" : "Wanna"). The place follows each list’s visibility; your save’s audience stays the same.")
                             .font(AstirTypography.bodySmall)
                             .foregroundStyle(brandMode.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -321,10 +321,10 @@ struct MapPlaceListPickerSheet: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
-                    Text("New List")
+                    Text("New list")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text(onStage == nil ? "Create It And Add This Place" : stagedSaveStatus != nil ? "Create It And Select It For This Save" : "Create It And Select It For This Import")
+                    Text(onStage == nil ? "Create it and add this place" : stagedSaveStatus != nil ? "Create it and select it for this save" : "Create it and select it for this import")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -354,10 +354,10 @@ struct MapPlaceListPickerSheet: View {
             Image(systemName: WanderTab.lists.systemImage)
                 .font(.system(size: 20, weight: .black))
                 .foregroundStyle(brandMode.accentText)
-            Text("No Lists Yet")
+            Text("No lists yet")
                 .font(AstirTypography.sectionTitle)
                 .foregroundStyle(brandMode.primaryText)
-            Text("Make A List Above And This Place Will Be Its First Stop.")
+            Text("Make a list above and this place will be its first stop.")
                 .font(AstirTypography.body)
                 .foregroundStyle(brandMode.secondaryText)
         }
@@ -378,7 +378,7 @@ struct MapPlaceListPickerSheet: View {
                 .foregroundStyle(brandMode.accentText)
                 .frame(width: 18, height: 18)
 
-            Text(onStage == nil ? "This Place Isn’t On Your Map Yet, So Adding It To A List Will Also Save It To Wanna Go. If You Choose A Stealth List, The New Wanna Will Be Visible Only To You." : "List Choices Are Applied When You Tap Save In The Import Report. You Can Also Choose Wanna Or Check In.")
+            Text(onStage == nil ? "This place isn’t on your map yet, so adding it to a list will also save it to Wanna Go. If you choose a stealth list, the new Wanna will be visible only to you." : "List choices are applied when you tap Save in the import report. You can also choose Wanna or Check In.")
                 .font(AstirTypography.caption)
                 .foregroundStyle(brandMode.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
@@ -424,9 +424,9 @@ struct MapPlaceListPickerSheet: View {
         case 0:
             return "Done"
         case 1:
-            return "Add To 1 List"
+            return "Add to 1 list"
         default:
-            return "Add To \(pendingLists.count) Lists"
+            return "Add to \(pendingLists.count) lists"
         }
     }
 
@@ -483,7 +483,7 @@ struct MapPlaceListPickerSheet: View {
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(isExisting ? brandMode.secondaryText : brandMode.primaryText)
                         .lineLimit(1)
-                    Text(isExisting ? "Already In List" : listDetail(list))
+                    Text(isExisting ? "Already in list" : listDetail(list))
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
@@ -508,8 +508,8 @@ struct MapPlaceListPickerSheet: View {
         .buttonStyle(.plain)
         .disabled(isApplying || isExisting)
         .accessibilityIdentifier("map-list-picker.list.\(list.id)")
-        .accessibilityLabel("\(list.name), \(isExisting ? "Already In List" : isPending ? "Selected" : "Not Selected")")
-        .accessibilityHint(isExisting ? "This Place Is Already In The List" : "Double Tap To Toggle This List")
+        .accessibilityLabel("\(list.name), \(isExisting ? "already in list" : isPending ? "selected" : "not selected")")
+        .accessibilityHint(isExisting ? "This place is already in the list" : "Double tap to toggle this list")
     }
 
     private func listDetail(_ list: LocalPlaceList) -> String {
@@ -518,16 +518,16 @@ struct MapPlaceListPickerSheet: View {
 
     private func makeListDetail(_ list: LocalPlaceList) -> String {
         let count = list.cachedItemCount ?? store.visiblePlaces(in: list).count
-        let places = count == 1 ? "1 Place" : "\(count) Places"
+        let places = count == 1 ? "1 place" : "\(count) places"
         let collaboratorCount = store.collaborators(for: list).count
 
         if list.ownerUserID != store.currentUser.id {
-            return "Shared With You · \(places)"
+            return "Shared with you · \(places)"
         }
         if collaboratorCount > 0 {
             let collaborators = collaboratorCount == 1
-                ? "1 Collaborator"
-                : "\(collaboratorCount) Collaborators"
+                ? "1 collaborator"
+                : "\(collaboratorCount) collaborators"
             return "\(collaborators) · \(places)"
         }
         return places
@@ -638,7 +638,7 @@ struct MapPlaceListPickerSheet: View {
             visibility: visibility,
             collaboratorUserIDs: draft.collaboratorUserIDs
         ) else {
-            errorMessage = "Couldn’t Create That List. Try A Different Name."
+            errorMessage = "Couldn’t create that list. Try a different name."
             return
         }
 

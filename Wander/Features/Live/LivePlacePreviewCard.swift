@@ -145,15 +145,15 @@ struct LivePlacePreviewCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Opens The Full Place Page")
+            .accessibilityHint("Opens the full place page")
 
             if activityLoadFailed, recentActivity.isEmpty {
                 HStack {
-                    Text("Recent Activity Couldn’t Load.")
+                    Text("Recent activity couldn’t load.")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brand.secondaryText)
                     Spacer(minLength: 4)
-                    Button("Try Again") { activityRetry += 1 }
+                    Button("Try again") { activityRetry += 1 }
                         .font(AstirTypography.label)
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("live.placePreview.retryActivity")
@@ -196,7 +196,7 @@ struct LivePlacePreviewCard: View {
             .foregroundStyle(brand.primaryText)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel([rating.accessibilityLabel, rating.providerDisplayName,
-                                 rating.count.map { "\($0) Ratings" }].compactMap { $0 }.joined(separator: ", "))
+                                 rating.count.map { "\($0) ratings" }].compactMap { $0 }.joined(separator: ", "))
             .accessibilityIdentifier("live.placePreview.rating")
         }
     }
@@ -239,7 +239,7 @@ struct LivePlacePreviewCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
-            .accessibilityHint("Opens The Full Place Page")
+            .accessibilityHint("Opens the full place page")
             let media = previewMedia(activity)
             if !media.isEmpty {
                 photoPile(activity, media: media)
@@ -295,8 +295,8 @@ struct LivePlacePreviewCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("View \(media.count) \(media.count == 1 ? "Photo" : "Photos") From \(activity.actor.displayName)’s Activity")
-        .accessibilityHint("Opens The Photo Gallery")
+        .accessibilityLabel("View \(media.count) \(media.count == 1 ? "photo" : "photos") from \(activity.actor.displayName)’s activity")
+        .accessibilityHint("Opens the photo gallery")
         .accessibilityIdentifier("live.placePreview.photos.\(activity.id)")
     }
 
@@ -505,12 +505,12 @@ struct LivePlacePreviewHeader: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Open \(name)")
-                .accessibilityHint("Opens The Full Place Page")
+                .accessibilityHint("Opens the full place page")
                 .accessibilityIdentifier("live.placePreview.open")
             }
             .overlay(alignment: .topTrailing) { actionRail.padding(10) }
             .overlay(alignment: .topLeading) {
-                action("Close Place Preview", symbol: "xmark", identifier: "close", perform: onClose)
+                action("Close place preview", symbol: "xmark", identifier: "close", perform: onClose)
                     .padding(10)
             }
             .clipped()
@@ -518,9 +518,9 @@ struct LivePlacePreviewHeader: View {
 
     private var actionRail: some View {
         VStack(spacing: 0) {
-            action("Save Place", symbol: "plus", identifier: "add", signal: true, perform: onAdd)
-            action("Share Place", symbol: "square.and.arrow.up", identifier: "share", perform: onShare)
-            action("Add Place To List", symbol: "text.badge.plus", identifier: "list", perform: onAddToList)
+            action("Save place", symbol: "plus", identifier: "add", signal: true, perform: onAdd)
+            action("Share place", symbol: "square.and.arrow.up", identifier: "share", perform: onShare)
+            action("Add place to list", symbol: "text.badge.plus", identifier: "list", perform: onAddToList)
         }
     }
 
@@ -698,9 +698,9 @@ enum LivePlacePreviewPresentation {
 
     static func actionLabel(for activity: FeedActivity) -> String {
         switch activity.resolvedTicketKind {
-        case .checkIn: "Checked In"
+        case .checkIn: "Checked in"
         case .wanna: "Wanna"
-        case .list: "Added To A List"
+        case .list: "Added to a list"
         case .saved: "Saved"
         }
     }

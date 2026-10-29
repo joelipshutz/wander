@@ -12,7 +12,7 @@ struct CommonGroundInvitationMockup: View {
     @State private var shareContent: WanderShareContent?
     @State private var isPreparingShare = false
     @State private var shareFailed = false
-    @State private var shareFailureMessage = "Your Draft Is Still Here. Please Try Again In A Moment."
+    @State private var shareFailureMessage = "Your draft is still here. Please try again in a moment."
     @AccessibilityFocusState private var postcardFocused: Bool
     @FocusState private var noteFocused: Bool
     let opensEnvelope: Bool
@@ -41,7 +41,7 @@ struct CommonGroundInvitationMockup: View {
                 if opensEnvelope {
                     recipient
                 } else {
-                    Text(showsLinkage ? draft.reasonTitle : "ASTIR’s Taking The Wheel")
+                    Text(showsLinkage ? draft.reasonTitle : "ASTIR’s taking the wheel")
                         .font(AstirTypography.sheetTitle)
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("common-ground.invitation.heading")
@@ -84,7 +84,7 @@ struct CommonGroundInvitationMockup: View {
                 CommonGroundMessagesMockup(draft: draft, isReply: opensEnvelope)
             }
         }
-        .alert("Couldn’t Create This Invitation", isPresented: $shareFailed) {
+        .alert("Couldn’t create this invitation", isPresented: $shareFailed) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(shareFailureMessage)
@@ -135,7 +135,7 @@ struct CommonGroundInvitationMockup: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Make It Yours").font(AstirTypography.control)
+                    Text("Make it yours").font(AstirTypography.control)
                     Text("Optional").font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 }
                 TextField(draft.message, text: $draft.note, axis: .vertical)
@@ -145,7 +145,7 @@ struct CommonGroundInvitationMockup: View {
                     .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 14))
                     .contentShape(Rectangle())
                     .onTapGesture { noteFocused = true }
-                    .accessibilityLabel("Your Message, Optional")
+                    .accessibilityLabel("Your message, optional")
                     .accessibilityIdentifier("common-ground.invitation.message")
             }
             VStack(alignment: .leading, spacing: 4) {
@@ -157,7 +157,7 @@ struct CommonGroundInvitationMockup: View {
                         Image(systemName: "calendar").font(.title3).foregroundStyle(brand.accentText)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("When").font(AstirTypography.control)
-                            Text(draft.whenText ?? "Pick A Day & Time")
+                            Text(draft.whenText ?? "Pick a day & time")
                                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .accessibilityIdentifier("common-ground.invitation.when-selection")
@@ -170,7 +170,7 @@ struct CommonGroundInvitationMockup: View {
                     .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("When, \(draft.whenText ?? "Optional, Choose A Day And Time")")
+                .accessibilityLabel("When, \(draft.whenText ?? "optional, choose a day and time")")
                 .accessibilityIdentifier("common-ground.invitation.when")
 
             }
@@ -182,8 +182,8 @@ struct CommonGroundInvitationMockup: View {
             HStack(spacing: 12) {
                 CommonGroundPersonAvatar(person: draft.place.viewer, size: 42)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(draft.place.viewer.shortName)’s Got A Plan").font(AstirTypography.sheetTitle)
-                    Text("And A Pretty Good Reason For It")
+                    Text("\(draft.place.viewer.shortName)’s got a plan").font(AstirTypography.sheetTitle)
+                    Text("And a pretty good reason for it")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
             }
@@ -204,8 +204,8 @@ struct CommonGroundInvitationMockup: View {
                     VStack(spacing: 22) {
                         CGInvitationEnvelopeArtwork(symbol: draft.reasonSymbol, recipientName: draft.place.partner.shortName)
                             .aspectRatio(1.25, contentMode: .fit)
-                        Text("A Plan For Us").font(AstirTypography.screenTitle)
-                        Label("Take A Peek", systemImage: "envelope.open")
+                        Text("A plan for us").font(AstirTypography.screenTitle)
+                        Label("Take a peek", systemImage: "envelope.open")
                             .font(AstirTypography.control).foregroundStyle(brand.accentText)
                             .frame(minHeight: 44)
                     }
@@ -213,8 +213,8 @@ struct CommonGroundInvitationMockup: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain).padding(.vertical, 20)
-                .accessibilityLabel("Open \(draft.place.viewer.shortName)’s Invitation")
-                .accessibilityHint("Reveals The Place, The Reason, And The Proposed Time")
+                .accessibilityLabel("Open \(draft.place.viewer.shortName)’s invitation")
+                .accessibilityHint("Reveals the place, the reason, and the proposed time")
             }
         }
     }
@@ -224,7 +224,7 @@ struct CommonGroundInvitationMockup: View {
             Button {
                 noteFocused = false
                 guard !liveSharing || canShare(draft.place) else {
-                    shareFailureMessage = "This Place Or Friendship Is No Longer Available. Your Draft Is Still Here; Return To Plans And Refresh Before Sharing."
+                    shareFailureMessage = "This place or friendship is no longer available. Your draft is still here; return to Plans and refresh before sharing."
                     shareFailed = true
                     return
                 }
@@ -234,7 +234,7 @@ struct CommonGroundInvitationMockup: View {
                     showsMessages = true
                 }
             } label: {
-                Label(isPreparingShare ? "Creating Invitation…" : liveSharing ? "Share Invitation" : opensEnvelope ? "Reply In Messages" : "Preview In Messages", systemImage: liveSharing ? "square.and.arrow.up" : "message.fill")
+                Label(isPreparingShare ? "Creating invitation…" : liveSharing ? "Share invitation" : opensEnvelope ? "Reply in Messages" : "Preview in Messages", systemImage: liveSharing ? "square.and.arrow.up" : "message.fill")
                     .font(AstirTypography.control).frame(maxWidth: .infinity, minHeight: 52)
                     .foregroundStyle(brand.accentForeground)
                     .background(brand.accent, in: RoundedRectangle(cornerRadius: 16))
@@ -244,7 +244,7 @@ struct CommonGroundInvitationMockup: View {
             .accessibilityIdentifier("common-ground.invitation.messages")
             .disabled(isPreparingShare || (liveSharing && !draft.canCreateInvitation))
             if liveSharing && !draft.canCreateInvitation {
-                Text("This Place Needs To Finish Syncing Before You Can Share")
+                Text("This place needs to finish syncing before you can share")
                     .font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
             }
 
@@ -257,7 +257,7 @@ struct CommonGroundInvitationMockup: View {
     private func createInvitation() async {
         guard !isPreparingShare else { return }
         guard let prepareShare, canShare(draft.place) else {
-            shareFailureMessage = "This Invitation Is No Longer Available To Share. Your Draft Is Still Here; Return To Plans And Refresh."
+            shareFailureMessage = "This invitation is no longer available to share. Your draft is still here; return to Plans and refresh."
             shareFailed = true
             return
         }
@@ -267,7 +267,7 @@ struct CommonGroundInvitationMockup: View {
         do {
             let content = try await prepareShare(sharedDraft)
             guard canShare(sharedDraft.place), draft == sharedDraft else {
-                shareFailureMessage = "Your Draft Or Access Changed While Preparing The Invitation. Review The Details And Try Again."
+                shareFailureMessage = "Your draft or access changed while preparing the invitation. Review the details and try again."
                 shareFailed = true
                 return
             }
@@ -275,7 +275,7 @@ struct CommonGroundInvitationMockup: View {
             shareContent = content
             showsMessages = true
         } catch {
-            shareFailureMessage = "Your Draft Is Still Here. Please Try Again In A Moment."
+            shareFailureMessage = "Your draft is still here. Please try again in a moment."
             shareFailed = true
         }
     }
@@ -360,7 +360,7 @@ private struct CGInvitationEnvelopeArtwork: View {
                 }.stroke(brand.accentText.opacity(0.22), lineWidth: 1.2)
                 VStack(spacing: 3) {
                     Text("\(recipientName.uppercased()),").font(AstirTypography.metadata).tracking(2)
-                    Text("This One’s For Us").font(AstirTypography.sectionTitle)
+                    Text("This one’s for us").font(AstirTypography.sectionTitle)
                 }
                 .foregroundStyle(brand.primaryText)
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.2)
@@ -391,7 +391,7 @@ private struct CGInvitationDatePicker: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Text("Put A Little Something On The Calendar")
+                    Text("Put a little something on the calendar")
                         .font(AstirTypography.sheetTitle)
                     DatePicker("Day", selection: $date, displayedComponents: .date)
                         .datePickerStyle(.graphical)
@@ -399,15 +399,15 @@ private struct CGInvitationDatePicker: View {
                     DatePicker("Time", selection: $date, displayedComponents: .hourAndMinute)
                         .datePickerStyle(.compact).font(AstirTypography.control)
                         .frame(minHeight: 44)
-                    Text("Just A Proposal — Work Out The Details In Your Chat")
+                    Text("Just a proposal — work out the details in your chat")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }.padding(20)
             }
-            .navigationTitle("Pick A Time").navigationBarTitleDisplayMode(.inline)
+            .navigationTitle("Pick a time").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("No Date Yet") { confirm(nil); dismiss() }
+                    Button("No date yet") { confirm(nil); dismiss() }
                 }
             }
             .safeAreaInset(edge: .bottom) {
@@ -415,7 +415,7 @@ private struct CGInvitationDatePicker: View {
                     confirm(date)
                     dismiss()
                 } label: {
-                    Text("Use This Time").font(AstirTypography.control)
+                    Text("Use this time").font(AstirTypography.control)
                         .frame(maxWidth: .infinity, minHeight: 52)
                         .foregroundStyle(brand.accentForeground)
                         .background(brand.accent, in: RoundedRectangle(cornerRadius: 16))

@@ -63,7 +63,7 @@ final class FeedbackAudioRecorder: NSObject, ObservableObject {
         guard active, recordingRequestID == requestID else { return }
         guard allowed else {
             permissionDenied = true
-            errorMessage = "Microphone Access Is Off. You Can Enable It In Settings Or Type Your Feedback."
+            errorMessage = "Microphone access is off. You can enable it in Settings or type your feedback."
             return
         }
         permissionDenied = false
@@ -103,7 +103,7 @@ final class FeedbackAudioRecorder: NSObject, ObservableObject {
             }
         } catch {
             cancelRecording()
-            errorMessage = "The Recording Couldn’t Start. Please Try Again Or Type Your Feedback."
+            errorMessage = "The recording couldn’t start. Please try again or type your feedback."
         }
     }
 
@@ -118,7 +118,7 @@ final class FeedbackAudioRecorder: NSObject, ObservableObject {
         defer { removeTemporaryFile(); deactivateSession() }
         guard let url = recordingURL, let data = try? Data(contentsOf: url),
               !data.isEmpty, data.count <= FeedbackSubmission.maximumAttachmentBytes else {
-            errorMessage = "The Voice Note Couldn’t Be Saved. Please Record It Again."
+            errorMessage = "The voice note couldn’t be saved. Please record it again."
             return
         }
         elapsedSeconds = seconds
@@ -156,7 +156,7 @@ final class FeedbackAudioRecorder: NSObject, ObservableObject {
             }
         } catch {
             stopPlayback()
-            errorMessage = "The Voice Note Couldn’t Play. Please Try Again."
+            errorMessage = "The voice note couldn’t play. Please try again."
         }
     }
 

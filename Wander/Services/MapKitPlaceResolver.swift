@@ -14,15 +14,15 @@ extension PlaceResolutionError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .locationDenied:
-            "Location Is Off For \(AppBrand.displayName). Turn It On Or Add The Place Manually."
+            "Location is off for \(AppBrand.displayName). Turn it on or add the place manually."
         case .locationUnavailable:
-            "Couldn’t Get Your Location. Tap To Retry"
+            "Couldn’t get your location. Tap to retry"
         case .noCandidates:
-            "No Matching Places Found. Try A More Specific Name Or Nearby Area."
+            "No matching places found. Try a more specific name or nearby area."
         case .shortLinkNeedsExtraction:
-            "Short Map Links Need Extraction. Save This As A Draft For Now Or Add It Manually."
+            "Short map links need extraction. Save this as a draft for now or add it manually."
         case .unsupportedLink:
-            "This Link Does Not Show Enough Place Info Yet. Save It As A Draft Or Add It Manually."
+            "This link does not show enough place info yet. Save it as a draft or add it manually."
         }
     }
 }

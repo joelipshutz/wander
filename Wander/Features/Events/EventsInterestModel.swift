@@ -80,7 +80,7 @@ enum EventsInterestPresentation: Equatable {
     func register(repository: (any EventsInterestRepository)?, analytics: AnalyticsClient = NoopAnalyticsClient()) async {
         guard let userID, !isRegistered, !isSaving else { return }
         guard let repository else {
-            errorMessage = "Couldn't Save That Yet. Please Try Again."
+            errorMessage = "Couldn't save that yet. Please try again."
             return
         }
         analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.eventsInterestSubmitted, properties: [:]))
@@ -103,7 +103,7 @@ enum EventsInterestPresentation: Equatable {
             guard request == generation else { return }
             analytics.track(AnalyticsEvent(name: WanderAnalyticsEvents.eventsInterestResult,
                                           properties: ["outcome": "failed"]))
-            errorMessage = "Couldn't Save That Yet. Please Try Again."
+            errorMessage = "Couldn't save that yet. Please try again."
         }
     }
 }

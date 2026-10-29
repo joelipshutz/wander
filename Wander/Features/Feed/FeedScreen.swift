@@ -300,7 +300,7 @@ struct FeedScreen: View {
                     }
                 }
             }
-            .alert("Map Updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
+            .alert("Map updated", isPresented: Binding(get: { savedMessage != nil }, set: { if !$0 { savedMessage = nil } })) {
                 Button("OK", role: .cancel) { savedMessage = nil }
             } message: {
                 Text(savedMessage ?? "")
@@ -393,7 +393,7 @@ struct FeedScreen: View {
             }
             HStack(spacing: WanderTheme.spacing2) {
                 FeedSearchLauncher(
-                    placeholders: ["Search Places And People"],
+                    placeholders: ["Search places and people"],
                     isWalkthroughTarget: walkthroughs.currentStep?.target == .feedDiscoverSearch,
                     action: openDiscoverSearch
                 )
@@ -403,7 +403,7 @@ struct FeedScreen: View {
 
                 AstirIconActionButton(
                     systemImage: "plus",
-                    accessibilityLabel: "Add A Place",
+                    accessibilityLabel: "Add a place",
                     accessibilityIdentifier: "feed.headerAdd",
                     isAddAction: true,
                     action: onAdd
@@ -479,7 +479,7 @@ struct FeedScreen: View {
                     }
                 }
                 .accessibilityIdentifier("feed.places.scroll")
-                .accessibilityValue("\(displayedActivityGroups.count) Activities Loaded")
+                .accessibilityValue("\(displayedActivityGroups.count) activities loaded")
                 .onPreferenceChange(FeedPagingMetricsKey.self) { metrics in
                     defer { previousPagingMetrics = metrics }
                     if let metrics,
@@ -731,13 +731,13 @@ struct FeedScreen: View {
             FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
             ForEach(store.visibleLiveFeedSections) { section in
                 if section.stage == .older {
-                    expansionDivider(title: "Showing Older Activity", identifier: "feed.olderActivity")
+                    expansionDivider(title: "Showing older activity", identifier: "feed.olderActivity")
                 } else if section.stage == .allActivity {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                        Text("These Posts Are Outside Your Selected Location, People, Categories And Activity Filters.")
+                        Text("These posts are outside your selected location, people, categories and activity filters.")
                             .font(AstirTypography.caption)
                             .foregroundStyle(astirBrandMode.secondaryText)
-                        expansionDivider(title: "Showing All Activity", identifier: "feed.allActivity")
+                        expansionDivider(title: "Showing all activity", identifier: "feed.allActivity")
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -749,16 +749,16 @@ struct FeedScreen: View {
             }
             if !store.hasMoreFeed, store.liveFeedExpansionStage != .allActivity,
                store.feedLoadState == .loaded {
-                expansionDivider(title: "Showing All Activity", identifier: "feed.allActivity")
+                expansionDivider(title: "Showing all activity", identifier: "feed.allActivity")
             }
             paginationControls
             if store.feedLoadState == .stale {
-                FeedRetryRow(title: "Updated Earlier", subtitle: "We’ll Keep This Cached Feed Until It Reconnects.",
+                FeedRetryRow(title: "Updated earlier", subtitle: "We’ll keep this cached Feed until it reconnects.",
                              actionTitle: "Retry", retry: refresh)
             }
         } else if let page, !page.activity.isEmpty {
             if FeedPresentation.showsFeaturedPlaces, !page.featuredPlaces.isEmpty {
-                FeedSectionHeading(title: "Featured For You")
+                FeedSectionHeading(title: "Featured for you")
                 FeedFeaturedRail(
                     places: page.featuredPlaces,
                     openProfile: openProfile,
@@ -787,8 +787,8 @@ struct FeedScreen: View {
 
             if store.feedLoadState == .stale {
                 FeedRetryRow(
-                    title: "Updated Earlier",
-                    subtitle: "We’ll Keep This Cached Feed Until It Reconnects.",
+                    title: "Updated earlier",
+                    subtitle: "We’ll keep this cached Feed until it reconnects.",
                     actionTitle: "Retry",
                     retry: refresh
                 )
@@ -822,7 +822,7 @@ struct FeedScreen: View {
         if store.isLoadingMoreFeed {
             HStack(spacing: WanderTheme.spacing2) {
                 ProgressView()
-                Text("Loading More Activities…").font(AstirTypography.body)
+                Text("Loading more activities…").font(AstirTypography.body)
             }
             .foregroundStyle(astirBrandMode.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 44)
@@ -830,8 +830,8 @@ struct FeedScreen: View {
             .accessibilityIdentifier("feed.loadingMore")
         } else if store.feedPaginationFailed {
             FeedRetryRow(
-                title: "More Activity Couldn't Load",
-                subtitle: "Your Loaded Activity Is Still Here.",
+                title: "More activity couldn't load",
+                subtitle: "Your loaded activity is still here.",
                 actionTitle: "Retry",
                 retry: { _ = await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
             ).accessibilityIdentifier("feed.loadMoreRetry")
@@ -859,7 +859,7 @@ struct FeedScreen: View {
     }
 
     private var filteredActivityEmptyState: some View {
-        Text("No Activity Matches Your Selected Filters.")
+        Text("No activity matches your selected filters.")
             .font(AstirTypography.body)
             .foregroundStyle(astirBrandMode.secondaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -902,9 +902,9 @@ struct FeedScreen: View {
                 }
             case .failed:
                 FeedRetryRow(
-                    title: "Suggestions Couldn't Load",
-                    subtitle: "Your Feed Can Still Load Below.",
-                    actionTitle: "Try Again",
+                    title: "Suggestions couldn't load",
+                    subtitle: "Your feed can still load below.",
+                    actionTitle: "Try again",
                     retry: {
                         await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
                     }
@@ -917,7 +917,7 @@ struct FeedScreen: View {
 
     private var freshnessDetail: String? {
         guard store.feedLoadState == .stale else { return nil }
-        return "Updated Earlier"
+        return "Updated earlier"
     }
 
     private var peopleRecommendations: [DiscoverPeopleRecommendation] {
@@ -1182,11 +1182,11 @@ struct FeedScreen: View {
 
     private func confirmationMessage(for status: PlaceStatus, syncState: SyncState) -> String {
         if syncState == .synced {
-            return status == .been ? "Check-In Complete." : "Added To Wanna."
+            return status == .been ? "Check-in complete." : "Added to Wanna."
         }
         return status == .been
-            ? "Check-In Is On This Phone. We'll Retry Sync."
-            : "Wanna Is On This Phone. We'll Retry Sync."
+            ? "Check-in is on this phone. We'll retry sync."
+            : "Wanna is on this phone. We'll retry sync."
     }
 
     private var selectedPlaceDestinationBinding: Binding<Bool> {
@@ -1363,7 +1363,7 @@ private struct FeedSearchLauncher: View {
     @State private var isPulsing = false
 
     private var placeholder: String {
-        guard !placeholders.isEmpty else { return "Search Places And People" }
+        guard !placeholders.isEmpty else { return "Search places and people" }
         return placeholders[placeholderIndex % placeholders.count]
     }
 
@@ -1389,7 +1389,7 @@ private struct FeedSearchLauncher: View {
             .astirOutlinedSurface(castsShadow: true, interactive: true)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Search Places And People")
+        .accessibilityLabel("Search places and people")
         .accessibilityIdentifier("feed.searchLauncher")
         .overlay {
             if isWalkthroughTarget {
@@ -1498,7 +1498,7 @@ private struct FeedFeaturedRail: View {
             for: .scrollContent
         )
         .padding(.horizontal, -FeedFeaturedLayout.screenEdgeBleed)
-        .accessibilityLabel("Featured Places From People You Follow")
+        .accessibilityLabel("Featured places from people you follow")
     }
 }
 
@@ -1573,7 +1573,7 @@ private struct FeedFeaturedCard: View {
     }
 
     private var featuredActivity: String {
-        featured.visiblePlace.userPlace.status == .been ? "Checked In" : "Added To Wanna"
+        featured.visiblePlace.userPlace.status == .been ? "Checked in" : "Added to Wanna"
     }
 }
 
@@ -1716,7 +1716,7 @@ private struct FeedActivityModule: View {
     }
 
     private var secondaryMetadataAccessibilityLabel: String? {
-        activity.list.map { "View List \($0.name)" }
+        activity.list.map { "View list \($0.name)" }
     }
 
     private var hasActivityDestination: Bool {
@@ -1725,12 +1725,12 @@ private struct FeedActivityModule: View {
 
     private var activityDestinationAccessibilityLabel: String {
         if let place = activity.place {
-            return "Open Activity At \(place.place.canonicalName)"
+            return "Open activity at \(place.place.canonicalName)"
         }
         if let list = activity.list {
-            return "Open List \(list.name)"
+            return "Open list \(list.name)"
         }
-        return "Activity Preview"
+        return "Activity preview"
     }
 
     private var metadataIcon: String {
@@ -1742,9 +1742,9 @@ private struct FeedActivityModule: View {
         ActivityEngagementContext(
             activityID: activity.id,
             actor: activity.actor,
-            placeName: "Map Activity",
+            placeName: "Map activity",
             placeServerID: nil,
-            placeDetail: "Place Details Unavailable",
+            placeDetail: "Place details unavailable",
             ticketKind: activity.resolvedTicketKind,
             occurredAt: activity.occurredAt,
             note: activity.note,
@@ -1780,7 +1780,7 @@ extension FeedActivity {
             subjectName = list.name
             subjectServerID = nil
             let count = list.cachedItemCount ?? 0
-            detail = count == 1 ? "1 Place" : "\(count) Places"
+            detail = count == 1 ? "1 place" : "\(count) places"
         } else {
             return nil
         }
@@ -1809,7 +1809,7 @@ extension FeedActivity {
     }
 
     fileprivate var postcardAttributionAction: String {
-        kind == .listCreated ? "Created A List" : resolvedTicketKind.defaultAttributionAction
+        kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
     }
 }
 
@@ -1953,7 +1953,7 @@ private struct FeedLoadingState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if FeedPresentation.showsFeaturedPlaces {
-                FeedSectionHeading(title: "Featured For You")
+                FeedSectionHeading(title: "Featured for you")
                 HStack(spacing: WanderTheme.spacing3) {
                     ForEach(0..<2, id: \.self) { _ in
                         RoundedRectangle(cornerRadius: WanderTheme.radiusLarge)
@@ -1987,7 +1987,7 @@ private struct FeedRefreshRecoveryState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             if FeedPresentation.showsFeaturedPlaces {
-                FeedSectionHeading(title: "Featured For You")
+                FeedSectionHeading(title: "Featured for you")
                 FeedRecoveryFeaturedRail()
             }
 
@@ -1995,14 +1995,14 @@ private struct FeedRefreshRecoveryState: View {
             FeedRecoveryActivityList()
 
             FeedRetryRow(
-                title: "Couldn’t Load Feed",
-                subtitle: "Try Again To Reload Updates From People You Follow.",
+                title: "Couldn’t load Feed",
+                subtitle: "Try again to reload updates from people you follow.",
                 actionTitle: "Retry",
                 retry: retry
             )
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Feed Couldn't Load. Retry To Reload Updates.")
+        .accessibilityLabel("Feed couldn't load. Retry to reload updates.")
     }
 }
 
@@ -2089,23 +2089,23 @@ private struct FeedEmptyState: View {
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                Text("Your Feed Fills Up From People You Follow.")
+                Text("Your Feed fills up from people you follow.")
                     .font(AstirTypography.sectionTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text("Find People Whose Place Memory You’d Actually Use, Then Come Back Here To Catch Up.")
+                Text("Find people whose place memory you’d actually use, then come back here to catch up.")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
 
             if recommendations.isEmpty {
-                Button("Find People", action: openSearch)
+                Button("Find people", action: openSearch)
                     .font(AstirTypography.control)
                     .foregroundStyle(brandMode.accentForeground)
                     .frame(minHeight: 44)
                     .padding(.horizontal, WanderTheme.spacing4)
                     .background(brandMode.accent)
                     .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-                    .accessibilityLabel("Find People To Follow")
+                    .accessibilityLabel("Find people to follow")
             } else {
                 ForEach(recommendations) { recommendation in
                     HStack(spacing: WanderTheme.spacing3) {

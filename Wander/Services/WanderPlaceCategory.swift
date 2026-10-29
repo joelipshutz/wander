@@ -117,7 +117,7 @@ struct PlaceCategoryDisplay: Equatable {
         if primaryCategory == WanderPlaceCategory.coffeeTeaSweets {
             switch WanderPlaceCategory.normalizedCategoryText(compactType) {
             case "cafe", "coffee", "coffeehouse":
-                return "Coffee Shop"
+                return "Coffee shop"
             default:
                 break
             }
@@ -153,15 +153,15 @@ struct RestaurantCuisineInference: Equatable {
     var reason: String {
         switch source {
         case .providerType:
-            "Suggested From The Place Type"
+            "Suggested from the place type"
         case .subcategory:
-            "Suggested From The Restaurant Type"
+            "Suggested from the restaurant type"
         case .category:
-            "Suggested From Category Details"
+            "Suggested from category details"
         case .placeName:
-            "Suggested From The Place Name"
+            "Suggested from the place name"
         case .website:
-            "Suggested From The Restaurant Website"
+            "Suggested from the restaurant website"
         }
     }
 }
@@ -1325,16 +1325,16 @@ enum WanderPlaceCategory {
         return PlaceCategoryDisplay(
             rawCategory: assignment.rawProviderType ?? assignment.legacyCategory,
             primaryCategory: primary,
-            category: AppCopy.capitalizingWords(broadCategory(for: primary)),
+            category: AppCopy.capitalizingInitial(broadCategory(for: primary)),
             subcategory: primary == fallbackPlace ? nil : subcategory.map(displayLabel),
-            sourceLabel: AppCopy.capitalizingWords(label)
+            sourceLabel: AppCopy.capitalizingInitial(label)
         )
     }
 
     /// Built-in taxonomy labels get display casing; custom category text stays verbatim.
     static func displayLabel(_ value: String) -> String {
         guard let known = builtInDisplayLabels[normalizedCategoryText(value)] else { return value }
-        return AppCopy.capitalizingWords(known)
+        return AppCopy.capitalizingInitial(known)
     }
 
     private static let builtInDisplayLabels: [String: String] = {

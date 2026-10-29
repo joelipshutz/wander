@@ -35,13 +35,13 @@ final class DiscoverParserTests: XCTestCase {
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let now = date("2026-07-12T12:00:00Z")
 
-        XCTAssertEqual(timestamp("2026-07-12T11:59:30Z", now: now, calendar: calendar), "Just Now")
-        XCTAssertEqual(timestamp("2026-07-12T11:58:00Z", now: now, calendar: calendar), "2m Ago")
-        XCTAssertEqual(timestamp("2026-07-12T10:00:00Z", now: now, calendar: calendar), "2h Ago")
-        XCTAssertEqual(timestamp("2026-07-09T12:00:00Z", now: now, calendar: calendar), "3d Ago")
+        XCTAssertEqual(timestamp("2026-07-12T11:59:30Z", now: now, calendar: calendar), "Just now")
+        XCTAssertEqual(timestamp("2026-07-12T11:58:00Z", now: now, calendar: calendar), "2m ago")
+        XCTAssertEqual(timestamp("2026-07-12T10:00:00Z", now: now, calendar: calendar), "2h ago")
+        XCTAssertEqual(timestamp("2026-07-09T12:00:00Z", now: now, calendar: calendar), "3d ago")
         XCTAssertEqual(timestamp("2026-01-02T12:00:00Z", now: now, calendar: calendar), "Jan 2")
         XCTAssertEqual(timestamp("2025-12-31T12:00:00Z", now: now, calendar: calendar), "Dec 31, 2025")
-        XCTAssertEqual(timestamp("2026-07-12T12:02:00Z", now: now, calendar: calendar), "Just Now")
+        XCTAssertEqual(timestamp("2026-07-12T12:02:00Z", now: now, calendar: calendar), "Just now")
         XCTAssertEqual(timestamp("2026-07-13T12:00:00Z", now: now, calendar: calendar), "Jul 13")
     }
 
@@ -79,7 +79,7 @@ final class DiscoverParserTests: XCTestCase {
         XCTAssertEqual(filters.schemaVersion, 2)
         XCTAssertEqual(filters.opinion, .favorite)
         XCTAssertEqual(filters.sort, .ownerRatingDescending)
-        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "Check-In", "LA", "joe", "Favorites"])
+        XCTAssertEqual(filters.chips.map(\.title), ["Coffee, Tea, & Sweets", "Check-in", "LA", "joe", "Favorites"])
     }
 
     func testDeterministicParserTreatsWorthCrossingTownForAsFavoriteCheckIns() async throws {

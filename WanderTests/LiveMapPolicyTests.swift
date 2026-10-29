@@ -88,23 +88,23 @@ final class LiveMapPolicyTests: XCTestCase {
         let actor = store.shell(for: store.currentUser)
         let listUpdate = FeedActivity(id: "list-update", kind: .listItemAdded,
                                       actor: actor, place: place, occurredAt: .now)
-        XCTAssertEqual(LiveActivityPresentation.title(for: listUpdate), "List Update",
+        XCTAssertEqual(LiveActivityPresentation.title(for: listUpdate), "List update",
                        "Adding an already-visited place to a list is not another check-in.")
         let checkIn = FeedActivity(id: "check-in", kind: .placeBeen,
                                    actor: actor, place: place, occurredAt: .now)
         let wanna = FeedActivity(id: "wanna", kind: .placeWannaGo,
                                 actor: actor, place: place, occurredAt: .now)
-        XCTAssertEqual(LiveActivityPresentation.title(for: checkIn), "Check-In")
+        XCTAssertEqual(LiveActivityPresentation.title(for: checkIn), "Check-in")
         XCTAssertEqual(LiveActivityPresentation.title(for: wanna), "Wanna")
     }
 
     func testLiveDrawerCountCopyUsesSingularOnlyForOneUpdate() {
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(0), "0 Place Updates")
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(1), "1 Place Update")
-        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(2), "2 Place Updates")
-        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(0), "0 Loaded Updates")
-        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(1), "1 Loaded Update")
-        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(2), "2 Loaded Updates")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(0), "0 place updates")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(1), "1 place update")
+        XCTAssertEqual(LiveActivityPresentation.shownUpdateCount(2), "2 place updates")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(0), "0 loaded updates")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(1), "1 loaded update")
+        XCTAssertEqual(LiveActivityPresentation.loadedUpdateCount(2), "2 loaded updates")
     }
 
     private func point(_ lat: Double, _ lon: Double) -> CLLocationCoordinate2D {

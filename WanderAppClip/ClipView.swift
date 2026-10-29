@@ -28,7 +28,7 @@ struct ClipView: View {
                             .font(ClipStyle.body(15)).frame(minHeight: 44)
                     }
                     if store.isLoading, store.preview == nil {
-                        ProgressView("Opening Your Shared Link…").frame(maxWidth: .infinity, minHeight: 220)
+                        ProgressView("Opening your shared link…").frame(maxWidth: .infinity, minHeight: 220)
                     }
                     if let preview = store.preview {
                         if let image = preview.imageURL {
@@ -36,7 +36,7 @@ struct ClipView: View {
                                 if let image = phase.image { image.resizable().scaledToFit() }
                                 else if phase.error == nil { ProgressView().frame(maxWidth: .infinity, minHeight: 160) }
                             }.clipShape(RoundedRectangle(cornerRadius: 20))
-                                .accessibilityLabel("Shared Preview")
+                                .accessibilityLabel("Shared preview")
                         }
                         VStack(alignment: .leading, spacing: 10) {
                             Text(preview.title).font(.system(.largeTitle, design: .serif, weight: .semibold))
@@ -44,18 +44,18 @@ struct ClipView: View {
                             if let subtitle = preview.subtitle { Text(subtitle).foregroundStyle(.secondary) }
                         }
                         if preview.needsSignIn {
-                            Button("Sign In To View") { store.perform(.viewProtected) }.buttonStyle(ClipPrimaryButton())
+                            Button("Sign in to view") { store.perform(.viewProtected) }.buttonStyle(ClipPrimaryButton())
                         }
                         if store.route?.kind == .invite, !store.joined {
-                            Text("Join This List To Add Places Together.")
-                            Button("Join List") { store.perform(.join) }.buttonStyle(ClipPrimaryButton())
+                            Text("Join this list to add places together.")
+                            Button("Join list") { store.perform(.join) }.buttonStyle(ClipPrimaryButton())
                                 .accessibilityIdentifier("clip.join")
                         }
                         ForEach(preview.places) { place in
                             placeView(place, showTitle: preview.places.count > 1 || store.route?.kind == .list || store.route?.kind == .profile)
                         }
                         if !preview.needsSignIn, preview.places.isEmpty, store.route?.kind == .list {
-                            Text("No Places In This List Yet.").foregroundStyle(.secondary)
+                            Text("No places in this list yet.").foregroundStyle(.secondary)
                         }
                     }
                     if let success = store.success {
@@ -66,17 +66,17 @@ struct ClipView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(error).accessibilityIdentifier("clip.error")
                             if store.preview == nil, store.route != nil {
-                                Button("Try Again") { store.reload() }.frame(minHeight: 44)
+                                Button("Try again") { store.reload() }.frame(minHeight: 44)
                             }
                         }
                     }
                     if store.route == nil, store.error == nil {
-                        ContentUnavailableView("Open A Shared Astir Link", systemImage: "link",
-                            description: Text("See A Place, Save It To Your Map, Or Join A Friend's List."))
+                        ContentUnavailableView("Open a shared Astir link", systemImage: "link",
+                            description: Text("See a place, save it to your map, or join a friend's list."))
                     }
-                    if store.isWorking { ProgressView("One Moment…").frame(maxWidth: .infinity) }
+                    if store.isWorking { ProgressView("One moment…").frame(maxWidth: .infinity) }
                     if store.signedIn {
-                        Button("Sign Out", action: store.signOut).frame(minHeight: 44)
+                        Button("Sign out", action: store.signOut).frame(minHeight: 44)
                             .disabled(store.isWorking)
                     }
                 }.padding(24)
@@ -104,9 +104,9 @@ struct ClipView: View {
                 Marker(place.title, coordinate: CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude))
                     .tint(ClipStyle.coral)
             }.frame(height: 210).clipShape(RoundedRectangle(cornerRadius: 18))
-                .accessibilityLabel("Map Of \(place.title)")
+                .accessibilityLabel("Map of \(place.title)")
             if let address = place.address { Text(address).foregroundStyle(.secondary) }
-            Button(store.savedIDs.contains(place.id) ? "Saved To Your Map" : "Save To Wanna") { store.perform(.save(place)) }
+            Button(store.savedIDs.contains(place.id) ? "Saved to your map" : "Save to Wanna") { store.perform(.save(place)) }
                 .buttonStyle(ClipPrimaryButton())
                 .disabled(store.isWorking || store.savedIDs.contains(place.id))
                 .accessibilityIdentifier("clip.save")
@@ -116,7 +116,7 @@ struct ClipView: View {
                 item.openInMaps(launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking])
             } label: { Label("Directions", systemImage: "arrow.triangle.turn.up.right.diamond")
                     .frame(maxWidth: .infinity, minHeight: 48) }
-            Text("Existing Saves Keep Their Notes And Visibility.").font(ClipStyle.body(14)).foregroundStyle(.secondary)
+            Text("Existing saves keep their notes and visibility.").font(ClipStyle.body(14)).foregroundStyle(.secondary)
         }
     }
 
@@ -124,7 +124,7 @@ struct ClipView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("Choose The Name And Username People Will See On Astir.")
+                    Text("Choose the name and username people will see on Astir.")
                     TextField("Name", text: $store.name).textContentType(.name)
                     TextField("Username", text: $store.handle).textContentType(.username)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -133,7 +133,7 @@ struct ClipView: View {
                 Button("Continue") { store.finishProfile() }
                     .disabled(store.isWorking || store.name.trimmingCharacters(in: .whitespaces).isEmpty || store.handle.count < 2)
                 if store.isWorking { ProgressView() }
-            }.navigationTitle("Your Astir Profile")
+            }.navigationTitle("Your Astir profile")
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: store.cancelAuth).disabled(store.isWorking) } }
                 .interactiveDismissDisabled()
         }.font(ClipStyle.body())
@@ -163,45 +163,45 @@ private struct ClipAuthView: View {
         NavigationStack {
             Form {
                 if store.emailSent {
-                    Section("Enter The Code From Your Email") {
-                        TextField("Verification Code", text: $code).textContentType(.oneTimeCode).keyboardType(.numberPad)
-                        Button("Verify Email") { store.verifyEmail(code) }.disabled(store.isWorking || code.isEmpty)
+                    Section("Enter the code from your email") {
+                        TextField("Verification code", text: $code).textContentType(.oneTimeCode).keyboardType(.numberPad)
+                        Button("Verify email") { store.verifyEmail(code) }.disabled(store.isWorking || code.isEmpty)
                     }
                 } else {
                     Section {
                         Picker("Account", selection: $mode) {
-                            Text("Sign In").tag(NativeAuthMode.signIn)
-                            Text("Create Account").tag(NativeAuthMode.signUp)
+                            Text("Sign in").tag(NativeAuthMode.signIn)
+                            Text("Create account").tag(NativeAuthMode.signUp)
                         }.pickerStyle(.segmented).disabled(store.isWorking)
-                        Text("Use Your Original Sign-In Method To Keep Your Places And Lists Together.")
+                        Text("Use your original sign-in method to keep your places and lists together.")
                         if mode == .signUp {
                             Toggle(isOn: $acceptsTerms) {
-                                Text("I Agree To The [Terms](https://astirmovement.com/terms) And [Privacy Policy](https://astirmovement.com/privacy).")
+                                Text("I agree to the [Terms](https://astirmovement.com/terms) and [Privacy Policy](https://astirmovement.com/privacy).")
                             }
                         }
                         ClipAppleIDButton(isEnabled: canStart) { store.authenticate(.apple, mode: mode) }
                             .frame(height: 48)
-                        Button("Continue With Google") { store.authenticate(.google, mode: mode) }
+                        Button("Continue with Google") { store.authenticate(.google, mode: mode) }
                             .frame(minHeight: 44).disabled(!canStart)
                     }
-                    Section("Or Use Email") {
+                    Section("Or use email") {
                         TextField("Email", text: $email).textContentType(.emailAddress).keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                         if usePassword, mode == .signIn {
                             SecureField("Password", text: $password).textContentType(.password)
-                            Button("Sign In") { store.signIn(email: email, password: password) }
+                            Button("Sign in") { store.signIn(email: email, password: password) }
                                 .disabled(!canStart || email.isEmpty || password.isEmpty)
                         } else {
-                            Button("Send Code") { store.sendEmail(email, mode: mode) }.disabled(!canStart || email.isEmpty)
+                            Button("Send code") { store.sendEmail(email, mode: mode) }.disabled(!canStart || email.isEmpty)
                         }
                         if mode == .signIn {
-                            Toggle("Use Password", isOn: $usePassword).disabled(store.isWorking)
+                            Toggle("Use password", isOn: $usePassword).disabled(store.isWorking)
                         }
                     }
                 }
                 if let error = store.error { Text(error).accessibilityIdentifier("clip.auth.error") }
-                if store.isWorking { ProgressView("Signing In…") }
-            }.navigationTitle(mode == .signIn ? "Sign In To Astir" : "Create Your Account")
+                if store.isWorking { ProgressView("Signing in…") }
+            }.navigationTitle(mode == .signIn ? "Sign in to Astir" : "Create your account")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: store.cancelAuth).disabled(store.isWorking) } }
                 .interactiveDismissDisabled()

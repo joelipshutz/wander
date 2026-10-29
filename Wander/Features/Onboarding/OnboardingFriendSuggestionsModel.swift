@@ -122,7 +122,7 @@ final class OnboardingFriendSuggestionsModel: ObservableObject {
             completedFollowCount += 1
             return true
         } catch {
-            followErrors[profile.id] = "Couldn’t Follow. Tap To Retry."
+            followErrors[profile.id] = "Couldn’t follow. Tap to retry."
             return false
         }
     }

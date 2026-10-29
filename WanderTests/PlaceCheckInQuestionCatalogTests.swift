@@ -291,7 +291,7 @@ final class PlaceCheckInQuestionCatalogTests: XCTestCase {
             XCTAssertFalse(availableIDs.contains(question.id), id)
         }
         let reformer = try XCTUnwrap(PlaceCheckInQuestionCatalog.question(id: "place_detail_pilates_reformer"))
-        XCTAssertEqual(reformer.prompt, "Was It A Reformer Class?")
+        XCTAssertEqual(reformer.prompt, "Was it a reformer class?")
         XCTAssertEqual(reformer.options, ["Yes", "No"])
         XCTAssertEqual(reformer.searchTerms(for: "No"), [])
         XCTAssertEqual(reformer.searchTerms(for: "Reformer"), [], "Historical apparatus answers cannot become class answers")

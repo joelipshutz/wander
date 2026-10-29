@@ -15,10 +15,10 @@ struct ShareCardContent: Equatable {
     var firstName: String { ownerName.split(separator: " ").first.map(String.init) ?? ownerName }
     var headline: String {
         switch kind {
-        case .profile: "Discover \(firstName)’s World"
-        case .checkIn: "\(firstName) Checked In"
-        case .wanna: "\(firstName) Wants To Go"
-        case .invitation: "Build This List With \(firstName)"
+        case .profile: "Discover \(firstName)’s world"
+        case .checkIn: "\(firstName) checked in"
+        case .wanna: "\(firstName) wants to go"
+        case .invitation: "Build this list with \(firstName)"
         default: name
         }
     }
@@ -26,9 +26,9 @@ struct ShareCardContent: Equatable {
         switch kind {
         case .profile, .invitation: nil
         case .checkIn: [name, dateLabel].compactMap { $0 }.joined(separator: " · ")
-        case .wanna: "\(name) · \(dateLabel ?? "On \(firstName)’s Radar")"
-        case .list: "\(countLabel) · Curated By \(firstName)"
-        case .map: "\(firstName)’s Saved Map · \(countLabel)"
+        case .wanna: "\(name) · \(dateLabel ?? "On \(firstName)’s radar")"
+        case .list: "\(countLabel) · Curated by \(firstName)"
+        case .map: "\(firstName)’s saved map · \(countLabel)"
         case .place: detail.isEmpty ? nil : detail
         }
     }
@@ -50,22 +50,22 @@ struct ShareCardContent: Equatable {
     }
     var socialTitle: String {
         switch kind {
-        case .checkIn: "\(firstName) Was Here."
-        case .wanna: dateLabel ?? "On \(firstName)’s Radar."
+        case .checkIn: "\(firstName) was here."
+        case .wanna: dateLabel ?? "On \(firstName)’s radar."
         default: headline
         }
     }
     var socialSubtitle: String? {
         switch kind {
-        case .checkIn: "A Check-In At \(name)\(dateLabel.map { " · \($0)" } ?? "")"
-        case .wanna: "Wanna Go To \(name)?"
+        case .checkIn: "A check-in at \(name)\(dateLabel.map { " · \($0)" } ?? "")"
+        case .wanna: "Wanna go to \(name)?"
         default: subtitle
         }
     }
     var dateLabel: String? {
         date.map { $0.formatted(.dateTime.month(.wide).day().year()) }
     }
-    var countLabel: String { "\(count) \(count == 1 ? "Place" : "Places")" }
+    var countLabel: String { "\(count) \(count == 1 ? "place" : "places")" }
     var isCollage: Bool { kind == .list || kind == .invitation }
     var label: String {
         switch kind {
@@ -171,7 +171,7 @@ struct ShareCardArtwork: View {
                 if format != .link {
                     Text(content.name).font(.system(size: 22, weight: .medium, design: .serif))
                 }
-                Text("The First Place Is Still To Come.").font(.custom("AvenirNext-Medium", size: 13))
+                Text("The first place is still to come.").font(.custom("AvenirNext-Medium", size: 13))
             }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity).background(brand.recessedBackground)
         } else if content.isCollage && content.count >= 2 {
             HStack(spacing: 3) {

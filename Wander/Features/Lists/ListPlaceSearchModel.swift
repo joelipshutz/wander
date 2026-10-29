@@ -35,7 +35,7 @@ final class ListPlaceSearchModel: ObservableObject {
         } catch {
             guard !Task.isCancelled, request == generation else { return }
             if error as? PlaceResolutionError != .noCandidates {
-                errorMessage = "Couldn’t Find Places. Check Your Connection And Try Again."
+                errorMessage = "Couldn’t find places. Check your connection and try again."
             }
         }
     }

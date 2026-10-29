@@ -38,9 +38,9 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
         for (title, subtitle) in [
-            ("Your Rating", "No Rating Yet"),
-            ("Friends Rating", "No Visible Ratings Yet"),
-            ("Astir Rating", "No Ratings Yet")
+            ("Your rating", "No rating yet"),
+            ("Friends rating", "No visible ratings yet"),
+            ("Astir rating", "No ratings yet")
         ] {
             let metric = app.descendants(matching: .any).matching(
                 NSPredicate(format: "label == %@", title + ", —/5, " + subtitle)
@@ -63,9 +63,9 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(app.buttons["place-profile.back"].waitForExistence(timeout: 15))
         XCTAssertTrue(app.staticTexts["Ratings"].waitForExistence(timeout: 8))
         for (title, subtitle) in [
-            ("Your Rating", "No Rating Yet"),
-            ("Friends Rating", "No Visible Ratings Yet"),
-            ("Astir Rating", "No Ratings Yet")
+            ("Your rating", "No rating yet"),
+            ("Friends rating", "No visible ratings yet"),
+            ("Astir rating", "No ratings yet")
         ] {
             let label = app.staticTexts[title].firstMatch
             let detail = app.staticTexts[subtitle].firstMatch
@@ -83,9 +83,9 @@ final class MapPlaceCardUITests: XCTestCase {
         explanationButton.tap()
         let explanation = app.scrollViews["ratings.explanation.scroll"]
         XCTAssertTrue(explanation.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Your Rating Averages Your Rated Check-Ins Here."].isHittable)
+        XCTAssertTrue(app.staticTexts["Your rating averages your rated check-ins here."].isHittable)
         capture("REC590 accessibility rating explanation start")
-        let finalParagraph = app.staticTexts["A Dash Means There Are No Ratings Yet."]
+        let finalParagraph = app.staticTexts["A dash means there are no ratings yet."]
         for _ in 0..<6 where !finalParagraph.isHittable { explanation.swipeUp() }
         XCTAssertTrue(finalParagraph.isHittable, "Cannot reach the end of the ratings explanation")
         capture("REC590 accessibility rating explanation end")
@@ -105,7 +105,7 @@ final class MapPlaceCardUITests: XCTestCase {
             app.launch()
             let card = app.buttons["map.selectedPlaceCard"]
             XCTAssertTrue(card.waitForExistence(timeout: 15))
-            XCTAssertTrue(card.label.contains(rated ? "Rated 3.5 Out Of 5" : "Featured, 5 Out Of 5, Not Yet Rated"))
+            XCTAssertTrue(card.label.contains(rated ? "Rated 3.5 out of 5" : "Featured, 5 out of 5, not yet rated"))
             XCTAssertFalse(app.descendants(matching: .any)["map.selectedPlaceRatingProvider"].exists)
             capture(rated ? "REC579 Featured actual rating" : "REC579 Featured temporary five")
             app.terminate()
@@ -402,7 +402,7 @@ final class MapPlaceCardUITests: XCTestCase {
             }, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
             openPhoto.tap()
-            let close = app.buttons["Close Photo Viewer"]
+            let close = app.buttons["Close photo viewer"]
             guard close.waitForExistence(timeout: 5) else {
                 XCTFail("Tapping the visible header photo must open the fullscreen viewer.")
                 return
@@ -468,7 +468,7 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 3))
         capture("REC-386 member photo visible in gallery")
         memberPhoto.tap()
-        let closeViewer = app.buttons["Close Photo Viewer"]
+        let closeViewer = app.buttons["Close photo viewer"]
         XCTAssertTrue(closeViewer.waitForExistence(timeout: 5))
         XCTAssertTrue(closeViewer.isHittable)
         closeViewer.tap()
@@ -507,16 +507,16 @@ final class MapPlaceCardUITests: XCTestCase {
         scrollDown(in: profileScroll, until: disposableNote)
         XCTAssertTrue(disposableNote.exists)
 
-        let editButton = app.buttons["Edit Check-In"].firstMatch
+        let editButton = app.buttons["Edit check-in"].firstMatch
         XCTAssertTrue(editButton.waitForExistence(timeout: 3))
         editButton.tap()
 
-        let deleteButton = app.buttons["Delete Check-In"]
+        let deleteButton = app.buttons["Delete check-in"]
         XCTAssertTrue(deleteButton.waitForExistence(timeout: 4))
         deleteButton.tap()
-        let confirmation = app.alerts["Delete Check-In?"]
+        let confirmation = app.alerts["Delete check-in?"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 3))
-        confirmation.buttons["Delete Check-In"].tap()
+        confirmation.buttons["Delete check-in"].tap()
 
         XCTAssertFalse(disposableNote.waitForExistence(timeout: 3))
         let collapsedCard = app.buttons["map.selectedPlaceCard"]
@@ -631,7 +631,7 @@ final class MapPlaceCardUITests: XCTestCase {
         shareButton.tap()
         let sharePreview = app.segmentedControls["share.format"]
         XCTAssertTrue(sharePreview.waitForExistence(timeout: 5))
-        app.buttons["Close Share Preview"].tap()
+        app.buttons["Close share preview"].tap()
         XCTAssertFalse(sharePreview.waitForExistence(timeout: 3))
 
         card.press(forDuration: 0.8)

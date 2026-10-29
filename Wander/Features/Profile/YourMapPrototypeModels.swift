@@ -38,9 +38,9 @@ enum YourMapPrototypeTimeRange: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: "All Time"
-        case .thisYear: "This Year"
-        case .thisMonth: "This Month"
+        case .all: "All time"
+        case .thisYear: "This year"
+        case .thisMonth: "This month"
         }
     }
 
@@ -160,9 +160,9 @@ struct YourMapPrototypeSavedLens: Identifiable, Equatable {
         .compactMap { $0 }
 
         title = primaryTokens.prefix(2).isEmpty
-            ? "Saved Lens \(ordinal)"
+            ? "Saved lens \(ordinal)"
             : primaryTokens.prefix(2).joined(separator: " · ")
-        detail = "\(lens.activeOptionCount) Selected \(lens.activeOptionCount == 1 ? "Option" : "Options")"
+        detail = "\(lens.activeOptionCount) selected \(lens.activeOptionCount == 1 ? "option" : "options")"
     }
 }
 
@@ -400,9 +400,9 @@ struct YourMapPrototypeDataset {
                 matchingVisits.flatMap(\.tags)
                     + saved.saves.flatMap(\.historicalWantTags)
             )
-            let city = normalized(place.locality, fallback: "Unknown City")
+            let city = normalized(place.locality, fallback: "Unknown city")
             let country = CountryCanonicalizer.canonicalName(place.country)
-                ?? normalized(place.country, fallback: "Unknown Country")
+                ?? normalized(place.country, fallback: "Unknown country")
             let status: YourMapPrototypeStatus = userPlace.status == .been ? .been : .wanna
             let lastVisitedAt = matchingVisits.map(\.visitedAt).max()
                 ?? userPlace.visitedAt
@@ -414,7 +414,7 @@ struct YourMapPrototypeDataset {
                 latitude: place.latitude,
                 longitude: place.longitude,
                 status: status,
-                category: AppCopy.capitalizingWords(WanderPlaceCategory.broadCategory(for: saved.category)),
+                category: AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: saved.category)),
                 city: city,
                 country: country,
                 tags: tags,

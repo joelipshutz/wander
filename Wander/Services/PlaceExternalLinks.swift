@@ -334,13 +334,13 @@ enum PlaceExternalLinks {
         case (.menu, .exact):
             return PlaceExternalAction(kind: .menu, title: actionTitle(link.title, fallback: "Menu"), systemImage: "menucard.fill", url: url)
         case (.deliverySearch, _), (.order, .search):
-            return PlaceExternalAction(kind: .deliverySearch, title: "Find Delivery", systemImage: "magnifyingglass", url: url)
+            return PlaceExternalAction(kind: .deliverySearch, title: "Find delivery", systemImage: "magnifyingglass", url: url)
         case (.reservationSearch, _), (.reserve, .search):
-            return PlaceExternalAction(kind: .reservationSearch, title: "Find Reservations", systemImage: "magnifyingglass", url: url)
+            return PlaceExternalAction(kind: .reservationSearch, title: "Find reservations", systemImage: "magnifyingglass", url: url)
         case (.website, _):
             return PlaceExternalAction(kind: .website, title: actionTitle(link.title, fallback: "Website"), systemImage: "globe", url: url)
         case (.menu, .search):
-            return PlaceExternalAction(kind: .deliverySearch, title: "Find Menu", systemImage: "magnifyingglass", url: url)
+            return PlaceExternalAction(kind: .deliverySearch, title: "Find menu", systemImage: "magnifyingglass", url: url)
         }
     }
 

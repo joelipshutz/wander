@@ -43,7 +43,7 @@ struct FeedbackSheet: View {
                     } label: {
                         Image(systemName: "xmark").font(.body.weight(.semibold)).frame(width: 44, height: 44)
                     }
-                    .accessibilityLabel("Close Feedback")
+                    .accessibilityLabel("Close feedback")
                     .disabled(composer.isSubmitting)
                 }
             }
@@ -52,10 +52,10 @@ struct FeedbackSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(composer.hasContent || audio.isRecording || composer.isSubmitting || isLoadingPhotos)
-        .alert("Discard Your Feedback?", isPresented: $showsDiscardConfirmation) {
-            Button("Discard Feedback", role: .destructive) { dismiss() }
-            Button("Keep Editing", role: .cancel) {}
-        } message: { Text("Your Unsent Text And Attachments Will Be Removed From This Device.") }
+        .alert("Discard your feedback?", isPresented: $showsDiscardConfirmation) {
+            Button("Discard feedback", role: .destructive) { dismiss() }
+            Button("Keep editing", role: .cancel) {}
+        } message: { Text("Your unsent text and attachments will be removed from this device.") }
         .onChange(of: audio.attachment, initial: true) { _, value in composer.voice = value }
         .onChange(of: inputMode) { _, _ in
             textFocused = false
@@ -80,9 +80,9 @@ struct FeedbackSheet: View {
                     Image(systemName: "ladybug.fill")
                         .font(.system(size: 30)).foregroundStyle(brandMode.accentText)
                         .accessibilityHidden(true)
-                    Text("Drop Us A Line")
+                    Text("Drop us a line")
                         .font(AstirTypography.screenTitle).foregroundStyle(brandMode.primaryText)
-                    Text("(Feature Request, Bug, Or Tell Us You Love Us)")
+                    Text("(feature request, bug, or tell us you love us)")
                         .font(AstirTypography.body).foregroundStyle(brandMode.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -90,10 +90,10 @@ struct FeedbackSheet: View {
                 if inputMode == .voice { voicePanel }
                 else { textPanel }
                 if inputMode == .text, audio.attachment != nil {
-                    Label("Your Voice Note Will Be Included.", systemImage: "checkmark.circle.fill")
+                    Label("Your voice note will be included.", systemImage: "checkmark.circle.fill")
                         .font(.footnote).foregroundStyle(brandMode.secondaryText)
                 } else if inputMode == .voice, hasTextDraft {
-                    Label("Your Text Will Be Included.", systemImage: "checkmark.circle.fill")
+                    Label("Your text will be included.", systemImage: "checkmark.circle.fill")
                         .font(.footnote).foregroundStyle(brandMode.secondaryText)
                 }
                 if let error = composer.errorMessage ?? audio.errorMessage {
@@ -109,7 +109,7 @@ struct FeedbackSheet: View {
                         }
                     }
                 }
-                Text("Only The Astir Team Sees Your Feedback And Attachments.")
+                Text("Only the Astir team sees your feedback and attachments.")
                     .font(.footnote).foregroundStyle(brandMode.secondaryText)
             }
             .padding(24)
@@ -123,7 +123,7 @@ struct FeedbackSheet: View {
             } label: {
                 HStack(spacing: 10) {
                     if composer.isSubmitting { ProgressView().tint(.white) }
-                    Text(composer.isSubmitting ? "Submitting…" : composer.pendingSubmission == nil ? "Submit" : "Try Again")
+                    Text(composer.isSubmitting ? "Submitting…" : composer.pendingSubmission == nil ? "Submit" : "Try again")
                         .font(AstirTypography.body.weight(.semibold))
                 }
                 .frame(maxWidth: .infinity).frame(minHeight: 54)
@@ -182,7 +182,7 @@ struct FeedbackSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 ZStack(alignment: .topLeading) {
                     if composer.text.isEmpty {
-                        Text("Type Your Feedback…")
+                        Text("Type your feedback…")
                             .foregroundStyle(brandMode.secondaryText)
                             .padding(.horizontal, 16).padding(.vertical, 20)
                             .allowsHitTesting(false)
@@ -193,10 +193,10 @@ struct FeedbackSheet: View {
                         .frame(minHeight: 180)
                         .focused($textFocused)
                         .disabled(!composer.canEdit)
-                        .accessibilityLabel("Type Your Feedback")
+                        .accessibilityLabel("Type your feedback")
                         .accessibilityIdentifier("feedback.text")
                 }
-                if isLoadingPhotos { ProgressView("Adding Photos…").padding(.horizontal, 16) }
+                if isLoadingPhotos { ProgressView("Adding photos…").padding(.horizontal, 16) }
                 if !composer.photos.isEmpty { photos.padding(.horizontal, 16) }
                 photoButton.padding(.horizontal, 12).padding(.bottom, 12)
             }
@@ -213,7 +213,7 @@ struct FeedbackSheet: View {
     private var photoButton: some View {
         let background = brandMode.primaryText.opacity(0.06)
         return PhotosPicker(selection: $selectedPhotos, maxSelectionCount: max(1, FeedbackSubmission.maximumPhotos - composer.photos.count), matching: .images) {
-            Label("Add Photos", systemImage: "photo.on.rectangle")
+            Label("Add photos", systemImage: "photo.on.rectangle")
                 .font(AstirTypography.body).padding(.horizontal, 16).frame(minHeight: 48)
                 .background(background, in: Capsule())
         }
@@ -225,10 +225,10 @@ struct FeedbackSheet: View {
         VStack(spacing: 18) {
             VStack(spacing: 6) {
                 if audio.isRecording || audio.attachment != nil {
-                    Text(audio.isRecording ? "Recording Your Note…" : "Ready When You Are")
+                    Text(audio.isRecording ? "Recording your note…" : "Ready when you are")
                         .font(AstirTypography.body.weight(.semibold))
                 }
-                Text(audio.isRecording ? "Tap Stop When You’re Done" : audio.attachment == nil ? "Tap To Record · Up To \(FeedbackSubmission.maximumVoiceSeconds / 60) Minutes" : "Give It A Listen Before You Send")
+                Text(audio.isRecording ? "Tap stop when you’re done" : audio.attachment == nil ? "Tap to record · up to \(FeedbackSubmission.maximumVoiceSeconds / 60) minutes" : "Give it a listen before you send")
                     .font(.footnote).foregroundStyle(brandMode.secondaryText)
             }.multilineTextAlignment(.center)
 
@@ -254,7 +254,7 @@ struct FeedbackSheet: View {
             }
             .buttonStyle(.plain)
             .disabled(audio.isRequestingPermission || composer.isSubmitting || (!composer.canEdit && audio.attachment == nil))
-            .accessibilityLabel(audio.attachment != nil ? (audio.isPlaying ? "Pause Voice Note" : "Play Voice Note") : (audio.isRecording ? "Stop Recording" : "Record A Voice Note"))
+            .accessibilityLabel(audio.attachment != nil ? (audio.isPlaying ? "Pause voice note" : "Play voice note") : (audio.isRecording ? "Stop recording" : "Record a voice note"))
             .accessibilityIdentifier(audio.attachment == nil ? "feedback.record" : "feedback.play")
 
             VStack(spacing: 10) {
@@ -272,18 +272,18 @@ struct FeedbackSheet: View {
                         .disabled(audio.playbackSeconds == 0 && !audio.isPlaying)
                         .accessibilityIdentifier("feedback.stopPlayback")
                     Button { audio.stopPlayback(); showsReplaceConfirmation = true } label: {
-                        Label("Record Again", systemImage: "arrow.counterclockwise").frame(minHeight: 44)
+                        Label("Record again", systemImage: "arrow.counterclockwise").frame(minHeight: 44)
                     }
                     .disabled(!composer.canEdit)
-                    .alert("Replace This Voice Note?", isPresented: $showsReplaceConfirmation) {
-                        Button("Replace Recording", role: .destructive) { audio.remove() }
-                        Button("Keep Recording", role: .cancel) {}
-                    } message: { Text("Your Current Voice Note Will Be Removed So You Can Record A New One.") }
+                    .alert("Replace this voice note?", isPresented: $showsReplaceConfirmation) {
+                        Button("Replace recording", role: .destructive) { audio.remove() }
+                        Button("Keep recording", role: .cancel) {}
+                    } message: { Text("Your current voice note will be removed so you can record a new one.") }
                 }
                 .font(.footnote.weight(.medium)).frame(minHeight: 44)
             }
             VStack(alignment: .leading, spacing: 12) {
-                if isLoadingPhotos { ProgressView("Adding Photos…") }
+                if isLoadingPhotos { ProgressView("Adding photos…") }
                 if !composer.photos.isEmpty { photos }
                 photoButton
             }
@@ -331,7 +331,7 @@ struct FeedbackSheet: View {
                                     Image(systemName: "xmark.circle.fill")
                                         .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.7))
                                         .frame(width: 44, height: 44)
-                                }.disabled(!composer.canEdit).accessibilityLabel("Remove Photo")
+                                }.disabled(!composer.canEdit).accessibilityLabel("Remove photo")
                             }
                     }
                 }
@@ -343,8 +343,8 @@ struct FeedbackSheet: View {
         ZStack {
             VStack(spacing: 18) {
                 Image(systemName: "checkmark.circle.fill").font(.system(size: 56)).foregroundStyle(brandMode.accentText)
-                Text("You Made Astir Better.").font(AstirTypography.screenTitle).multilineTextAlignment(.center)
-                Text("Thanks For The Love. Your Feedback Is With Our Team.")
+                Text("You made Astir better.").font(AstirTypography.screenTitle).multilineTextAlignment(.center)
+                Text("Thanks for the love. Your feedback is with our team.")
                     .font(AstirTypography.body).foregroundStyle(brandMode.secondaryText).multilineTextAlignment(.center)
                 Button("Done") { dismiss() }
                     .font(AstirTypography.body.weight(.semibold)).frame(minWidth: 140, minHeight: 52)
@@ -369,7 +369,7 @@ struct FeedbackSheet: View {
                 try Task.checkCancellation()
                 composer.photos.append(FeedbackAttachment(kind: .photo, data: jpeg))
             } catch is CancellationError { return }
-            catch { composer.errorMessage = "A Photo Couldn’t Be Added. Please Choose Another Image." }
+            catch { composer.errorMessage = "A photo couldn’t be added. Please choose another image." }
         }
     }
 }

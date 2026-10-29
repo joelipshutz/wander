@@ -78,7 +78,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(result.astir.count, 3)
         XCTAssertEqual(rpc.calls.map(\.name), ["place_rating_summaries"])
         XCTAssertEqual(Set(try XCTUnwrap(rpc.rawBodies.first).keys), ["input_place_id"])
-        rpc.responses["place_rating_summaries"] = Data("{\"Friends\":{\"score\":4,\"count\":1}}".utf8)
+        rpc.responses["place_rating_summaries"] = Data("{\"friends\":{\"score\":4,\"count\":1}}".utf8)
         do {
             _ = try await repository.ratingSummaries(for: .init(placeID: "11111111-1111-4111-8111-111111111111"))
             XCTFail("Missing global data must not fall back to Friends")
@@ -614,7 +614,7 @@ final class RemoteRepositoryTests: XCTestCase {
                 pendingInvites: pending,
                 ownerUserID: "user_joe"
             ),
-            "Friend Updates Are Still Sending. Astir Will Keep Retrying."
+            "Friend updates are still sending. Astir will keep retrying."
         )
         XCTAssertNil(SharedVisitOutboxNotice.message(
             pendingInvites: pending,

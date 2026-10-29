@@ -196,7 +196,7 @@ import CoreLocation
         await eventually { provider.queries.count == 1 }
         provider.finish("zzzz", with: [])
         await eventually { !model.isSearching }
-        XCTAssertTrue(model.message?.hasPrefix("No Matching") == true)
+        XCTAssertTrue(model.message?.hasPrefix("No matching") == true)
         model.update("offline")
         await eventually { provider.queries.count == 2 }
         provider.pending.removeValue(forKey: "offline")?.resume(throwing: URLError(.notConnectedToInternet))

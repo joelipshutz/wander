@@ -86,7 +86,7 @@ func completeSourceWannaRemovalAfterCheckIn(
           store.visits(for: replacementParent.id).contains(where: { $0.id == visit.id }),
           [.synced, .localOnly, .pendingCreate, .pendingUpdate].contains(result.syncState),
           [.synced, .localOnly, .pendingCreate, .pendingUpdate].contains(visit.syncState) else {
-        return warning(result, "Your Wannas Were Kept Because The Check-In Has Not Finished Saving.")
+        return warning(result, "Your Wannas were kept because the check-in has not finished saving.")
     }
     // Validate the complete immutable set before any deletion. No await occurs
     // between this preflight and local tombstones, so another save cannot enter it.
@@ -103,7 +103,7 @@ func completeSourceWannaRemovalAfterCheckIn(
         return target.isOriginal
             && LivePlaceSaveContinuation.originalWannaDate(for: visible, store: store) == target.occurredAt
     }) else {
-        return warning(result, "Your Check-In Was Saved. Your Wannas Changed While Saving, So They Were Kept. You Can Remove Them From Your Map.")
+        return warning(result, "Your check-in was saved. Your Wannas changed while saving, so they were kept. You can remove them from Your Map.")
     }
 
     store.flushPersistence()
@@ -121,10 +121,10 @@ func completeSourceWannaRemovalAfterCheckIn(
         _ = await store.syncPendingWannaSaves(backend: backend)
         guard store.currentUser.id == ownerID else { return result }
         if !removedAll || targets.contains(where: { $0.tombstone(in: store)?.isSynced != true }) {
-            return warning(result, "Your Check-In Was Saved. Some Wanna Removals Are Still Pending And Will Retry When Connected.")
+            return warning(result, "Your check-in was saved. Some Wanna removals are still pending and will retry when connected.")
         }
     } else if !removedAll {
-        return warning(result, "Your Check-In Was Saved, But Some Wannas Could Not Be Removed. You Can Remove Them From Your Map.")
+        return warning(result, "Your check-in was saved, but some Wannas could not be removed. You can remove them from Your Map.")
     }
     return result
 }
@@ -163,6 +163,6 @@ private func warning(_ result: SaveResult, _ message: String) -> SaveResult {
 enum MapPlaceWannaHistoryError: LocalizedError {
     case unavailable
     var errorDescription: String? {
-        "Your Wanna History Couldn’t Be Checked. Connect And Try Again, Or Turn Off Remove From Wanna To Keep Your Wannas. Your Check-In Has Not Been Saved."
+        "Your Wanna history couldn’t be checked. Connect and try again, or turn off Remove from Wanna to keep your Wannas. Your check-in has not been saved."
     }
 }

@@ -929,9 +929,9 @@ final class OnboardingStateTests: XCTestCase {
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .notDetermined), .request)
         XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .notDetermined), "Continue")
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .denied), .openSettings)
-        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "Open Settings")
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .denied), "Open settings")
         XCTAssertEqual(CalendarPermissionPolicy.action(for: .fullAccess), .sync)
-        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "Sync Now")
+        XCTAssertEqual(CalendarPermissionPolicy.primaryTitle(for: .fullAccess), "Sync now")
     }
 
     func testFirstVisitParkPolicyUsesHotchkissForUnavailableAndSantaMonicaZIPs() {
@@ -1066,10 +1066,10 @@ final class OnboardingStateTests: XCTestCase {
 
     func testApprovedLocationValueCopyIsStable() {
         XCTAssertEqual(OnboardingLocationContent.eyebrow, "AROUND YOU")
-        XCTAssertEqual(OnboardingLocationContent.title, "Find Places Nearby")
+        XCTAssertEqual(OnboardingLocationContent.title, "Find places nearby")
         XCTAssertEqual(
             OnboardingLocationContent.privacyMessage,
-            "Your Location Is Yours."
+            "Your location is yours."
         )
         XCTAssertEqual(OnboardingLocationContent.selectedPlaceName, "Hotchkiss Park")
     }

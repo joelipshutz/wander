@@ -37,7 +37,7 @@ enum OnboardingLocationPermissionPolicy {
         case .openSettings:
             "Open Settings"
         case .continueWithoutAccess:
-            "Continue Without Location"
+            "Continue without location"
         }
     }
 }

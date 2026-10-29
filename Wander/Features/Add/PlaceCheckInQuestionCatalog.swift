@@ -74,8 +74,8 @@ struct PlaceCheckInQuestionProfile: Equatable, Sendable {
 enum PlaceCheckInQuestionCatalog {
     static let keyPrefix = "place_detail_"
     static let allQuestions = coreQuestions + everydayQuestions + [
-        PlaceCheckInQuestion(id: "place_detail_dietary_options", displayLabel: "Dietary Options", prompt: "Dietary Options?", options: ["Vegan", "Vegetarian", "Gluten free"], searchableAnswers: ["Vegan": ["vegan options"], "Vegetarian": ["vegetarian options"], "Gluten free": ["gluten free options"]]),
-        PlaceCheckInQuestion(id: "place_detail_gluten_free_options", displayLabel: "Gluten-Free Options", prompt: "Gluten-Free Options?", options: ["Yes", "No"], searchableAnswers: ["Yes": ["gluten free options"]])
+        PlaceCheckInQuestion(id: "place_detail_dietary_options", displayLabel: "Dietary options", prompt: "Dietary options?", options: ["Vegan", "Vegetarian", "Gluten free"], searchableAnswers: ["Vegan": ["vegan options"], "Vegetarian": ["vegetarian options"], "Gluten free": ["gluten free options"]]),
+        PlaceCheckInQuestion(id: "place_detail_gluten_free_options", displayLabel: "Gluten-free options", prompt: "Gluten-free options?", options: ["Yes", "No"], searchableAnswers: ["Yes": ["gluten free options"]])
     ]
     static let profiles = coreProfiles + everydayProfiles
 

@@ -365,7 +365,7 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertEqual(FirstVisitWalkthroughContent.primaryJourneySurfaces, [.map, .feed])
         XCTAssertEqual(FirstVisitWalkthroughContent.stepsBySurface[.add]?.map(\.target), [.addNearby, .addImport])
         XCTAssertEqual(FirstVisitWalkthroughContent.stepsBySurface[.add]?.last?.message,
-                       "Import Your Saved Places From Instagram, TikTok And Google Maps")
+                       "Import your saved places from Instagram, TikTok and Google Maps")
     }
 
     func testAddIntroductionWaitsForLoadedMeasuredContentAndHasEightSecondsOfReadingTime() {

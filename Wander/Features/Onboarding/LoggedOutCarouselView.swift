@@ -69,7 +69,7 @@ struct LoggedOutCarouselView: View {
                                 .frame(width: WanderTheme.tapMinimum, height: WanderTheme.tapMinimum)
                         }
                         .foregroundStyle(brandMode.secondaryText)
-                        .accessibilityLabel(isPaused ? "Play Introduction" : "Pause Introduction")
+                        .accessibilityLabel(isPaused ? "Play introduction" : "Pause introduction")
                         .accessibilityIdentifier("onboarding.pause")
                     }
                 }
@@ -115,13 +115,13 @@ struct LoggedOutCarouselView: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Carousel Page").accessibilityValue(String(selection + 1))
+                .accessibilityLabel("Carousel page").accessibilityValue(String(selection + 1))
                 .accessibilityIdentifier("onboarding.carouselPage")
                 .padding(.bottom, WanderTheme.spacing4)
                 VStack(spacing: WanderTheme.spacing2) {
                     nextButton
                         .accessibilityIdentifier("onboarding.next")
-                    Button("Already Have An Account? Log In") { startAuth(mode: .signIn) }
+                    Button("Already have an account? Log in") { startAuth(mode: .signIn) }
                         .font(AstirTypography.control).foregroundStyle(brandMode.secondaryText)
                         .frame(maxWidth: .infinity, minHeight: WanderTheme.tapMinimum)
                         .accessibilityIdentifier("onboarding.logIn")
@@ -283,7 +283,7 @@ private struct OnboardingBenefitSequenceView: View {
                 )
                 .frame(width: width, height: width * 0.39)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel(step == .places ? "Keep Track Of Everywhere You’ve Been." : "Keep Up With The People You Love.")
+                .accessibilityLabel(step == .places ? "Keep track of everywhere you’ve been." : "Keep up with the people you love.")
                 .accessibilityIdentifier("onboarding.benefitCopy")
                 Spacer(minLength: 18)
             }
@@ -391,7 +391,7 @@ struct OnboardingTickerView: View {
             let frame = OnboardingTickerFrame.at(elapsed: readableElapsed, content: content)
             let currentWord = content.words.indices.contains(frame.wordIndex) ? content.words[frame.wordIndex].uppercased() : ""
             let nextWord = frame.nextWordIndex.flatMap { content.words.indices.contains($0) ? content.words[$0].uppercased() : nil } ?? currentWord
-            let finalText = OnboardingWelcomeCopy.finalRows(content.finalLockup ?? "A Local Experiment").joined(separator: "\n")
+            let finalText = OnboardingWelcomeCopy.finalRows(content.finalLockup ?? "A local experiment").joined(separator: "\n")
             let entering = elapsed < OnboardingSlideMotion.seconds && !staticReading && (isPlaying || elapsed > 0)
             let from = entering ? "" : (frame.showsFinalLockup ? finalText : currentWord)
             let to = entering ? currentWord : (frame.isFinalTransition || frame.showsFinalLockup ? finalText : nextWord)

@@ -26,7 +26,7 @@ final class ListPlaceSearchUITests: XCTestCase {
         let list = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Open Saturday plan")).firstMatch
         XCTAssertTrue(list.waitForExistence(timeout: 15))
         list.tap()
-        let addPlaces = app.buttons["Add Places To List"]
+        let addPlaces = app.buttons["Add places to list"]
         XCTAssertTrue(addPlaces.waitForExistence(timeout: 8))
         addPlaces.tap()
         let search = app.textFields["lists.placeSearch"]
@@ -50,13 +50,13 @@ final class ListPlaceSearchUITests: XCTestCase {
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         XCTAssertEqual(search.value as? String, "Sparrow")
         XCTAssertTrue(addResult.waitForExistence(timeout: 8))
-        XCTAssertFalse(app.buttons["Add Silently"].exists)
+        XCTAssertFalse(app.buttons["Add silently"].exists)
 
         // Clearing restores suggestions; a new coordinate query uses the same
         // nearby provider route as quick search, preserving provider order.
         search.tap()
         search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 7))
-        XCTAssertTrue(app.staticTexts["Suggested For This List"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Suggested for this list"].waitForExistence(timeout: 5))
         search.typeText("34.0522, -118.2437")
         XCTAssertTrue(addResult.waitForExistence(timeout: 8))
         XCTAssertTrue(app.buttons["Add Clover & Pine to list"].exists)
@@ -72,11 +72,11 @@ final class ListPlaceSearchUITests: XCTestCase {
         XCTAssertTrue(addResult.waitForExistence(timeout: 8))
 
         addResult.tap()
-        let addSilently = app.buttons["Add Silently"]
+        let addSilently = app.buttons["Add silently"]
         XCTAssertTrue(addSilently.waitForExistence(timeout: 5))
         addSilently.tap()
         XCTAssertTrue(addResult.waitForNonExistence(timeout: 8))
-        XCTAssertFalse(app.staticTexts["No Matching Places Found. Try A More Specific Name Or Nearby Area."].exists)
+        XCTAssertFalse(app.staticTexts["No matching places found. Try a more specific name or nearby area."].exists)
         capture("REC656 list search after addition")
     }
 

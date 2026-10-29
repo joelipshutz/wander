@@ -15,7 +15,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertEqual(count.label, "3 suggestions")
         XCTAssertTrue(app.staticTexts["common-ground.one-sided-intro"].exists)
         XCTAssertEqual(app.staticTexts["common-ground.narrative.mudwater"].label, "Joe loves Mudwater")
-        XCTAssertTrue(app.staticTexts["You Two Should Go Together."].firstMatch.exists)
+        XCTAssertTrue(app.staticTexts["You two should go together."].firstMatch.exists)
         capture("rec578-one-sided-suggestions")
 
         let invite = app.buttons["common-ground.invite.mudwater"]
@@ -120,7 +120,7 @@ final class CommonGroundMockupUITests: XCTestCase {
 
         let invite = app.buttons["common-ground.invite.not-no-bar"]
         XCTAssertTrue(scrollTo(invite, in: app))
-        XCTAssertEqual(app.staticTexts["common-ground.wanna.not-no-bar"].label, "In Both Of Your Wannas")
+        XCTAssertEqual(app.staticTexts["common-ground.wanna.not-no-bar"].label, "In both of your Wannas")
         invite.tap()
         let previewMessages = app.buttons["common-ground.invitation.messages"]
         XCTAssertTrue(previewMessages.waitForExistence(timeout: 5))
@@ -129,7 +129,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertEqual(postcardPlace.label, "Not No Bar")
         XCTAssertFalse(postcardReason.exists, "The composer keeps evidence on In Common")
         XCTAssertFalse(app.navigationBars["Your invitation"].exists)
-        XCTAssertFalse(app.staticTexts["In Both Of Your Wannas"].isHittable)
+        XCTAssertFalse(app.staticTexts["In both of your Wannas"].isHittable)
         XCTAssertFalse(app.staticTexts["From Ryan, with a little help."].isHittable)
         let expectedReason = "Both Wanna Go"
         capture("rec486-flow-03-invitation")
@@ -150,7 +150,7 @@ final class CommonGroundMockupUITests: XCTestCase {
         XCTAssertEqual(visibleText("common-ground.invitation.reason-title", in: app).label, expectedReason)
         XCTAssertTrue(app.buttons["Reply in Messages"].exists)
         XCTAssertFalse(app.navigationBars["From Ryan"].exists)
-        XCTAssertFalse(app.staticTexts["In Both Of Your Wannas"].isHittable)
+        XCTAssertFalse(app.staticTexts["In both of your Wannas"].isHittable)
         XCTAssertFalse(app.staticTexts["Like the sound of it? Take it back to your chat."].isHittable)
         capture("rec486-flow-05-opened-recipient")
 
@@ -358,7 +358,7 @@ final class CommonGroundMockupUITests: XCTestCase {
             XCTAssertTrue(loading.waitForExistence(timeout: 3))
             XCTAssertFalse(app.buttons["common-ground.open-mix"].exists)
         case "unavailable":
-            XCTAssertTrue(app.buttons["Try Again"].waitForExistence(timeout: 3))
+            XCTAssertTrue(app.buttons["Try again"].waitForExistence(timeout: 3))
             XCTAssertTrue(app.staticTexts["A little out of reach"].exists)
             XCTAssertFalse(app.buttons["common-ground.open-mix"].exists)
         default:

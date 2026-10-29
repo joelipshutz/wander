@@ -51,7 +51,7 @@ struct ProductUpsellScreen: View {
     private var footer: some View {
         VStack(spacing: WanderTheme.spacing1) {
             WanderPrimaryButton(
-                title: isWorking ? "Turning On Notifications…" : primaryTitle,
+                title: isWorking ? "Turning on notifications…" : primaryTitle,
                 isDisabled: isWorking
             ) {
                 handlePrimaryAction()
@@ -59,7 +59,7 @@ struct ProductUpsellScreen: View {
             .accessibilityIdentifier("productUpsell.primary")
 
             if allowsSecondaryAction {
-                Button("Not Now") {
+                Button("Not now") {
                     guard isCurrentPresentation else { return }
                     coordinator.recordButtonClick(.notNow, for: presentation.id)
                     trackOnboardingPermissionResult("skipped")
@@ -192,9 +192,9 @@ struct OnboardingNotificationExamples: View {
     @State private var visibleCount = 0
 
     private let examples: [(icon: String, title: String, message: String)] = [
-        ("mappin.and.ellipse", "Ryan Checked In", "A New Place To Discover."),
-        ("bubble.left", "Joe Commented On Your Check-In", "“This place looks gas”"),
-        ("person.crop.circle.badge.checkmark", "Mina Followed You", "Your Circle Is Growing.")
+        ("mappin.and.ellipse", "Ryan checked in", "A new place to discover."),
+        ("bubble.left", "Joe commented on your check-in", "“This place looks gas”"),
+        ("person.crop.circle.badge.checkmark", "Mina followed you", "Your circle is growing.")
     ]
 
     var body: some View {
@@ -230,7 +230,7 @@ struct OnboardingNotificationExamples: View {
         }
         .padding(.vertical, WanderTheme.spacing2)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Example Astir Notifications: Ryan Checked In. Joe Commented On Your Check-In. Mina Followed You.")
+        .accessibilityLabel("Example Astir notifications: Ryan checked in. Joe commented on your check-in. Mina followed you.")
         .accessibilityIdentifier("onboarding.notificationExamples")
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }

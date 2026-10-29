@@ -55,7 +55,7 @@ final class LiveExperienceUITests: XCTestCase {
         app.buttons["live.draw"].tap()
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["live.applyArea"].isEnabled)
-        app.buttons["Use Visible Area"].tap()
+        app.buttons["Use visible area"].tap()
         XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
         capture("draw-review")
         app.buttons["live.applyArea"].tap()
@@ -108,7 +108,7 @@ final class LiveExperienceUITests: XCTestCase {
             waitForCondition {
                 !drawer.exists || (!drawer.isHittable && !app.frame.intersects(drawer.frame))
             }
-            app.buttons["Use Visible Area"].tap()
+            app.buttons["Use visible area"].tap()
             XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
             app.buttons[action == "Apply" ? "live.applyArea" : "Cancel"].tap()
             XCTAssertTrue(app.buttons["live.applyArea"].waitForNonExistence(timeout: 5))
@@ -152,7 +152,7 @@ final class LiveExperienceUITests: XCTestCase {
                       "The combined drawer element must retain its loaded count for VoiceOver.")
         let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
-        XCTAssertTrue(app.buttons["Invite People To Astir"].waitForExistence(timeout: 8)
+        XCTAssertTrue(app.buttons["Invite people to Astir"].waitForExistence(timeout: 8)
                       || app.staticTexts["Activity"].exists)
         capture("feed-expanded")
         let feed = app.scrollViews["feed.places.scroll"]
@@ -175,7 +175,7 @@ final class LiveExperienceUITests: XCTestCase {
     func testFilterResetCanBeCancelledBeforeApply() {
         let app = launch()
         app.buttons["live.draw"].tap()
-        app.buttons["Use Visible Area"].tap()
+        app.buttons["Use visible area"].tap()
         app.buttons["live.applyArea"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
         app.buttons["Filters"].tap()
@@ -215,7 +215,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.introduction.next"].waitForExistence(timeout: 5))
         capture("migration-guide")
         app.buttons["live.introduction.next"].tap()
-        XCTAssertTrue(app.staticTexts["Choose Your Filters And Area"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Choose your filters and area"].waitForExistence(timeout: 5))
     }
 
     func testPrivateDemoReplyAndForegroundPreserveDraft() {
@@ -256,7 +256,7 @@ final class LiveExperienceUITests: XCTestCase {
         let actions = app.buttons["activity.fixture-feed-ryan-wanna-noodles.actions"]
         revealFully(actions, in: feed, app: app)
         actions.tap()
-        let reply = app.buttons["Reply Privately"].firstMatch
+        let reply = app.buttons["Reply privately"].firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 5))
         capture("activity-menu-private-reply")
         reply.tap()
@@ -292,7 +292,7 @@ final class LiveExperienceUITests: XCTestCase {
         revealFully(actions, in: feed, app: app)
         XCTAssertTrue(actions.isHittable)
         actions.tap()
-        let reply = app.buttons["Reply Privately"].firstMatch
+        let reply = app.buttons["Reply privately"].firstMatch
         XCTAssertTrue(reply.waitForExistence(timeout: 5))
         capture("wanna-activity-actions")
         reply.tap()
@@ -314,7 +314,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertTrue(friend.label.contains("Ryan"))
         friend.tap()
-        XCTAssertFalse(app.buttons["Share Invitation"].exists)
+        XCTAssertFalse(app.buttons["Share invitation"].exists)
         XCTAssertFalse(app.buttons["live.plan.saveWanna"].exists)
         XCTAssertTrue(app.staticTexts["common-ground.invitation.heading"].waitForExistence(timeout: 8))
         let when = app.buttons["common-ground.invitation.when"]
@@ -377,8 +377,8 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertEqual(attribution.label, "Alex checked-in with Sam")
         XCTAssertFalse(app.staticTexts["Invitation pending"].exists)
         XCTAssertFalse(app.staticTexts["Invitations pending"].exists)
-        XCTAssertFalse(app.buttons["View Activity"].exists)
-        XCTAssertFalse(app.buttons["Hide Activity"].exists)
+        XCTAssertFalse(app.buttons["View activity"].exists)
+        XCTAssertFalse(app.buttons["Hide activity"].exists)
         XCTAssertFalse(app.staticTexts["Comments"].exists)
         capture("shared-check-in-postcard-example")
 
@@ -406,7 +406,7 @@ final class LiveExperienceUITests: XCTestCase {
         }
         XCTAssertTrue(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Photo of Sample check-in photo 2"))
             .firstMatch.waitForExistence(timeout: 5))
-        XCTAssertFalse(app.staticTexts["Photo Unavailable"].exists)
+        XCTAssertFalse(app.staticTexts["Photo unavailable"].exists)
         capture("shared-check-in-combined-photos")
         photoBack.tap()
         XCTAssertTrue(photoBack.waitForNonExistence(timeout: 5))
@@ -415,16 +415,16 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(first.exists)
         XCTAssertTrue(second.exists)
 
-        let comments = app.buttons["Open Comments"]
+        let comments = app.buttons["Open comments"]
         for _ in 0..<6 where !comments.isHittable { app.swipeUp() }
         XCTAssertTrue(comments.isHittable)
-        XCTAssertEqual(app.buttons.matching(identifier: "Open Comments").count, 1)
+        XCTAssertEqual(app.buttons.matching(identifier: "Open comments").count, 1)
         XCTAssertEqual(comments.staticTexts.count, 0, "The comment action uses an icon, without a visible text label.")
         comments.tap()
         let header = app.descendants(matching: .any)["comments.activity.postcard"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["comments.activity.postcard.companions"].label, "Alex checked-in with Sam")
-        XCTAssertFalse(app.buttons["View Activity"].exists)
+        XCTAssertFalse(app.buttons["View activity"].exists)
         XCTAssertFalse(app.staticTexts["On Alex’s check-in"].exists)
         XCTAssertFalse(app.staticTexts["On Sam’s check-in"].exists)
         let mine = app.staticTexts["Happy we finally made it here."]
@@ -462,7 +462,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["live.plan.demo"].exists)
         let share = app.buttons["common-ground.invitation.messages"]
         XCTAssertTrue(share.waitForExistence(timeout: 5))
-        XCTAssertEqual(share.label, "Share Invitation")
+        XCTAssertEqual(share.label, "Share invitation")
         XCTAssertFalse(share.isEnabled, "Synthetic place IDs must never create real invitations.")
         let when = app.buttons["common-ground.invitation.when"]
         for _ in 0..<4 where !when.isHittable { app.swipeUp() }
@@ -511,7 +511,7 @@ final class LiveExperienceUITests: XCTestCase {
         entry.tap()
         let row = app.buttons["live.upcoming.invitation.11111111-2222-4333-8444-555555555555"]
         XCTAssertTrue(row.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["From Up To 100 Recent Received Invitations"].exists)
+        XCTAssertTrue(app.staticTexts["From up to 100 recent received invitations"].exists)
         capture("upcoming-invitations")
         row.tap()
         XCTAssertTrue(app.staticTexts["place-plan.message"].waitForExistence(timeout: 10))
@@ -533,7 +533,7 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 10))
         app.buttons["live.draw"].tap()
-        let visibleArea = app.buttons["Use Visible Area"]
+        let visibleArea = app.buttons["Use visible area"]
         XCTAssertTrue(visibleArea.waitForExistence(timeout: 5))
         XCTAssertTrue(visibleArea.isHittable)
         visibleArea.tap()
@@ -581,7 +581,7 @@ final class LiveExperienceUITests: XCTestCase {
         let committed = try XCTUnwrap(liveState(in: app))
         XCTAssertTrue(app.buttons["live.searchArea"].waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
-        XCTAssertEqual(app.buttons["live.draw"].label, "Draw Area")
+        XCTAssertEqual(app.buttons["live.draw"].label, "Draw area")
         let retainedPin = app.buttons.matching(identifier: anchorID).element
         XCTAssertTrue(retainedPin.waitForExistence(timeout: 5))
         XCTAssertTrue(retainedPin.isHittable)
@@ -598,13 +598,13 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(back.waitForNonExistence(timeout: 5))
         waitLiveCount(committed.count, in: app)
         waitFeedCount(committed.count, in: app)
-        XCTAssertTrue(try XCTUnwrap(liveState(in: app)).value.contains("Map Area"))
+        XCTAssertTrue(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
         for tab in ["Lists", "Profile"] {
             app.tabBars.buttons[tab].tap()
             XCTAssertTrue(app.tabBars.buttons[tab].isSelected)
             app.tabBars.buttons["Live"].tap()
             waitLiveCount(committed.count, in: app)
-            XCTAssertTrue(try XCTUnwrap(liveState(in: app)).value.contains("Map Area"))
+            XCTAssertTrue(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
         }
         setDrawer("collapsed", in: app)
         XCTAssertFalse(app.buttons["live.searchArea"].exists,
@@ -619,7 +619,7 @@ final class LiveExperienceUITests: XCTestCase {
         reset.tap()
         app.buttons["live.applyFilters"].tap()
         waitLiveCount(5, in: app)
-        XCTAssertFalse(try XCTUnwrap(liveState(in: app)).value.contains("Map Area"))
+        XCTAssertFalse(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
         XCTAssertFalse(app.buttons["live.clearArea"].exists)
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
         capture("search-area-reset")
@@ -1020,7 +1020,7 @@ final class LiveExperienceUITests: XCTestCase {
     }
 
     private func tapResetFilters(in app: XCUIApplication) {
-        let button = app.buttons["Reset Filters"]
+        let button = app.buttons["Reset filters"]
         let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
         XCTAssertTrue(form.waitForExistence(timeout: 5))
         for _ in 0..<6 where !button.isHittable { form.swipeUp() }

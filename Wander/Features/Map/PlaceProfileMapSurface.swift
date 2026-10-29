@@ -338,7 +338,7 @@ struct PlaceProfileFullScreen: View {
         )
         .overlay(alignment: .top) {
             if historyRefresh.hasFailed {
-                Button("History Could Not Refresh. Tap To Retry.") {
+                Button("History could not refresh. Tap to retry.") {
                     Task { await refreshHistory() }
                 }
                 .font(.footnote)
@@ -988,7 +988,7 @@ private struct PlaceProfilePreviewCard: View {
                     .accessibilityAddTraits(.isButton)
                     .accessibilityIdentifier("map.selectedPlaceCard")
                     .accessibilityLabel(cardAccessibilityLabel)
-                    .accessibilityHint("Opens The Full Place Page")
+                    .accessibilityHint("Opens the full place page")
                     .accessibilityAction {
                         onOpen()
                     }
@@ -1097,7 +1097,7 @@ private struct PlaceProfilePreviewCard: View {
                     Spacer(minLength: 0)
 
                     if isSavedDroppedPin {
-                        Text("Saved From A Dropped Pin")
+                        Text("Saved from a dropped pin")
                             .font(AstirTypography.metadata)
                             .foregroundStyle(.white.opacity(0.86))
                             .accessibilityIdentifier("map.selectedPlaceDroppedPinSource")
@@ -1127,7 +1127,7 @@ private struct PlaceProfilePreviewCard: View {
                     .allowsHitTesting(false)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding City…")
+                    Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
                         .font(AstirTypography.caption)
                         .lineLimit(1)
                         .hidden()
@@ -1142,12 +1142,12 @@ private struct PlaceProfilePreviewCard: View {
                             Button {
                                 UIPasteboard.general.string = coordinates
                             } label: {
-                                Label("Copy Coordinates", systemImage: "doc.on.doc")
+                                Label("Copy coordinates", systemImage: "doc.on.doc")
                             }
                         }
                         .accessibilityIdentifier("map.droppedPinCoordinates")
                         .accessibilityLabel("Coordinates \(coordinates)")
-                        .accessibilityHint("Touch And Hold To Copy")
+                        .accessibilityHint("Touch and hold to copy")
                 }
             }
             .padding(18)
@@ -1228,7 +1228,7 @@ private struct PlaceProfilePreviewCard: View {
                     )
                 )
                 .accessibilityIdentifier("map.selectedPlaceAddToList")
-                .accessibilityLabel("Add Place To Lists")
+                .accessibilityLabel("Add place to lists")
             }
 
             if shareContent != nil {
@@ -1246,7 +1246,7 @@ private struct PlaceProfilePreviewCard: View {
                     )
                 )
                 .accessibilityIdentifier("map.selectedPlaceShare")
-                .accessibilityLabel("Share Place")
+                .accessibilityLabel("Share place")
             }
         }
     }
@@ -1292,7 +1292,7 @@ private struct PlaceProfilePreviewCard: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    .accessibilityLabel("Photo Of \(place.name)")
+                    .accessibilityLabel("Photo of \(place.name)")
             }
         }
     }
@@ -1369,7 +1369,7 @@ private struct PlaceProfilePreviewCard: View {
 
     private var droppedPinMetadata: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding City…")
+            Text(PlaceProfileCopy.trimmed(place.locality) ?? "Finding city…")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.88))
                 .lineLimit(1)
@@ -1384,12 +1384,12 @@ private struct PlaceProfilePreviewCard: View {
                         Button {
                             UIPasteboard.general.string = coordinates
                         } label: {
-                            Label("Copy Coordinates", systemImage: "doc.on.doc")
+                            Label("Copy coordinates", systemImage: "doc.on.doc")
                         }
                     }
                     .accessibilityIdentifier("map.droppedPinCoordinates")
                     .accessibilityLabel("Coordinates \(coordinates)")
-                    .accessibilityHint("Touch And Hold To Copy")
+                    .accessibilityHint("Touch and hold to copy")
             }
         }
     }
@@ -1718,7 +1718,7 @@ private struct PlaceCardProviderRatingBadge: View {
         }
         .font(.system(size: 10, weight: .bold))
         .frame(maxWidth: 34, maxHeight: 14)
-        .accessibilityLabel("\(providerName) Rating")
+        .accessibilityLabel("\(providerName) rating")
         .accessibilityIdentifier("map.selectedPlaceRatingProvider")
     }
 }
@@ -1973,7 +1973,7 @@ private struct PlaceProfileFullView: View {
                             headerNavigationLabel(systemImage: PlaceListSymbol.systemImage)
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Add Place To Lists")
+                        .accessibilityLabel("Add place to lists")
                         .accessibilityIdentifier("place-profile.add-to-list")
                     }
 
@@ -1986,7 +1986,7 @@ private struct PlaceProfileFullView: View {
                             headerNavigationLabel(systemImage: "square.and.arrow.up")
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Share Place")
+                        .accessibilityLabel("Share place")
                         .accessibilityIdentifier("place-profile.share")
                     }
                 }
@@ -2273,7 +2273,7 @@ private struct PlaceProfileFullView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("place-profile.plans")
-        .accessibilityHint("Choose A Mutual Friend And Make A Plan For This Place")
+        .accessibilityHint("Choose a mutual friend and make a plan for this place")
     }
 
     private func standardActionButton(_ item: PlaceExternalAction) -> some View {
@@ -2354,7 +2354,7 @@ private struct PlaceProfileFullView: View {
     private var bestForSection: some View {
         if !displayTags.isEmpty {
             VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                sectionLabel("Best For")
+                sectionLabel("Best for")
                 PlaceProfileWrappingTags(tags: displayTags)
             }
         }
@@ -2593,15 +2593,15 @@ enum PlaceProfileFloatingActionVariant: Int, CaseIterable, Equatable {
     var testerLabel: String {
         switch self {
         case .option1:
-            "1 — Current"
+            "1 — current"
         case .option2:
-            "2 — Full-Width Black"
+            "2 — full-width black"
         case .option3:
-            "3 — Compact Black"
+            "3 — compact black"
         case .option4:
-            "4 — Compact Dark Rail"
+            "4 — compact dark rail"
         case .option5:
-            "5 — Selected · Compact Deep Black"
+            "5 — selected · compact deep black"
         }
     }
 }
@@ -3024,7 +3024,7 @@ private struct PlacePhotoGalleryViewer: View {
                                 Button {
                                     presentPhotoReport(item: selectedItem, contributor: contributor)
                                 } label: {
-                                    Label("Report Photo", systemImage: "exclamationmark.bubble")
+                                    Label("Report photo", systemImage: "exclamationmark.bubble")
                                 }
                             } label: {
                                 Image(systemName: "ellipsis")
@@ -3034,7 +3034,7 @@ private struct PlacePhotoGalleryViewer: View {
                                     .background(Color.white.opacity(0.18))
                                     .clipShape(Circle())
                             }
-                            .accessibilityLabel("Photo Actions")
+                            .accessibilityLabel("Photo actions")
                         }
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
@@ -3206,7 +3206,7 @@ private struct PlacePhotoGalleryViewer: View {
                         .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Open \(contributor.displayName)'s Profile")
+                .accessibilityLabel("Open \(contributor.displayName)'s profile")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
@@ -3242,7 +3242,7 @@ private struct PlacePhotoGalleryViewer: View {
             Rectangle()
                 .fill(brandMode.accent)
                 .frame(width: 2, height: 18)
-            Text(status == .been ? CheckInCopy.noun : "Wanna Go")
+            Text(status == .been ? CheckInCopy.title : "Wanna go")
                 .font(AstirTypography.metadata)
                 .textCase(.uppercase)
         }
@@ -3267,7 +3267,7 @@ private struct PlacePhotoGalleryViewer: View {
                 .clipShape(Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Close Photo Viewer")
+        .accessibilityLabel("Close photo viewer")
     }
 
     private func presentPhotoReport(
@@ -3279,7 +3279,7 @@ private struct PlacePhotoGalleryViewer: View {
                 kind: .visitPhoto,
                 subjectID: item.photo.providerPlaceID,
                 reportedUserID: contributor.userID,
-                context: "Report \(contributor.displayName)’s Photo From \(placeName)."
+                context: "Report \(contributor.displayName)’s photo from \(placeName)."
             )
         }
     }
@@ -3300,7 +3300,7 @@ private struct PlacePhotoGalleryViewer: View {
     }
 
     private var positionAccessibilityLabel: String {
-        guard let positionLabel else { return "Photo Viewer" }
+        guard let positionLabel else { return "Photo viewer" }
         return "Photo \(positionLabel)"
     }
 
@@ -3333,7 +3333,7 @@ private struct PlaceProfileMapHeader: View {
         ZStack {
             if visualStyle == .astir {
                 AstirPlacePhotoAsset(stableKey: place.id)
-                    .accessibilityLabel("Photo Of \(place.name)")
+                    .accessibilityLabel("Photo of \(place.name)")
             } else {
                 mapFallback
             }
@@ -3444,7 +3444,7 @@ private struct PlaceProfileMapHeader: View {
             .background(Color.black.opacity(0.68))
             .foregroundStyle(.white)
             .overlay(Rectangle().stroke(astirBrandMode.accent.opacity(0.72), lineWidth: 1))
-            .accessibilityLabel("Photo By \(contributor.displayName)")
+            .accessibilityLabel("Photo by \(contributor.displayName)")
         }
     }
 
@@ -3465,9 +3465,9 @@ private struct PlaceProfileMapHeader: View {
 
     private func accessibilityLabel(for item: PlacePhotoGalleryItem) -> String {
         if let contributor = item.contributor {
-            return "Open Place Photo By \(contributor.displayName) Full Screen"
+            return "Open place photo by \(contributor.displayName) full screen"
         }
-        return "Open Place Photo Of \(place.name) Full Screen"
+        return "Open place photo of \(place.name) full screen"
     }
 
     @ViewBuilder
@@ -3534,7 +3534,7 @@ struct PlaceProfilePhotoImage: View {
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
                         .transition(.opacity)
-                        .accessibilityLabel("Photo Of \(placeName)")
+                        .accessibilityLabel("Photo of \(placeName)")
                     }
             }
             .task(id: currentRenderKey) {
@@ -4022,7 +4022,7 @@ private struct PlaceProfileStatusPill: View {
     @Environment(\.astirBrandMode) private var astirBrandMode
 
     var body: some View {
-        Text(status == .been ? CheckInCopy.noun : "Wanna")
+        Text(status == .been ? CheckInCopy.title : "Wanna")
             .font(
                 visualStyle == .astir
                     ? AstirTypography.metadata

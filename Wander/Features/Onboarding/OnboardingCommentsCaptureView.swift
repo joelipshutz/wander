@@ -86,9 +86,9 @@ private final class OnboardingCommentsRepository: ActivityEngagementRepository {
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
         ActivityCommentsPage(comments: [
             ActivityComment(id: "demo-1", activityID: activityID, author: Self.person("Theo"),
-                            body: "This Looks So Good. Saving It For Friday!", createdAt: Date().addingTimeInterval(-3600)),
+                            body: "This looks so good. Saving it for Friday!", createdAt: Date().addingTimeInterval(-3600)),
             ActivityComment(id: "demo-2", activityID: activityID, author: Self.person("Mina"),
-                            body: "You’ll Love It. Let’s Go Together!", createdAt: Date().addingTimeInterval(-1800))
+                            body: "You’ll love it. Let’s go together!", createdAt: Date().addingTimeInterval(-1800))
         ], nextCursor: nil, engagement: ActivityEngagementSummary(activityID: activityID, likeCount: 8, commentCount: 2, viewerHasLiked: true))
     }
     func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] { [] }

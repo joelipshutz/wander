@@ -55,10 +55,10 @@ final class ClipServiceTests: XCTestCase {
         let token = String(repeating: "a", count: 48)
         let cases: [(String, String, [String], Bool)] = [
             ("places/\(place.id)", place.title, ["share_card_preview", "public_web_preview"], false),
-            ("lists/00000000-0000-0000-0000-000000000408", "Shared List", ["share_card_preview"], true),
-            ("activities/00000000-0000-0000-0000-000000000408", "Shared Activity", ["share_card_preview"], true),
-            ("profiles/fixture_user", "Shared Map", ["share_card_preview", "public_web_preview"], true),
-            ("invites/\(token)", "You’re Invited To A List On Astir", ["share_card_preview", "public_web_preview"], false)
+            ("lists/00000000-0000-0000-0000-000000000408", "Shared list", ["share_card_preview"], true),
+            ("activities/00000000-0000-0000-0000-000000000408", "Shared activity", ["share_card_preview"], true),
+            ("profiles/fixture_user", "Shared map", ["share_card_preview", "public_web_preview"], true),
+            ("invites/\(token)", "You’re invited to a list on Astir", ["share_card_preview", "public_web_preview"], false)
         ]
         for (path, title, expectedCalls, needsSignIn) in cases {
             let route = try XCTUnwrap(AppClipRoute(url: URL(string: "https://astirmovement.com/cards/\(path)?card=\(token)")!))

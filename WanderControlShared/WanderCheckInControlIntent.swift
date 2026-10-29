@@ -37,13 +37,13 @@ enum WanderControlDestination: String, AppEnum {
     case checkInHere
 
     static let typeDisplayRepresentation = TypeDisplayRepresentation(
-        name: "Astir Destination"
+        name: "Astir destination"
     )
 
     static let caseDisplayRepresentations: [Self: DisplayRepresentation] = [
         .checkInHere: DisplayRepresentation(
-            title: "Check-In",
-            subtitle: "Choose And Save The Place Where You Are"
+            title: "Check-in",
+            subtitle: "Choose and save the place where you are"
         )
     ]
 
@@ -57,9 +57,9 @@ enum WanderControlDestination: String, AppEnum {
 
 @available(iOS 18.0, *)
 struct WanderOpenCheckInControlIntent: OpenIntent {
-    static let title: LocalizedStringResource = "Check-In"
+    static let title: LocalizedStringResource = "Check-in"
     static let description = IntentDescription(
-        "Opens Astir To Choose And Save The Place Where You Are."
+        "Opens Astir to choose and save the place where you are."
     )
     static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 

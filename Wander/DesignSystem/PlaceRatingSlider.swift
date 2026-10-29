@@ -1,6 +1,6 @@
 import SwiftUI
 
-#Preview("Rating Scale · Dark") {
+#Preview("Rating scale · Dark") {
     VStack(spacing: 20) {
         ForEach([1.0, 3.0, 5.0], id: \.self) { score in
             PlaceRatingSlider(score: .constant(score))
@@ -12,7 +12,7 @@ import SwiftUI
     .preferredColorScheme(.dark)
 }
 
-#Preview("Rating Scale · Light") {
+#Preview("Rating scale · Light") {
     VStack(spacing: 20) {
         ForEach([1.0, 3.0, 5.0], id: \.self) { score in
             PlaceRatingSlider(score: .constant(score))
@@ -41,7 +41,7 @@ struct PlaceRatingReaction: Equatable {
     }
 
     var accessibilityValue: String {
-        "\(PlaceRating.display(score)) Out Of 5, \(label)"
+        "\(PlaceRating.display(score)) out of 5, \(label.lowercased())"
     }
 
     static func resolve(_ score: Double) -> PlaceRatingReaction {
@@ -54,7 +54,7 @@ struct PlaceRatingReaction: Equatable {
         case 3: "Mid"
         case 3.5: "Okayyy"
         case 4: "Yeah"
-        case 4.5: "Oh Baby"
+        case 4.5: "Oh baby"
         default: "Wow"
         }
         return PlaceRatingReaction(score: normalized, label: label)
@@ -163,7 +163,7 @@ struct PlaceRatingSlider: View {
                         .font(AstirTypography.label)
                         .foregroundStyle(brandMode.secondaryText)
 
-                    Text("5 Is Best")
+                    Text("5 is best")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText.opacity(0.72))
                 }
@@ -224,7 +224,7 @@ struct PlaceRatingSlider: View {
         .accessibilityIdentifier("place-rating-slider")
         .accessibilityLabel("Rating")
         .accessibilityValue(reaction.accessibilityValue)
-        .accessibilityHint("Swipe Up Or Down To Change The Rating By Half A Point.")
+        .accessibilityHint("Swipe up or down to change the rating by half a point.")
         .accessibilityAdjustableAction(adjustRating)
         .sensoryFeedback(.selection, trigger: selectionFeedbackTrigger)
     }

@@ -165,7 +165,7 @@ struct ProfilePhotoCropView: View {
                     cropCanvas(viewportSize: viewportSize)
                         .frame(width: side, height: side)
 
-                    Text("Pinch To Zoom. Drag To Reposition.")
+                    Text("Pinch to zoom. Drag to reposition.")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.72))
                         .padding(.top, WanderTheme.spacing6)
@@ -193,8 +193,8 @@ struct ProfilePhotoCropView: View {
                     .padding(.horizontal, WanderTheme.spacing8)
                     .padding(.top, WanderTheme.spacing4)
                     .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Photo Zoom")
-                    .accessibilityValue("\(Int(crop.scale * 100)) Percent")
+                    .accessibilityLabel("Photo zoom")
+                    .accessibilityValue("\(Int(crop.scale * 100)) percent")
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -222,7 +222,7 @@ struct ProfilePhotoCropView: View {
                     }
                 }
             }
-            .navigationTitle("Crop Photo")
+            .navigationTitle("Crop photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -263,8 +263,8 @@ struct ProfilePhotoCropView: View {
         .clipped()
         .simultaneousGesture(magnificationGesture(viewportSize: viewportSize))
         .simultaneousGesture(dragGesture(viewportSize: viewportSize))
-        .accessibilityLabel("Profile Photo Crop")
-        .accessibilityHint("Pinch To Zoom And Drag To Reposition The Photo Inside The Circle")
+        .accessibilityLabel("Profile photo crop")
+        .accessibilityHint("Pinch to zoom and drag to reposition the photo inside the circle")
     }
 
     private func magnificationGesture(viewportSize: CGSize) -> some Gesture {
@@ -314,7 +314,7 @@ struct ProfilePhotoCropView: View {
             }
             choose(data, preview)
         } catch {
-            errorMessage = "That Crop Couldn’t Be Saved. Try Again."
+            errorMessage = "That crop couldn’t be saved. Try again."
             isSaving = false
         }
     }

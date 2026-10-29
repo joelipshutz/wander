@@ -491,8 +491,8 @@ final class SharedPlaceImportInboxDrainerTests: XCTestCase {
             entitlements["com.apple.security.application-groups"] as? [String],
             [SharedPlaceImportInbox.appGroupIdentifier]
         )
-        XCTAssertTrue(shareController.contains("Import Places"))
-        XCTAssertTrue(shareController.contains("Start Import"))
+        XCTAssertTrue(shareController.contains("Import places"))
+        XCTAssertTrue(shareController.contains("Start import"))
         XCTAssertTrue(shareController.contains("linkField.text = sharedLinkString"))
         XCTAssertTrue(shareController.contains("try inbox.capture(captureInputs)"))
         XCTAssertFalse(shareController.contains(".open(appURL"))

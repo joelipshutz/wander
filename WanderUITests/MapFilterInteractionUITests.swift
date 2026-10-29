@@ -690,7 +690,7 @@ final class MapFilterInteractionUITests: XCTestCase {
             let coordinates = app.staticTexts["map.droppedPinCoordinates"]
             XCTAssertTrue(coordinates.waitForExistence(timeout: 2))
             coordinates.press(forDuration: 1)
-            XCTAssertTrue(app.buttons["Copy Coordinates"].waitForExistence(timeout: 2))
+            XCTAssertTrue(app.buttons["Copy coordinates"].waitForExistence(timeout: 2))
         }
     }
 
@@ -709,7 +709,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
         let nearby = app.buttons["map.nearby"]
         XCTAssertTrue(nearby.waitForExistence(timeout: 5))
-        XCTAssertEqual(nearby.value as? String, "Location Permission Needed")
+        XCTAssertEqual(nearby.value as? String, "Location permission needed")
 
         nearby.tap()
         XCTAssertTrue(
@@ -819,7 +819,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(panel.waitForNonExistence(timeout: 2))
         XCTAssertTrue((you.value as? String)?.contains("Selected") == true)
         XCTAssertTrue(
-            (app.buttons["map.filter.more"].value as? String)?.contains("No Additional Filters") == true
+            (app.buttons["map.filter.more"].value as? String)?.contains("No additional filters") == true
         )
     }
 
@@ -911,7 +911,7 @@ final class MapFilterInteractionUITests: XCTestCase {
         app.buttons["Map"].tap()
 
         XCTAssertTrue(
-            (app.buttons["map.filter.more"].value as? String)?.contains("No Additional Filters") == true
+            (app.buttons["map.filter.more"].value as? String)?.contains("No additional filters") == true
         )
     }
 
@@ -927,7 +927,7 @@ final class MapFilterInteractionUITests: XCTestCase {
 
     private func assertOneSelectedFilter(in app: XCUIApplication) {
         XCTAssertTrue(
-            (app.buttons["map.filter.more"].value as? String)?.contains("1 Selected Filter") == true
+            (app.buttons["map.filter.more"].value as? String)?.contains("1 selected filter") == true
         )
     }
 }

@@ -61,8 +61,8 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
             throw ShareCardPreparationError.artwork
         }
         XCTAssertTrue(transport.path.isEmpty)
-        XCTAssertEqual(transport.params["input_title"], "Shared On Astir")
-        XCTAssertEqual(shared.subject, "Shared On Astir")
+        XCTAssertEqual(transport.params["input_title"], "Shared on Astir")
+        XCTAssertEqual(shared.subject, "Shared on Astir")
     }
 
     func testMissingPublisherAndUnsupportedURLsFailBeforeRendering() async {
@@ -212,7 +212,7 @@ final class ShareCardPreviewRepositoryTests: XCTestCase {
         XCTAssertTrue(transport.bucket.isEmpty)
         XCTAssertTrue(transport.path.isEmpty)
         XCTAssertEqual(transport.params["input_image_path"], "")
-        XCTAssertEqual(shared.subject, "Shared On Astir")
+        XCTAssertEqual(shared.subject, "Shared on Astir")
         XCTAssertEqual(transport.params["input_kind"], "profile")
         XCTAssertEqual(transport.params["input_identifier"], "user_ryan")
         XCTAssertEqual(shared.items, [shared.item])

@@ -325,7 +325,7 @@ struct ProfileOwnerHome: View {
                 if let yourMapAction {
                     ProfileYourMapPreview(
                         insights: insights,
-                        title: "\(ownerLabel) Map",
+                        title: "\(ownerLabel) map",
                         action: yourMapAction
                     )
                     .id(ProfileHomeScrollAnchor.map)
@@ -457,7 +457,7 @@ struct ProfileOwnerHome: View {
             } else if let memberActions {
                 ProfileHeaderActionButton(
                     systemImage: "ellipsis",
-                    accessibilityLabel: "More Profile Actions"
+                    accessibilityLabel: "More profile actions"
                 ) {
                     showsMemberActions.toggle()
                 }
@@ -510,10 +510,10 @@ struct ProfileOwnerHome: View {
                     return ShareCardImages(avatar: avatar, map: map)
                 }
             ) {
-                AstirIdentityActionLabel(title: "Share Profile")
+                AstirIdentityActionLabel(title: "Share profile")
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Share Profile")
+            .accessibilityLabel("Share profile")
             .walkthroughEmphasis(mode.isOwner ? .profileShare : nil)
             .walkthroughTarget(mode.isOwner ? .profileShare : nil)
         }
@@ -568,7 +568,7 @@ struct ProfileOwnerHome: View {
             if mode.isOwner {
                 HStack(spacing: WanderTheme.spacing2) {
                     Button(action: editAction) {
-                        AstirIdentityActionLabel(title: "Edit Profile")
+                        AstirIdentityActionLabel(title: "Edit profile")
                     }
                     .buttonStyle(.plain)
                     profileShareButton
@@ -593,12 +593,12 @@ struct ProfileOwnerHome: View {
             Button(action: avatarAction) { profileAvatar }
                 .buttonStyle(.plain)
                 .disabled(!hasProfilePhoto)
-                .accessibilityLabel(hasProfilePhoto ? "View Profile Photo" : "Profile Photo Not Set")
-                .accessibilityHint(hasProfilePhoto ? "Opens The Profile Photo Full Screen" : "Use Edit Profile To Add A Photo")
+                .accessibilityLabel(hasProfilePhoto ? "View profile photo" : "Profile photo not set")
+                .accessibilityHint(hasProfilePhoto ? "Opens the profile photo full screen" : "Use Edit profile to add a photo")
                 .accessibilityIdentifier("profile.header.photo")
         } else {
             profileAvatar
-                .accessibilityLabel("\(profile.displayName)'s Profile Photo")
+                .accessibilityLabel("\(profile.displayName)'s profile photo")
                 .accessibilityIdentifier("profile.header.photo")
         }
     }
@@ -637,7 +637,7 @@ struct ProfileOwnerHome: View {
     private var memberSinceText: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
-        return "Member Since \(formatter.string(from: profile.createdAt))"
+        return "Member since \(formatter.string(from: profile.createdAt))"
     }
 
     private func normalized(_ value: String?) -> String? {
@@ -666,7 +666,7 @@ private struct ProfileMemberActionsPopover: View {
             }
 
             actionButton(
-                title: actions.isMuted ? "Unmute Activity" : "Mute Activity",
+                title: actions.isMuted ? "Unmute activity" : "Mute activity",
                 systemImage: actions.isMuted ? "speaker.wave.2.fill" : "speaker.slash.fill",
                 action: actions.toggleMuteAction
             )
@@ -688,7 +688,7 @@ private struct ProfileMemberActionsPopover: View {
         .padding(.vertical, WanderTheme.spacing1)
         .background(brandMode.raisedBackground)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Profile Actions")
+        .accessibilityLabel("Profile actions")
     }
 
     private func actionButton(
@@ -755,9 +755,9 @@ struct ProfileInvitationBadgeState: Equatable {
 
     var accessibilityValue: String {
         switch pendingInvitationCount {
-        case 0: "No New Notifications"
-        case 1: "1 New Notification"
-        default: "\(pendingInvitationCount) New Notifications"
+        case 0: "No new notifications"
+        case 1: "1 new notification"
+        default: "\(pendingInvitationCount) new notifications"
         }
     }
 }
@@ -777,7 +777,7 @@ private struct ProfileInvitationButton: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Notifications")
         .accessibilityValue(badgeState.accessibilityValue)
-        .accessibilityHint("Opens Followers, Plans, And Check-In Invitations")
+        .accessibilityHint("Opens followers, plans, and check-in invitations")
         .accessibilityIdentifier("profile.checkInInvitations")
         .anchorPreference(key: ProfileNotificationBellAnchorKey.self, value: .bounds) { $0 }
     }
@@ -848,10 +848,10 @@ private struct ProfileInCommonPlacesRow: View {
                 avatarPair
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(count) \(count == 1 ? "Place" : "Places") In Common")
+                    Text("\(count) \(count == 1 ? "place" : "places") in common")
                         .font(AstirTypography.cardTitle)
                         .foregroundStyle(brandMode.primaryText)
-                    Text("See Where Your Maps Overlap")
+                    Text("See where your maps overlap")
                         .font(AstirTypography.caption)
                         .foregroundStyle(brandMode.secondaryText)
                 }
@@ -873,8 +873,8 @@ private struct ProfileInCommonPlacesRow: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(count) \(count == 1 ? "Place" : "Places") In Common With \(profile.displayName)")
-        .accessibilityHint("Opens Shared Places")
+        .accessibilityLabel("\(count) \(count == 1 ? "place" : "places") in common with \(profile.displayName)")
+        .accessibilityHint("Opens shared places")
     }
 
     private var avatarPair: some View {
@@ -1014,9 +1014,9 @@ struct ProfileActivityFilterControl: View {
 
     private func accessibilityLabel(for filter: ProfileActivityFilter) -> String {
         switch filter {
-        case .all: "All Activity"
-        case .checkIns: "\(CheckInCopy.pluralTitle) Activity, \(checkInCount)"
-        case .wanna: "Wanna Activity, \(wannaCount)"
+        case .all: "All activity"
+        case .checkIns: "\(CheckInCopy.pluralTitle) activity, \(checkInCount)"
+        case .wanna: "Wanna activity, \(wannaCount)"
         }
     }
 }
@@ -1090,7 +1090,7 @@ private struct ProfileRecentActivitySection: View {
                 allActivityAction(filter)
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text("See More")
+                    Text("See more")
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .black))
@@ -1114,9 +1114,9 @@ private struct ProfileRecentActivitySection: View {
 
     private var emptyStateText: String {
         switch filter {
-        case .all: "Activity Will Show Up Here."
-        case .checkIns: "No Check-Ins Yet."
-        case .wanna: "No Wanna Activity Yet."
+        case .all: "Activity will show up here."
+        case .checkIns: "No check-ins yet."
+        case .wanna: "No Wanna activity yet."
         }
     }
 }
@@ -1181,9 +1181,9 @@ struct ProfileActivityRow: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
-            "\(item.visiblePlace.place.canonicalName), \(item.kind.title), \(timestamp.date) At \(timestamp.time)"
+            "\(item.visiblePlace.place.canonicalName), \(item.kind.title), \(timestamp.date) at \(timestamp.time)"
         )
-        .accessibilityHint("Opens This Place At Its Activity")
+        .accessibilityHint("Opens this place at its activity")
     }
 
     private var statusColor: Color {
@@ -1238,7 +1238,7 @@ private struct ProfileSaveStreakRow: View {
                 .accessibilityHidden(true)
 
                 if summary.bestCount > 0 {
-                    Text("\(summary.bestCount) Best")
+                    Text("\(summary.bestCount) best")
                         .font(AstirTypography.metadata)
                         .foregroundStyle(brandMode.secondaryText)
                         .lineLimit(1)
@@ -1256,24 +1256,24 @@ private struct ProfileSaveStreakRow: View {
 
     private var streakTitle: String {
         if summary.isRecoveryAvailable {
-            return "Restore \(summary.recoverableCount)-Day Streak"
+            return "Restore \(summary.recoverableCount)-day streak"
         }
-        guard summary.currentCount > 0 else { return "Start A Streak" }
-        return "\(summary.currentCount)-Day Streak"
+        guard summary.currentCount > 0 else { return "Start a streak" }
+        return "\(summary.currentCount)-day streak"
     }
 
     private var accessibilityLabel: String {
         if summary.isRecoveryAvailable {
-            return "Your \(summary.recoverableCount) Day Save Streak Can Be Restored Today. Check In Or Save A Place To Use Your Streak Save."
+            return "Your \(summary.recoverableCount) day save streak can be restored today. Check in or save a place to use your Streak Save."
         }
         guard summary.currentCount > 0 else {
-            return "No Active Save Streak. Check In Or Save A Wanna Place To Start One."
+            return "No active save streak. Check in or save a Wanna place to start one."
         }
-        let todayStatus = summary.isTodayCovered ? "Today Is Covered." : "Save Today To Keep It Going."
+        let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
         let streakSaveStatus = summary.displayedDayStates.contains(.streakSave)
-            ? "One Missed Day Was Protected By A Streak Save."
+            ? "One missed day was protected by a Streak Save."
             : ""
-        return "\(summary.currentCount) Day Save Streak. Best Streak \(summary.bestCount) Days. \(todayStatus) \(streakSaveStatus)"
+        return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus) \(streakSaveStatus)"
     }
 
     private func dayFill(_ state: SaveStreakDayState) -> Color {
@@ -1329,7 +1329,7 @@ struct SaveStreakProfileRowMockup: View {
             ProfileSaveStreakRow(summary: summary)
 
             VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-                Text("Joe's Calendar")
+                Text("Joe's calendar")
                     .font(.system(size: 23, weight: .black))
                 Text("July 2026")
                     .font(.system(size: 14, weight: .bold))
@@ -1379,7 +1379,7 @@ private struct ProfileCalendarSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(ownerLabel) Calendar")
+                    Text("\(ownerLabel) calendar")
                         .font(AstirTypography.sectionTitle)
                     Text(monthTitle)
                         .font(AstirTypography.bodySmall)
@@ -1396,7 +1396,7 @@ private struct ProfileCalendarSection: View {
             .walkthroughTarget(.profileCalendar)
 
             HStack(spacing: 0) {
-                ProfileCalendarMetric(value: insights.monthSpotCount, label: "Spots Ranked")
+                ProfileCalendarMetric(value: insights.monthSpotCount, label: "Spots ranked")
                 ProfileCalendarMetric(value: insights.monthCategoryCount, label: "Categories")
                 ProfileCalendarMetric(value: insights.monthCityCount, label: "Cities")
             }
@@ -1431,7 +1431,7 @@ private struct ProfileCalendarSection: View {
                                     .contentShape(Rectangle())
                                     .onTapGesture { dateAction(summary) }
                                     .accessibilityAddTraits(.isButton)
-                                    .accessibilityHint("Shows Places From This Date")
+                                    .accessibilityHint("Shows places from this date")
                                     .accessibilityAction { dateAction(summary) }
                             } else {
                                 ProfileCalendarDayCell(date: nil, summary: nil, isToday: false)
@@ -1571,9 +1571,9 @@ struct ProfileCalendarDayCell: View {
     private var accessibilityLabel: String {
         guard let date else { return "" }
         let base = date.formatted(.dateTime.month(.wide).day())
-        let today = isToday ? ", Today" : ""
+        let today = isToday ? ", today" : ""
         guard let summary, summary.visitCount > 0 else {
-            return "\(base)\(today), No Activity"
+            return "\(base)\(today), no activity"
         }
         return "\(base)\(today), \(CheckInCopy.count(summary.visitCount))"
     }
@@ -1611,12 +1611,12 @@ private struct ProfileCalendarLegend: View {
     @Environment(\.astirBrandMode) private var brandMode
     var body: some View {
         HStack(spacing: WanderTheme.spacing2) {
-            item(state: .visit, title: CheckInCopy.pluralNoun)
+            item(state: .visit, title: CheckInCopy.pluralTitle)
         }
         .font(AstirTypography.caption)
         .foregroundStyle(brandMode.secondaryText)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Calendar Legend: Filled Is Check-Ins")
+        .accessibilityLabel("Calendar legend: filled is check-ins")
     }
 
     private func item(state: ProfileCalendarActivityState, title: String) -> some View {
@@ -1660,7 +1660,7 @@ private struct ProfileYourMapPreview: View {
                 .frame(height: 178)
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
 
-                Text("Slice Your Place Diary By Time, Status, Category, City, Country, Tags, Ratings, And Repeat Visits.")
+                Text("Slice your place diary by time, status, category, city, country, tags, ratings, and repeat visits.")
                     .font(AstirTypography.caption)
                     .foregroundStyle(brandMode.secondaryText)
                     .multilineTextAlignment(.leading)
@@ -1678,16 +1678,16 @@ private struct ProfileYourMapPreview: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title), \(countSummary)")
-        .accessibilityHint("Opens This Full Interactive Place Diary")
+        .accessibilityHint("Opens this full interactive place diary")
         .accessibilityIdentifier("profile.yourMap.preview")
         .walkthroughTarget(.profileMap)
         .walkthroughEmphasis(.profileMap)
     }
 
     private var countSummary: String {
-        let cityLabel = insights.mapCityCount == 1 ? "City" : "Cities"
-        let placeLabel = insights.mapPlaceCount == 1 ? "Place" : "Places"
-        return "\(insights.mapPlaceCount) \(placeLabel) Across \(insights.mapCityCount) \(cityLabel)"
+        let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
+        let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
+        return "\(insights.mapPlaceCount) \(placeLabel) across \(insights.mapCityCount) \(cityLabel)"
     }
 }
 
@@ -1714,7 +1714,7 @@ private struct ProfileMapSection: View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
             HStack(alignment: .top, spacing: WanderTheme.spacing2) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(ownerLabel) Map")
+                    Text("\(ownerLabel) map")
                         .font(AstirTypography.sectionTitle)
                     Text(mapCountSummary)
                         .font(AstirTypography.bodySmall)
@@ -1723,21 +1723,21 @@ private struct ProfileMapSection: View {
                 Spacer()
                 if let shareContent = mapShareContent {
                     ShareCardButton(content: shareContent,
-                        card: ShareCardContent(kind: .map, name: "\(profile.displayName)’s Map", ownerName: profile.displayName, count: insights.mapPlaceCount),
+                        card: ShareCardContent(kind: .map, name: "\(profile.displayName)’s map", ownerName: profile.displayName, count: insights.mapPlaceCount),
                         loadImages: { ShareCardImages(map: shareImageFileURL.flatMap { UIImage(contentsOfFile: $0.path) }) }) {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Share \(profile.displayName)'s Map")
-                    .accessibilityHint("Shares This Map As A Linked Card")
+                    .accessibilityLabel("Share \(profile.displayName)'s map")
+                    .accessibilityHint("Shares this map as a linked card")
                 } else if profile.serverID != nil {
                     Button {} label: {
                         ProfileHeaderActionLabel(systemImage: "square.and.arrow.up")
                     }
                     .buttonStyle(.plain)
                     .disabled(true)
-                    .accessibilityLabel("Share \(profile.displayName)'s Map")
-                    .accessibilityHint("Available When The Map Image Is Ready")
+                    .accessibilityLabel("Share \(profile.displayName)'s map")
+                    .accessibilityHint("Available when the map image is ready")
                 }
             }
             .walkthroughTarget(.profileMap)
@@ -1750,7 +1750,7 @@ private struct ProfileMapSection: View {
                 .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusSmall))
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Map Of \(ownerLabel) Check-In And Wanna Places")
+                .accessibilityLabel("Map of \(ownerLabel) Check-in and Wanna places")
 
             ProfileMapSummaryPicker(selection: $selectedSummary)
 
@@ -1772,7 +1772,7 @@ private struct ProfileMapSection: View {
                                 ProfileMapSummaryRow(item: item)
                             }
                             .buttonStyle(.plain)
-                            .accessibilityHint("Shows Matching Check-In And Wanna Places")
+                            .accessibilityHint("Shows matching Check-in and Wanna places")
 
                             ProfileMapSummaryShareButton(
                                 profile: profile,
@@ -1810,9 +1810,9 @@ private struct ProfileMapSection: View {
     }
 
     private var mapCountSummary: String {
-        let cityLabel = insights.mapCityCount == 1 ? "City" : "Cities"
-        let placeLabel = insights.mapPlaceCount == 1 ? "Place" : "Places"
-        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) Saved \(placeLabel)"
+        let cityLabel = insights.mapCityCount == 1 ? "city" : "cities"
+        let placeLabel = insights.mapPlaceCount == 1 ? "place" : "places"
+        return "\(insights.mapCityCount) \(cityLabel)  •  \(insights.mapPlaceCount) saved \(placeLabel)"
     }
 
     private var summaryItems: [ProfileSummaryItem] {
@@ -1825,9 +1825,9 @@ private struct ProfileMapSection: View {
 
     private var emptyCopy: String {
         switch selectedSummary {
-        case .places: "\(ownerLabel.capitalized) Check-In And Wanna Places Will Appear Here."
-        case .cities: "Cities Appear After \(ownerLabel) Saved Places Have Location Details."
-        case .countries: "Countries Appear After \(ownerLabel) Saved Places Have Location Details."
+        case .places: "\(ownerLabel.capitalized) Check-in and Wanna places will appear here."
+        case .cities: "Cities appear after \(ownerLabel) saved places have location details."
+        case .countries: "Countries appear after \(ownerLabel) saved places have location details."
         }
     }
 }
@@ -1850,7 +1850,7 @@ private struct ProfileMapSummaryPicker: View {
             )
         )
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Map Summary")
+        .accessibilityLabel("Map summary")
     }
 }
 
@@ -2078,7 +2078,7 @@ private struct ProfileMapSummaryRow: View {
                 Text(item.title)
                     .font(AstirTypography.cardTitle)
                     .foregroundStyle(brandMode.primaryText)
-                Text("\(item.count) \(item.count == 1 ? "Place" : "Places")")
+                Text("\(item.count) \(item.count == 1 ? "place" : "places")")
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
@@ -2142,10 +2142,10 @@ private struct ProfileMapSummaryShareButton: View {
                 )
             }
         }
-        .alert("Couldn't Prepare This Map", isPresented: $showsShareError) {
+        .alert("Couldn't prepare this map", isPresented: $showsShareError) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Check Your Connection And Try Sharing Again.")
+            Text("Check your connection and try sharing again.")
         }
         .onDisappear(perform: cancelSharePreparation)
     }
@@ -2184,7 +2184,7 @@ private struct ProfileMapSummaryShareButton: View {
                 showsShareError = true
                 UIAccessibility.post(
                     notification: .announcement,
-                    argument: "Couldn't Prepare This Map. Check Your Connection And Try Sharing Again."
+                    argument: "Couldn't prepare this map. Check your connection and try sharing again."
                 )
                 return
             }
@@ -2200,9 +2200,9 @@ private struct ProfileMapSummaryShareButton: View {
 
     private var shareAccessibilityHint: String {
         guard profile.serverID != nil else {
-            return "Available After This Profile Finishes Syncing"
+            return "Available after this profile finishes syncing"
         }
-        return "Shares A Linked Map Of These \(item.count) Saved \(item.count == 1 ? "Place" : "Places")"
+        return "Shares a linked map of these \(item.count) saved \(item.count == 1 ? "place" : "places")"
     }
 
     private func cancelSharePreparation() {

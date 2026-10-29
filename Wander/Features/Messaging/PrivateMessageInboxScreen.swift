@@ -17,26 +17,26 @@ struct PrivateMessageInboxScreen: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Messages").font(AstirTypography.screenTitle).foregroundStyle(brand.primaryText)
-                    Label("Private · Between Mutual Friends", systemImage: "lock.fill")
+                    Label("Private · between mutual friends", systemImage: "lock.fill")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
                 if (repository as? any PrivateMessageSimulationIdentifying)?.isSimulation == true {
                     PrivateMessagingSimulationLabel()
                 }
                 if state.isLoading && state.conversations.isEmpty {
-                    ProgressView("Loading Conversations…")
+                    ProgressView("Loading conversations…")
                         .font(AstirTypography.bodySmall)
                         .frame(maxWidth: .infinity, minHeight: 150)
                         .accessibilityIdentifier("messaging.inbox.loading")
                 } else if state.failed {
                     PrivateMessagingNotice(symbol: "bubble.left.and.exclamationmark.bubble.right",
-                                           title: "Couldn’t Load Messages",
-                                           detail: "Try Again When You’re Connected. Only Conversations You Can Still Access Will Appear.",
-                                           actionTitle: "Try Again", action: refresh)
+                                           title: "Couldn’t load messages",
+                                           detail: "Try again when you’re connected. Only conversations you can still access will appear.",
+                                           actionTitle: "Try again", action: refresh)
                 } else if state.hasLoaded && state.conversations.isEmpty {
                     PrivateMessagingNotice(symbol: "bubble.left.and.bubble.right",
-                                           title: "Start With A Place",
-                                           detail: "Reply Privately To An Activity From A Mutual Friend. Your Conversations Will Appear Here.")
+                                           title: "Start with a place",
+                                           detail: "Reply privately to an activity from a mutual friend. Your conversations will appear here.")
                 } else {
                     LazyVStack(spacing: 0) {
                         ForEach(state.conversations) { conversation in
@@ -59,7 +59,7 @@ struct PrivateMessageInboxScreen: View {
                         } label: {
                             HStack {
                                 if state.isLoadingMore { ProgressView() }
-                                Text(state.isLoadingMore ? "Loading…" : "More Conversations")
+                                Text(state.isLoadingMore ? "Loading…" : "More conversations")
                             }.frame(maxWidth: .infinity, minHeight: 44)
                         }
                         .font(AstirTypography.control).foregroundStyle(brand.accentText)
@@ -75,7 +75,7 @@ struct PrivateMessageInboxScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: refresh) { Image(systemName: "arrow.clockwise").frame(width: 44, height: 44) }
                     .foregroundStyle(brand.accentText).disabled(state.isLoading)
-                    .accessibilityLabel("Refresh Messages").accessibilityIdentifier("messaging.inbox.refresh")
+                    .accessibilityLabel("Refresh messages").accessibilityIdentifier("messaging.inbox.refresh")
             }
         }
         .refreshable { await state.refresh(userID: userID, repository: repository) }
@@ -108,7 +108,7 @@ private struct PrivateConversationRow: View {
                         Text(date, style: .relative).font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                     }
                 }
-                Text(conversation.lastMessagePreview ?? "No Messages Yet")
+                Text(conversation.lastMessagePreview ?? "No messages yet")
                     .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText).lineLimit(2)
             }
             if conversation.unreadCount > 0 {
@@ -118,8 +118,8 @@ private struct PrivateConversationRow: View {
         .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
         .padding(.vertical, 16).contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityValue(conversation.unreadCount > 0 ? "\(conversation.unreadCount) Unread Messages" : "No Unread Messages")
-        .accessibilityHint("Opens Your Private Conversation")
+        .accessibilityValue(conversation.unreadCount > 0 ? "\(conversation.unreadCount) unread messages" : "No unread messages")
+        .accessibilityHint("Opens your private conversation")
         .sessionReplayMasked()
     }
 

@@ -501,7 +501,7 @@ struct PlaceVisibilityIconPill: View {
             .background(includeBackground ? WanderTheme.surfaceSand.color : Color.clear)
             .foregroundStyle(WanderTheme.textInk.color)
             .clipShape(Capsule())
-            .accessibilityLabel("Stealth Mode Enabled")
+            .accessibilityLabel("Stealth mode enabled")
         }
     }
 
@@ -517,7 +517,7 @@ struct PlaceVisibilityStealthToggle: View {
     var helperCopy: (PlaceVisibility) -> String
 
     init(
-        title: String = "Stealth Mode",
+        title: String = "Stealth mode",
         visibility: Binding<PlaceVisibility>,
         showsContainer: Bool = true,
         helperCopy: @escaping (PlaceVisibility) -> String = { $0.stealthModeHelperCopy }
@@ -567,7 +567,7 @@ struct PlaceVisibilityStealthToggle: View {
         }
         .toggleStyle(.switch)
         .tint(WanderTheme.textInk.color)
-        .accessibilityValue(visibility.isStealthModeEnabled ? "Private" : "Not Private")
+        .accessibilityValue(visibility.isStealthModeEnabled ? "Private" : "Not private")
     }
 
     private var isPrivate: Binding<Bool> {

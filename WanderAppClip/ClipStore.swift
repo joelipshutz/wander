@@ -39,7 +39,7 @@ final class ClipStore: ObservableObject {
         auth.resetPendingEmailVerification(); emailSent = false
         route = AppClipRoute(url: url); preview = nil; error = nil; success = nil
         savedIDs = []; joined = false; isWorking = false; isLoading = false
-        guard let route else { error = "This Link Can't Be Opened In Astir."; return }
+        guard let route else { error = "This link can't be opened in Astir."; return }
         analytics.opened(route.kind)
         reload()
     }
@@ -232,13 +232,13 @@ final class ClipStore: ObservableObject {
             let created = try await service.save(place)
             guard expected == generation, !Task.isCancelled else { return }
             savedIDs.insert(place.id)
-            success = created ? "Saved To Your Wanna Map" : "Already On Your Map"
+            success = created ? "Saved to your Wanna map" : "Already on your map"
             if created { analytics.saved() }
         case .join:
             guard !profile.isPrivate else { throw ClipError.privateProfile }
             let listID = try await service.join(route)
             guard expected == generation, !Task.isCancelled else { return }
-            joined = true; success = "You're On The List"
+            joined = true; success = "You're on the list"
             analytics.joined()
             pending = nil
             if let url = WanderDeepLinkRoute.sharedList(listID: listID).url,
@@ -252,7 +252,7 @@ final class ClipStore: ObservableObject {
                     preview = value
                 } catch {
                     guard expected == generation, !Task.isCancelled else { return }
-                    self.error = "Couldn't Load The List. Try Again."
+                    self.error = "Couldn't load the list. Try again."
                 }
             }
         case .viewProtected: break
@@ -266,7 +266,7 @@ final class ClipStore: ObservableObject {
     func prepareInstall() -> Bool {
         guard let route else { return false }
         do { try AppClipHandoff.save(route: route, userID: auth.state.session?.userID); return true }
-        catch { self.error = "Couldn't Keep This Link For The Full App. Try Again."; return false }
+        catch { self.error = "Couldn't keep this link for the full app. Try again."; return false }
     }
 
     private func work(_ operation: @escaping @MainActor () async throws -> Void) {
@@ -290,11 +290,11 @@ final class ClipStore: ObservableObject {
         if let error = error as? ClipError { return error.message }
         if let error = error as? AuthSessionError {
             switch error {
-            case .accountNotFound: return "No Account Found. Choose Create Account To Get Started."
-            case .emailAlreadyInUse: return "That Email Already Has An Account. Choose Sign In."
-            case .invalidVerificationCode: return "That Code Didn't Work. Check It And Try Again."
-            case .invalidCredentials: return "Check Your Email And Password, Then Try Again."
-            default: return "Couldn't Finish Signing In. Try Your Original Sign-In Method."
+            case .accountNotFound: return "No account found. Choose Create account to get started."
+            case .emailAlreadyInUse: return "That email already has an account. Choose Sign in."
+            case .invalidVerificationCode: return "That code didn't work. Check it and try again."
+            case .invalidCredentials: return "Check your email and password, then try again."
+            default: return "Couldn't finish signing in. Try your original sign-in method."
             }
         }
         return ClipError.connection.message

@@ -17,17 +17,17 @@ struct FeedActivityDisclosure: View {
                 Button {
                     openList?(list)
                 } label: {
-                    Text(group.primaryActivity.kind == .listItemAdded ? "Added To " : "Also Added To ")
+                    Text(group.primaryActivity.kind == .listItemAdded ? "Added to " : "Also added to ")
                         .foregroundStyle(brandMode.secondaryText)
                     + Text(list.name).foregroundStyle(brandMode.primaryText)
-                    + Text(group.lists.count > 1 ? " +\(group.lists.count - 1) More" : "")
+                    + Text(group.lists.count > 1 ? " +\(group.lists.count - 1) more" : "")
                         .foregroundStyle(brandMode.secondaryText)
                 }
                 .font(AstirTypography.bodySmall)
                 .buttonStyle(.plain)
                 .frame(minHeight: WanderTheme.tapMinimum, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .accessibilityHint("Opens List. Expand Activity To See All List Additions.")
+                .accessibilityHint("Opens list. Expand activity to see all list additions.")
             }
 
             Button {
@@ -36,7 +36,7 @@ struct FeedActivityDisclosure: View {
                 }
             } label: {
                 HStack(spacing: WanderTheme.spacing2) {
-                    Text(isExpanded ? "Hide Activity" : "View Activity")
+                    Text(isExpanded ? "Hide activity" : "View activity")
                     Text(group.activities.count.formatted())
                         .foregroundStyle(brandMode.secondaryText)
                     Spacer(minLength: 0)
@@ -49,8 +49,8 @@ struct FeedActivityDisclosure: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "Hide Activity" : "View Activity")
-            .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed"), \(group.activities.count) Activities")
+            .accessibilityLabel(isExpanded ? "Hide activity" : "View activity")
+            .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed"), \(group.activities.count) activities")
             .accessibilityIdentifier("feed.activity.\(group.id).disclosure")
 
             if isExpanded {
@@ -101,7 +101,7 @@ struct FeedActivityDisclosure: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(eventTitle(event)), \(event.occurredAt.formatted(date: .complete, time: .standard))")
-            .accessibilityHint("Opens Original Post And Comments")
+            .accessibilityHint("Opens original post and comments")
             .accessibilityIdentifier("feed.activity.\(event.id).sequenceEvent")
 
             if let list = event.list, event.kind == .listItemAdded {
@@ -114,7 +114,7 @@ struct FeedActivityDisclosure: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 20 + WanderTheme.spacing2)
-                .accessibilityLabel("View List \(list.name)")
+                .accessibilityLabel("View list \(list.name)")
             }
         }
     }
@@ -123,11 +123,11 @@ struct FeedActivityDisclosure: View {
 private extension FeedActivity {
     var sequenceTitle: String {
         switch kind {
-        case .placeBeen: "Checked In"
+        case .placeBeen: "Checked in"
         case .placeWannaGo: "Wanna Go"
-        case .listItemAdded: "Added To A List"
-        case .listCreated: "Created A List"
-        case .placeSaved: "Saved A Place"
+        case .listItemAdded: "Added to a list"
+        case .listCreated: "Created a list"
+        case .placeSaved: "Saved a place"
         }
     }
 

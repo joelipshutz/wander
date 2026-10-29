@@ -30,7 +30,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
 
         let picker = app.otherElements["map-list-picker.sheet"]
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Add To Lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
         XCTAssertTrue(app.buttons["map-list-picker.new-list"].exists)
         capture("REC-414 Discover shared list picker")
 
@@ -41,11 +41,11 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(availableList.waitForExistence(timeout: 5))
         let listID = availableList.identifier
         availableList.tap()
-        XCTAssertEqual(app.buttons["map-list-picker.apply"].label, "Add To 1 List")
+        XCTAssertEqual(app.buttons["map-list-picker.apply"].label, "Add to 1 list")
         app.buttons["map-list-picker.cancel"].tap()
 
         XCTAssertTrue(app.buttons[resultButtonID].waitForExistence(timeout: 5))
-        XCTAssertFalse(app.alerts["List Updated"].exists)
+        XCTAssertFalse(app.alerts["List updated"].exists)
         app.buttons[resultButtonID].tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons["map-list-picker.apply"].label, "Done")
@@ -53,16 +53,16 @@ final class MapPlaceListPickerUITests: XCTestCase {
         app.buttons[listID].tap()
         app.buttons["map-list-picker.apply"].tap()
 
-        let confirmation = app.alerts["List Updated"]
+        let confirmation = app.alerts["List updated"]
         XCTAssertTrue(confirmation.waitForExistence(timeout: 8))
         confirmation.buttons["OK"].tap()
         app.buttons[resultButtonID].tap()
         XCTAssertTrue(picker.waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons[listID].isEnabled)
-        XCTAssertTrue(app.buttons[listID].label.contains("Already In List"))
+        XCTAssertTrue(app.buttons[listID].label.contains("already in list"))
 
         app.buttons["map-list-picker.new-list"].tap()
-        XCTAssertTrue(app.textFields["LA Laptop Mornings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["LA laptop mornings"].waitForExistence(timeout: 5))
         capture("REC-414 Discover new list entry")
     }
 
@@ -86,7 +86,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
         collapsedListButton.tap()
 
         XCTAssertTrue(app.otherElements["map-list-picker.sheet"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Add To Lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
         XCTAssertTrue(app.buttons["map-list-picker.new-list"].exists)
         XCTAssertEqual(
             app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "Only yours")).count,
@@ -120,7 +120,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
 
         fullListButton.tap()
         XCTAssertTrue(app.otherElements["map-list-picker.sheet"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["Add To Lists"].exists)
+        XCTAssertTrue(app.staticTexts["Add to lists"].exists)
     }
 
     func testPerformanceFixtureCoversListsLifecycleWithoutStaleProjections() {
@@ -139,8 +139,8 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(mapButton.waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["28 places"].exists)
 
-        app.buttons["Add Places To List"].tap()
-        XCTAssertTrue(app.staticTexts["Add Places"].waitForExistence(timeout: 5))
+        app.buttons["Add places to list"].tap()
+        XCTAssertTrue(app.staticTexts["Add places"].waitForExistence(timeout: 5))
 
         let addSuggestion = app.buttons.matching(
             NSPredicate(
@@ -153,7 +153,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
         XCTAssertTrue(addSuggestion.waitForExistence(timeout: 8))
         addSuggestion.tap()
 
-        let silentAddition = app.buttons["Add Silently"]
+        let silentAddition = app.buttons["Add silently"]
         XCTAssertTrue(silentAddition.waitForExistence(timeout: 5))
         silentAddition.tap()
 
@@ -165,8 +165,8 @@ final class MapPlaceListPickerUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(refreshedMapButton.waitForExistence(timeout: 5))
         refreshedMapButton.tap()
-        XCTAssertTrue(app.buttons["Close List Map"].waitForExistence(timeout: 8))
-        app.buttons["Close List Map"].tap()
+        XCTAssertTrue(app.buttons["Close list map"].waitForExistence(timeout: 8))
+        app.buttons["Close list map"].tap()
         XCTAssertTrue(app.staticTexts["29 places"].waitForExistence(timeout: 5))
 
         let laterPlace = app.buttons["Open Museum 0085"]
@@ -289,7 +289,7 @@ final class MapPlaceListPickerUITests: XCTestCase {
             "The measured first swipe should move list-detail content."
         )
 
-        let suggestionsHeader = app.staticTexts["Suggested Places"]
+        let suggestionsHeader = app.staticTexts["Suggested places"]
         reveal(suggestionsHeader, in: app)
         XCTAssertTrue(suggestionsHeader.waitForExistence(timeout: 8))
 

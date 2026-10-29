@@ -24,10 +24,10 @@ final class SenderNotificationFlowUITests: XCTestCase {
         for index in 0..<3 { tapImport(index, app: app) }
         capture("import-ten-first-three")
         app.buttons["import.save"].tap()
-        let prompt = app.alerts["Silence Notifications For This Import?"]
+        let prompt = app.alerts["Silence notifications for this import?"]
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         capture("import-ten-native-choice")
-        prompt.buttons["No, Notify Followers"].tap()
+        prompt.buttons["No, notify followers"].tap()
         expectState(app, contains: "visits=3;silentVisits=3;")
         expectState(app, contains: "commits=1;manifest=3;importSilent=false;complete=true")
         let originalManifest = stateField("manifestIDs", app: app)
@@ -45,14 +45,14 @@ final class SenderNotificationFlowUITests: XCTestCase {
         let app = launch("importOne")
         tapImport(0, app: app)
         app.buttons["import.save"].tap()
-        let prompt = app.alerts["Silence Notifications For This Import?"]
+        let prompt = app.alerts["Silence notifications for this import?"]
         XCTAssertTrue(prompt.waitForExistence(timeout: 5))
         capture("import-one-native-choice")
         prompt.buttons["Cancel"].tap()
         expectState(app, contains: "commits=0;manifest=0;importSilent=unset")
         expectState(app, contains: "visits=0;silentVisits=0;")
         app.buttons["import.save"].tap()
-        prompt.buttons["Yes, Save Silently"].tap()
+        prompt.buttons["Yes, save silently"].tap()
         expectState(app, contains: "visits=1;silentVisits=1;")
         expectState(app, contains: "commits=1;manifest=1;importSilent=true;complete=true")
     }
@@ -62,19 +62,19 @@ final class SenderNotificationFlowUITests: XCTestCase {
         let wanna = app.buttons["import.wanna.sender-review-item-0"]
         reveal(wanna, app: app); wanna.tap()
         app.buttons["import.save"].tap()
-        app.alerts.buttons["No, Notify Followers"].tap()
+        app.alerts.buttons["No, notify followers"].tap()
         expectState(app, contains: "commits=1;manifest=0;importSilent=false;complete=true")
         selectRemainingCheckIns(app)
         app.buttons["import.save"].tap()
         expectState(app, contains: "visits=9;silentVisits=9;")
         expectState(app, contains: "commits=1;manifest=0;importSilent=false;complete=true")
-        XCTAssertFalse(app.alerts["Silence Notifications For This Import?"].exists)
+        XCTAssertFalse(app.alerts["Silence notifications for this import?"].exists)
         let consumed = launch("importConsumed")
         tapImport(0, app: consumed)
         consumed.buttons["import.save"].tap()
         expectState(consumed, contains: "commits=1;manifest=0;importSilent=true;complete=true")
         expectState(consumed, contains: "visits=1;silentVisits=1;")
-        XCTAssertFalse(consumed.alerts["Silence Notifications For This Import?"].exists)
+        XCTAssertFalse(consumed.alerts["Silence notifications for this import?"].exists)
         capture("import-consumed-no-new-prompt")
     }
 
@@ -159,7 +159,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let silent = app.switches["save.silent"]
             reveal(silent, app: app); activate(silent)
             if route == "friends" {
-                XCTAssertTrue(app.staticTexts["Skip Notifications For This Save. Visibility Stays The Same. People You Invite Will Still Receive Invitations."].exists)
+                XCTAssertTrue(app.staticTexts["Skip notifications for this save. Visibility stays the same. People you invite will still receive invitations."].exists)
             }
             capture("\(route)-silent")
             if route == "sharedVisit" {
@@ -267,9 +267,9 @@ final class SenderNotificationFlowUITests: XCTestCase {
 
     func testDiscoverQuickWannaDialogPersistsSilentChoice() {
         let app = launch("discover", extra: ["-WanderDiscoverSearchQuery", "Griffith"])
-        let wanna = app.buttons["Wanna Go"].firstMatch
+        let wanna = app.buttons["Wanna go"].firstMatch
         reveal(wanna, app: app); wanna.tap()
-        let silent = app.buttons["Add Silently"]
+        let silent = app.buttons["Add silently"]
         XCTAssertTrue(silent.waitForExistence(timeout: 5))
         capture("discover-quick-wanna-dialog")
         if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
@@ -285,12 +285,12 @@ final class SenderNotificationFlowUITests: XCTestCase {
             let app = launch("lists")
             let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Open LA laptop mornings")).firstMatch
             reveal(row, app: app); press(row)
-            let addPlaces = app.buttons["Add Places To List"]
+            let addPlaces = app.buttons["Add places to list"]
             XCTAssertTrue(addPlaces.waitForExistence(timeout: 8))
             if mode != "direct" { press(addPlaces) }
             let addition: XCUIElement
             if mode == "search" {
-                let search = app.textFields["Search Places"]
+                let search = app.textFields["Search places"]
                 XCTAssertTrue(search.waitForExistence(timeout: 5))
                 search.tap(); search.typeText("Sparrow")
                 addition = app.buttons["Add Sparrow Bakery to list"]
@@ -298,7 +298,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
                 addition = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Add ' AND label ENDSWITH ' to list' AND label != 'Add places to list'")).firstMatch
             }
             reveal(addition, app: app); press(addition)
-            let silent = app.buttons["Add Silently"]
+            let silent = app.buttons["Add silently"]
             XCTAssertTrue(silent.waitForExistence(timeout: 5))
             capture("list-\(mode)-dialog")
             silent.tap()
@@ -312,7 +312,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
         XCTAssertTrue(silent.waitForExistence(timeout: 10)); activate(silent)
         let create = app.buttons["map-list-picker.new-list"]
         reveal(create, app: app, down: true); create.tap()
-        let title = app.textFields["LA Laptop Mornings"]
+        let title = app.textFields["LA laptop mornings"]
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         title.tap(); title.typeText("Review new list")
         capture("new-list-inherits-silent")

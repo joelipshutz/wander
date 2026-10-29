@@ -151,9 +151,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(authView.contains("ASAuthorizationAppleIDButton"))
         XCTAssertTrue(authView.contains("style: .black"))
         XCTAssertFalse(authView.contains("style: brandMode.prefersDarkInterface ? .white : .black"))
-        XCTAssertTrue(authView.contains("Sign In With Google"))
-        XCTAssertTrue(authView.contains("Continue With Email"))
-        XCTAssertTrue(authView.contains("Button(\"Use A Password\")"))
+        XCTAssertTrue(authView.contains("Sign in with Google"))
+        XCTAssertTrue(authView.contains("Continue with email"))
+        XCTAssertTrue(authView.contains("Button(\"Use a password\")"))
         XCTAssertTrue(authView.contains("SecureField(\"Password\""))
         XCTAssertTrue(authView.contains("auth.signInWithPassword"))
         XCTAssertTrue(authView.contains("accessibilityIdentifier(\"auth.password\")"))
@@ -282,9 +282,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feed.contains("ToolbarItem(placement: .topBarTrailing)"))
         XCTAssertTrue(feed.contains("private struct FeedSearchLauncher"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
-        XCTAssertTrue(feed.contains("placeholders: [\"Search Places And People\"]"))
+        XCTAssertTrue(feed.contains("placeholders: [\"Search places and people\"]"))
         XCTAssertTrue(feed.contains("setSearchPresented(true)"))
-        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search Places And People\")"))
+        XCTAssertTrue(feed.contains(".accessibilityLabel(\"Search places and people\")"))
         XCTAssertTrue(feed.contains(".accessibilityIdentifier(\"feed.searchLauncher\")"))
         XCTAssertFalse(feed.contains(".fullScreenCover(isPresented: $isShowingSearch)"))
         XCTAssertFalse(feed.contains(".sheet(isPresented: $isShowingSearch)"))
@@ -325,7 +325,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(discover.contains("activePlaceSearchHeader"))
         XCTAssertTrue(discover.contains("searchFieldFocused = true"))
         XCTAssertTrue(discover.contains("private var walkthroughSearchBackLabel: String"))
-        XCTAssertTrue(discover.contains("\"Back To Feed\""))
+        XCTAssertTrue(discover.contains("\"Back to Feed\""))
         XCTAssertTrue(discover.contains(".accessibilityIdentifier(\"discover.searchBack\")"))
         XCTAssertFalse(discover.contains(".accessibilityIdentifier(\"discover.close\")"))
         XCTAssertTrue(discover.contains("accessibilityIdentifier: accessibilityIdentifier"))
@@ -372,7 +372,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertEqual(fixture["destructive_gesture_policy"], "full-swipe deletion is disabled")
         XCTAssertTrue(activityViews.contains("artworkAction: artworkAction"))
         XCTAssertTrue(activityViews.contains("photoViewerRoute = ActivityCommentsPhotoViewerRoute(mediaID: firstMediaID)"))
-        XCTAssertTrue(activityViews.contains("context.media.count == 1 ? \"Open Activity Photo\" : \"Open Activity Photos\""))
+        XCTAssertTrue(activityViews.contains("context.media.count == 1 ? \"Open activity photo\" : \"Open activity photos\""))
         XCTAssertTrue(activityViews.contains(".fullScreenCover(item: $photoViewerRoute, onDismiss:"))
         XCTAssertTrue(activityViews.contains("TabView(selection: $selectedMediaID)"))
         XCTAssertTrue(activityViews.contains(".tabViewStyle(.page(indexDisplayMode: .automatic))"))
@@ -640,8 +640,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(map.contains("Map result. Tap + to add it."))
         XCTAssertFalse(map.contains("Map place. Tap + to add it."))
         XCTAssertFalse(map.contains("Also showing new map results."))
-        XCTAssertTrue(map.contains("No Places On Your Map Or Map Results Found."))
-        XCTAssertTrue(map.contains("That Shared Place Could Not Be Opened. Try The Link Again."))
+        XCTAssertTrue(map.contains("No places on your map or map results found."))
+        XCTAssertTrue(map.contains("That shared place could not be opened. Try the link again."))
     }
 
     func testFocusedMapSearchKeepsSafeChromeAndUsesABoundedGlassMenu() throws {
@@ -943,7 +943,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(feed.contains("FeedRefreshRecoveryState(audience: audienceSelection, retry: refresh)"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryFeaturedRail"))
         XCTAssertTrue(feed.contains("private struct FeedRecoveryActivityList"))
-        XCTAssertTrue(feed.contains("title: \"Couldn’t Load Feed\""))
+        XCTAssertTrue(feed.contains("title: \"Couldn’t load Feed\""))
         XCTAssertTrue(feed.contains("detail: \"Unavailable\""))
         XCTAssertFalse(feed.contains("Feed is reconnecting"))
     }
@@ -974,8 +974,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user%20joe")
         XCTAssertEqual(content.items, [content.item])
-        XCTAssertEqual(content.subject, "Discover Joe’s World")
-        XCTAssertEqual(content.message, "See @joe On Astir")
+        XCTAssertEqual(content.subject, "Discover Joe’s world")
+        XCTAssertEqual(content.message, "See @joe on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user joe"))
         XCTAssertNil(WanderShareContent.profile(serverID: nil, displayName: "Guest", handle: "you"))
         XCTAssertNil(WanderShareContent.profile(serverID: "   ", displayName: "Guest", handle: "you"))
@@ -1057,8 +1057,8 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertEqual(content.item.absoluteString, "https://astirmovement.com/profiles/user%20maya")
         XCTAssertEqual(content.items, [content.item, imageFileURL])
-        XCTAssertEqual(content.subject, "Maya Chen's Map")
-        XCTAssertEqual(content.message, "Explore @maya's Saved Places On Astir")
+        XCTAssertEqual(content.subject, "Maya Chen's map")
+        XCTAssertEqual(content.message, "Explore @maya's saved places on Astir")
         XCTAssertEqual(WanderRootView.sharedProfileRoute(for: content.item), SharedProfileRoute(profileID: "user maya"))
     }
 
@@ -1118,8 +1118,8 @@ final class NavigationContractTests: XCTestCase {
             URL(string: "https://astirmovement.com/profiles/user_maya")!,
             imageFileURL
         ])
-        XCTAssertEqual(content.subject, "Maya Chen's Santa Monica Map")
-        XCTAssertEqual(content.message, "Explore Santa Monica On @maya's Astir Map")
+        XCTAssertEqual(content.subject, "Maya Chen's Santa Monica map")
+        XCTAssertEqual(content.message, "Explore Santa Monica on @maya's Astir map")
     }
 
     @MainActor
@@ -1267,7 +1267,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("placesInCommon(with: profileID)"))
         XCTAssertTrue(home.contains("if mode.isOwner"))
         XCTAssertTrue(home.contains("ProfileInCommonPlacesRow("))
-        XCTAssertTrue(home.contains("See Where Your Maps Overlap"))
+        XCTAssertTrue(home.contains("See where your maps overlap"))
         XCTAssertTrue(home.contains("WanderShareContent.profileMap("))
     }
 
@@ -1332,8 +1332,8 @@ final class NavigationContractTests: XCTestCase {
         }
         XCTAssertTrue(releaseSurface.contains("store.placesInCommon(with: profileID)"))
         XCTAssertTrue(releaseSurface.contains("InCommonReleaseHero("))
-        XCTAssertTrue(releaseSurface.contains("TextField(\"Search \\(navigationTitle)\""))
-        XCTAssertTrue(releaseSurface.contains("Label(\"Open Your Shared Map\", systemImage: \"map.fill\")"))
+        XCTAssertTrue(releaseSurface.contains("TextField(\"Search \\(navigationTitle.lowercased())\""))
+        XCTAssertTrue(releaseSurface.contains("Label(\"Open your shared map\", systemImage: \"map.fill\")"))
         XCTAssertTrue(releaseSurface.contains("InCommonReleaseMapScreen("))
         XCTAssertTrue(releaseSurface.contains("ProfilePlaceCollectionMap("))
     }
@@ -1454,7 +1454,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(previewCard.contains("showsBorder: false"))
         XCTAssertTrue(previewCard.contains("Image(systemName: \"square.and.arrow.up\")"))
         XCTAssertTrue(previewCard.contains("Image(systemName: \"mappin.and.ellipse\")"))
-        XCTAssertTrue(previewCard.contains("Text(\"Saved From A Dropped Pin\")"))
+        XCTAssertTrue(previewCard.contains("Text(\"Saved from a dropped pin\")"))
         XCTAssertTrue(previewCard.contains("configuration.isPressed && !reduceMotion ? 1.3 : 1"))
         XCTAssertTrue(previewCard.contains("anchor: .center"))
         XCTAssertTrue(previewCard.contains("frame(width: 44, height: 44, alignment: .center)"))
@@ -1472,7 +1472,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressSession"))
         XCTAssertTrue(placeProfile.contains("PlaceProfilePreviewCardPressPolicy.shouldOpen("))
         XCTAssertFalse(placeProfile.contains("cardPressStartedAt"))
-        XCTAssertTrue(mapScreen.contains("Text(\"Check-In History\")"))
+        XCTAssertTrue(mapScreen.contains("Text(\"Check-in history\")"))
         XCTAssertTrue(activityCard.contains(".checkInTicketSurface("))
         XCTAssertTrue(activityCard.contains("ticketAccentColor"))
         XCTAssertTrue(activityCard.contains("AstirTypography.sectionTitle"))
@@ -1539,7 +1539,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(feed.contains(".navigationTitle(\"Feed\")"))
         XCTAssertTrue(feed.contains("FeedSearchLauncher("))
-        XCTAssertTrue(feed.contains("placeholders: [\"Search Places And People\"]"))
+        XCTAssertTrue(feed.contains("placeholders: [\"Search places and people\"]"))
         XCTAssertFalse(feed.contains("AstirEditorialSegmentedSwitch("))
         XCTAssertFalse(feed.contains("Picker(\"Feed section\", selection: $selectedSurface)"))
 
@@ -1599,7 +1599,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"chevron.left\")"))
         XCTAssertTrue(navigationControls.contains("headerNavigationLabel(systemImage: \"square.and.arrow.up\")"))
         XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Back\")"))
-        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Share Place\")"))
+        XCTAssertTrue(navigationControls.contains(".accessibilityLabel(\"Share place\")"))
         XCTAssertTrue(navigationControls.contains(".padding(.top, topInset)"))
         XCTAssertTrue(fullView.contains(".foregroundStyle(astirBrandMode.primaryText)"))
         XCTAssertTrue(fullView.contains(".astirGlassSurface(cornerRadius: WanderTheme.tapMinimum / 2)"))
@@ -1676,7 +1676,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(placeProfile.contains(".accessibilityLabel(\"Open photo in Google Maps\")"))
 
         XCTAssertTrue(headerAttribution.contains("if let contributor = item.contributor"))
-        XCTAssertTrue(headerAttribution.contains("Photo By \\(contributor.displayName)"))
+        XCTAssertTrue(headerAttribution.contains("Photo by \\(contributor.displayName)"))
         XCTAssertFalse(headerAttribution.contains("item.isGooglePlacesPhoto"))
         XCTAssertFalse(headerAttribution.contains("PlacePhotoAttribution"))
         XCTAssertFalse(mapHeader.contains("Open Google Maps photo"))
@@ -1899,7 +1899,7 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(settings.contains("title: \"Save Streak Reminders\""))
+        XCTAssertTrue(settings.contains("title: \"Save streak reminders\""))
         XCTAssertFalse(settings.contains("send test streak reminder"))
         XCTAssertFalse(settings.contains("settings.notifications.testSaveStreakReminder"))
         XCTAssertFalse(settings.contains("scheduleDebugSaveStreakReminder"))
@@ -1928,7 +1928,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(notificationSettings.contains("Apple Calendar"))
         XCTAssertFalse(notificationSettings.contains("connect calendar"))
-        XCTAssertTrue(notificationSettings.contains("title: \"Reservation Check-In Reminders\""))
+        XCTAssertTrue(notificationSettings.contains("title: \"Reservation check-in reminders\""))
 
         XCTAssertTrue(privacySettings.contains("Text(\"Permissions\")"))
         XCTAssertTrue(privacySettings.contains("Text(\"Apple Calendar\")"))
@@ -1950,7 +1950,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/App/WanderBackend.swift")
         )
 
-        XCTAssertTrue(profileSettings.contains("Text(\"Feature Flags\")"))
+        XCTAssertTrue(profileSettings.contains("Text(\"Feature flags\")"))
         XCTAssertTrue(profileSettings.contains("DebugSettingsAccessPolicy.isEntitled("))
         XCTAssertTrue(profileSettings.contains("Every Simulator build exposes this local tester surface"))
         XCTAssertTrue(backend.contains("#if targetEnvironment(simulator)"))
@@ -1959,8 +1959,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileSettings.contains("settings.flags.\\(key.rawValue)"))
         XCTAssertTrue(profileSettings.contains("booleanOverrideBinding(for: key)"))
         XCTAssertTrue(profileSettings.contains("integerFeatureFlagControl(for: key"))
-        XCTAssertTrue(profileSettings.contains("Reset All To Defaults"))
-        XCTAssertTrue(profileSettings.contains("Restart Astir To Apply These Changes"))
+        XCTAssertTrue(profileSettings.contains("Reset all to defaults"))
+        XCTAssertTrue(profileSettings.contains("Restart Astir to apply these changes"))
         XCTAssertTrue(profileSettings.contains("backend.remoteFeatureFlag(.debugSettings"))
         XCTAssertTrue(profileSettings.contains("featureFlagOverrideStore.setOverride"))
         XCTAssertFalse(profileSettings.contains("jolipshutz"))
@@ -2015,25 +2015,25 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("persistAddPlaceSaveSubmission("))
         XCTAssertFalse(addScreen.contains("store.saveCandidate("))
         XCTAssertFalse(addScreen.contains("private var detailsForm"))
-        XCTAssertTrue(addScreen.contains("Text(\"Nearby Places\")"))
-        XCTAssertTrue(addScreen.contains("Search For A Place"))
-        XCTAssertTrue(addScreen.contains("Label(\"Take A Photo\", systemImage: \"camera\")"))
+        XCTAssertTrue(addScreen.contains("Text(\"Nearby places\")"))
+        XCTAssertTrue(addScreen.contains("Search for a place"))
+        XCTAssertTrue(addScreen.contains("Label(\"Take a Photo\", systemImage: \"camera\")"))
         XCTAssertTrue(addScreen.contains("Label(\"Photo Library\", systemImage: \"photo.on.rectangle\")"))
         XCTAssertTrue(addScreen.contains("AddSuggestedPlaces.limited(nearby)"))
         XCTAssertTrue(addScreen.contains("static let maximumCount = 7"))
-        XCTAssertTrue(suggestedSection.contains("Text(\"Nearby Places\")"))
+        XCTAssertTrue(suggestedSection.contains("Text(\"Nearby places\")"))
         XCTAssertTrue(suggestedSection.contains("searchField"))
         XCTAssertTrue(suggestedSection.contains("AddSuggestedPlaces.previewCount("))
-        XCTAssertTrue(suggestedSection.contains("Label(\"See More\", systemImage: \"arrow.up.right\")"))
+        XCTAssertTrue(suggestedSection.contains("Label(\"See more\", systemImage: \"arrow.up.right\")"))
         XCTAssertTrue(suggestedSection.contains("await resolveCurrentLocationCandidates()"))
         XCTAssertFalse(suggestedSection.contains("ScrollView(.vertical"))
         XCTAssertFalse(suggestedSection.contains("ScrollView(.horizontal"))
         XCTAssertTrue(addScreen.contains("if showsPinnedImportEntry"))
         XCTAssertTrue(addScreen.contains("private var compactSheetContent: some View"))
         XCTAssertTrue(addScreen.contains("private var compactSourceContent: some View"))
-        XCTAssertTrue(addScreen.contains("isShowingHereNowResults ? \"I'm Here Now\""))
-        XCTAssertTrue(addScreen.contains("\"Choose The Place You're At\""))
-        XCTAssertFalse(addScreen.contains("title: \"From A Photo\""))
+        XCTAssertTrue(addScreen.contains("isShowingHereNowResults ? \"I'm here now\""))
+        XCTAssertTrue(addScreen.contains("\"Choose the place you're at\""))
+        XCTAssertFalse(addScreen.contains("title: \"From a photo\""))
         XCTAssertFalse(addScreen.contains("SourceRow(title: AddSourceType.manual.title"))
     }
 
@@ -2152,7 +2152,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(confirmPlace.contains("AstirAddPrimaryButton("))
         XCTAssertTrue(confirmPlace.contains("systemImage: \"arrow.right\""))
         XCTAssertFalse(confirmPlace.contains("tone: .espressoConfirmation"))
-        XCTAssertFalse(addScreen.contains("WanderPrimaryButton(title: \"Continue\""))
+        XCTAssertFalse(addScreen.contains("WanderPrimaryButton(title: \"continue\""))
     }
 
     func testAddOwnsPlaceImportsAndOnlyRendersReviewForPendingItems() throws {
@@ -2187,26 +2187,26 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(addScreen.contains("AddSheetLayout.detents("))
         XCTAssertTrue(addScreen.contains(".onChange(of: importStore.summary.hasPendingImports)"))
         XCTAssertFalse(importViews.contains("if summary.hasPendingImports"))
-        XCTAssertTrue(importViews.contains("Text(\"Import From\")"))
+        XCTAssertTrue(importViews.contains("Text(\"Import from\")"))
         XCTAssertTrue(
             importViews.contains(
-                "Text(\"Import Your Places And Lists From Google Maps, Instagram, TikTok, And More Here\")"
+                "Text(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
         XCTAssertTrue(
             importViews.contains(
-                ".accessibilityLabel(\"Import Your Places And Lists From Google Maps, Instagram, TikTok, And More Here\")"
+                ".accessibilityLabel(\"Import your places and lists from Google Maps, Instagram, TikTok, and more here\")"
             )
         )
-        XCTAssertTrue(importViews.contains("TextField(\"Paste A Link…\", text: $input)"))
-        XCTAssertFalse(importViews.contains("TextField(\"Paste A Link…\", text: $input, axis: .vertical)"))
+        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
+        XCTAssertFalse(importViews.contains("TextField(\"Paste a link…\", text: $input, axis: .vertical)"))
         XCTAssertTrue(
             importViews.contains(
-                "Text(\"Paste A Link From Instagram, Google Maps, Or TikTok\")"
+                "Text(\"Paste a link from Instagram, Google Maps, or TikTok\")"
             )
         )
         XCTAssertFalse(importViews.contains("Runs in background"))
-        XCTAssertTrue(importViews.contains("Label(\"Paste From Clipboard\", systemImage: \"doc.on.clipboard\")"))
+        XCTAssertTrue(importViews.contains("Label(\"Paste from clipboard\", systemImage: \"doc.on.clipboard\")"))
         XCTAssertTrue(importViews.contains("enqueueUnified(text: input)"))
         XCTAssertTrue(importViews.contains("completionAction(batchIDs)"))
         XCTAssertFalse(importViews.contains("reviewAction(batchIDs)"))
@@ -2231,7 +2231,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(root.contains("importHubRestingHeight = AddSheetLayout.importEntryHeight"))
         XCTAssertTrue(importViews.contains("key: PlaceImportHubContentHeightKey.self"))
         XCTAssertTrue(root.contains("importHubRestingHeight = ceil(contentHeight) + 44"))
-        XCTAssertTrue(importViews.contains("TextField(\"Paste A Link…\", text: $input)"))
+        XCTAssertTrue(importViews.contains("TextField(\"Paste a link…\", text: $input)"))
         XCTAssertFalse(importViews.contains("text: $input, axis: .vertical"))
         XCTAssertTrue(importViews.contains(".simultaneousGesture(TapGesture().onEnded { isInputFocused = true })"))
         XCTAssertTrue(importViews.contains("importStore.recentImportBadgeCount"))
@@ -2278,7 +2278,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(header.contains(".alignmentGuide(.top) { $0.height / 2 }"))
         XCTAssertTrue(header.contains("importStore.recentImportBadgeCount"))
         XCTAssertFalse(header.contains(".clipShape("), "The badge must not be clipped with the glass capsule")
-        XCTAssertTrue(importViews.contains("Imports Matching Or Awaiting Review"))
+        XCTAssertTrue(importViews.contains("imports matching or awaiting review"))
 
         let banner = try XCTUnwrap(importViews.components(separatedBy: "struct PlaceImportCompletionBanner: View {").last?
             .components(separatedBy: "struct ImportContentFittingSheet").first)
@@ -2386,7 +2386,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(importViews.contains("PlaceProfileFullScreen("))
         XCTAssertTrue(importViews.contains("place: PlaceSheetPlace(candidate: profileCandidate)"))
         XCTAssertTrue(importViews.contains("action: .choose"))
-        XCTAssertTrue(importViews.contains("Shows The Place Profile And Photo"))
+        XCTAssertTrue(importViews.contains("Shows the place profile and photo"))
         XCTAssertTrue(importViews.contains("Text(candidate.importCategoryTitle)"))
         XCTAssertTrue(importViews.contains("Text(candidate.importLocationSummary)"))
         XCTAssertTrue(importViews.contains("RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous)"))
@@ -2465,7 +2465,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(optionalDetails.contains(".walkthroughEmphasis(.saveMoreOptions)"))
         XCTAssertFalse(optionalDetails.contains("Circle()\n                                .stroke(WanderTheme.categorySun.color"))
         XCTAssertEqual(
-            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"What Do You Want To Do?\")").count - 1,
+            mapScreen.components(separatedBy: "MapSavePickerBlock(title: \"What do you want to do?\")").count - 1,
             1
         )
         XCTAssertTrue(mapScreen.contains("private var singleScreenContent: some View"))
@@ -2510,7 +2510,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(mapScreen.contains(".padding(.top, WanderTheme.spacing1)"))
         XCTAssertTrue(mapScreen.contains("action.displayTitle("))
         XCTAssertTrue(mapScreen.contains("return currentUserSave.userPlace.status == .been ? .addVisit : .reselectWant"))
-        XCTAssertTrue(mapScreen.contains("return \"Add To Wanna\""), "New Wanna saves use the shared Add to Wanna action.")
+        XCTAssertTrue(mapScreen.contains("return \"Add to Wanna\""), "New Wanna saves use the shared Add to Wanna action.")
         XCTAssertTrue(mapScreen.contains("return \"Update Wanna\""), "Existing Wanna saves use the shared Update Wanna action.")
         XCTAssertTrue(mapScreen.contains("return context.saveTitle"), "Check-in actions use their contextual save title.")
         XCTAssertTrue(mapScreen.contains(".overlay(alignment: .bottom)"))
@@ -2554,7 +2554,7 @@ final class NavigationContractTests: XCTestCase {
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/Add/CheckInQuestionPanel.swift")
         )
         let questionHeader = try sourceSection(questionPanel, after: "private var header: some View", before: "private var currentConfiguration:")
-        XCTAssertTrue(questionHeader.contains("Text(\"Useful Details\")"))
+        XCTAssertTrue(questionHeader.contains("Text(\"Useful details\")"))
         XCTAssertTrue(questionHeader.contains(".font(AstirTypography.label)"))
         XCTAssertTrue(questionHeader.contains("customizeButton"))
         XCTAssertTrue(questionHeader.contains("HStack(alignment: .firstTextBaseline"))
@@ -2567,7 +2567,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(questionRow.contains("Divider("), "Question rows use spacing rather than repeated dividing lines.")
         XCTAssertTrue(questionRow.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertTrue(questionRow.contains(".accessibilityAddTraits(selected ? .isSelected : [])"))
-        XCTAssertTrue(questionRow.contains("Button(\"Clear Answer\""))
+        XCTAssertTrue(questionRow.contains("Button(\"Clear answer\""))
 
         let sharedVisitComponents = try String(
             contentsOf: projectRoot.appendingPathComponent("Wander/Features/SharedVisits/SharedVisitComponents.swift")
@@ -2645,7 +2645,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(questionOptions.contains("minHeight: 52"))
         XCTAssertTrue(questionOptions.contains("\"checkmark.circle.fill\""))
         XCTAssertTrue(questionOptions.contains("\"plus.circle\" : \"circle\""))
-        XCTAssertTrue(questionOptions.contains("Text(\"Add Your Own\")"))
+        XCTAssertTrue(questionOptions.contains("Text(\"Add your own\")"))
         XCTAssertTrue(questionOptions.contains("style: StrokeStyle(lineWidth: 1, dash: [5, 4])"))
         XCTAssertFalse(questionOptions.contains("MapSaveWrappingChipLayout"))
         XCTAssertFalse(questionOptions.contains("WanderChip"))
@@ -2664,12 +2664,12 @@ final class NavigationContractTests: XCTestCase {
                 .first
         )
 
-        XCTAssertTrue(plannedDateSection.contains("Text(\"Add A Date\")"))
+        XCTAssertTrue(plannedDateSection.contains("Text(\"Add a date\")"))
         XCTAssertTrue(plannedDateSection.contains("MultiDatePicker("))
         XCTAssertTrue(plannedDateSection.contains("isShowingPlannedDatePicker = false"))
         XCTAssertTrue(
             plannedDateSection.contains(
-                "If Notifications Are On, Astir Will Remind You Three Days Before."
+                "If notifications are on, Astir will remind you three days before."
             )
         )
         XCTAssertFalse(plannedDateSection.contains("Someday is okay"))
@@ -2881,7 +2881,7 @@ final class NavigationContractTests: XCTestCase {
             fixture["pre_fix_control"] as? String,
             "single-value graphical DatePicker"
         )
-        XCTAssertTrue(checkInDateSection.contains("\"Check-In Date\""))
+        XCTAssertTrue(checkInDateSection.contains("\"Check-in date\""))
         XCTAssertTrue(checkInDateSection.contains("MultiDatePicker("))
         XCTAssertTrue(
             checkInDateSection.contains(
@@ -2998,7 +2998,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(home.contains("attachmentAnchor: .rect(.bounds)"))
         XCTAssertTrue(home.contains("arrowEdge: .top"))
         XCTAssertTrue(home.contains(".presentationCompactAdaptation(.popover)"))
-        XCTAssertFalse(profileScreen.contains(".confirmationDialog(\"Profile Actions\""))
+        XCTAssertFalse(profileScreen.contains(".confirmationDialog(\"Profile actions\""))
         XCTAssertTrue(profileScreen.contains("if profile == nil"), "Full-screen loading and unavailable states need a dismiss control")
     }
 
@@ -3016,17 +3016,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(profileScreen.contains("avatarAction: presentProfilePhotoViewer"))
         XCTAssertTrue(profileScreen.contains(".fullScreenCover(isPresented: $showsProfilePhotoViewer)"))
         XCTAssertTrue(profileEdit.contains("Color.black.ignoresSafeArea()"))
-        XCTAssertTrue(profileHome.contains("\"View Profile Photo\""))
-        XCTAssertFalse(profileHome.contains("\"Change Profile Photo\""))
+        XCTAssertTrue(profileHome.contains("\"View profile photo\""))
+        XCTAssertFalse(profileHome.contains("\"Change profile photo\""))
 
         XCTAssertTrue(profileEdit.contains("showsPhotoMenu = true"))
-        XCTAssertTrue(profileEdit.contains(".confirmationDialog(\"Profile Photo\""))
+        XCTAssertTrue(profileEdit.contains(".confirmationDialog(\"Profile photo\""))
         XCTAssertTrue(profileEdit.contains("Button(\"Take Photo\")"))
-        XCTAssertTrue(profileEdit.contains("Button(\"Choose From Library\")"))
+        XCTAssertTrue(profileEdit.contains("Button(\"Choose from Library\")"))
         XCTAssertTrue(profileEdit.contains("Button(\"Delete Photo\", role: .destructive)"))
         XCTAssertTrue(profileEdit.contains("isPresented: $showsPhotoLibrary"))
         XCTAssertTrue(profileEdit.contains(".sheet(isPresented: $showsCamera)"))
-        XCTAssertTrue(profileEdit.contains("Could Not Load Profile Photo"))
+        XCTAssertTrue(profileEdit.contains("Could not load profile photo"))
         XCTAssertFalse(profileEdit.contains("PhotosPicker(selection:"))
     }
 
@@ -3064,8 +3064,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains(".scrollPosition(id: $profileScrollPosition, anchor: .top)"))
         XCTAssertFalse(source.contains("style: StrokeStyle("))
         XCTAssertFalse(source.contains("dash: [0.1, max(3, size * 0.14)]"))
-        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralNoun)"))
-        XCTAssertFalse(source.contains("item(state: .wanna, title: \"Wanna\")"))
+        XCTAssertTrue(source.contains("item(state: .visit, title: CheckInCopy.pluralTitle)"))
+        XCTAssertFalse(source.contains("item(state: .wanna, title: \"wanna\")"))
         XCTAssertTrue(source.contains(".offset(y: -6)"))
         XCTAssertFalse(source.contains("visitCount > 1"), "Calendar cells should keep state visuals stable and move counts into day detail")
     }
@@ -3079,7 +3079,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(source.contains("visited this day"))
         XCTAssertFalse(source.contains("saved as wanna this day"))
         XCTAssertTrue(source.contains("metric(value: summary.visitCount, singular: CheckInCopy.noun, plural: CheckInCopy.pluralNoun"))
-        XCTAssertFalse(source.contains("metric(value: summary.wannaCount, singular: \"Wanna\", plural: \"Wanna\""))
+        XCTAssertFalse(source.contains("metric(value: summary.wannaCount, singular: \"wanna\", plural: \"wanna\""))
         XCTAssertTrue(source.contains("var includesAllStatuses: Bool {\n        source == .mapSummary\n    }"))
     }
 
@@ -3099,8 +3099,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(calendarControls.contains("HStack(alignment: .top, spacing: WanderTheme.spacing3)"))
         XCTAssertTrue(calendarControls.contains("title: \"Type\""))
         XCTAssertTrue(calendarControls.contains("title: \"Tags\""))
-        XCTAssertTrue(calendarControls.contains("allTitle: \"All Types\""))
-        XCTAssertTrue(calendarControls.contains("allTitle: \"All Tags\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"All types\""))
+        XCTAssertTrue(calendarControls.contains("allTitle: \"All tags\""))
         XCTAssertTrue(calendarControls.contains("Menu {"))
         XCTAssertTrue(calendarControls.contains("minHeight: WanderTheme.tapMinimum"))
         XCTAssertFalse(calendarControls.contains("TextField("))
@@ -3146,13 +3146,13 @@ final class NavigationContractTests: XCTestCase {
                 .last
         )
 
-        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) Saved \\(placeLabel)"))
+        XCTAssertTrue(mapSection.contains("\\(insights.mapPlaceCount) saved \\(placeLabel)"))
         XCTAssertTrue(mapSection.contains("ProfileMapSummaryShareButton("))
         XCTAssertTrue(mapSection.contains("points: insights.mapPoints(matching: item)"))
         XCTAssertTrue(shareButton.contains(".accessibilityLabel(\"Share \\(item.title)\")"))
         XCTAssertTrue(shareButton.contains("filterTitle: item.title"))
         XCTAssertTrue(shareButton.contains("ActivitySharePreviewScreen("))
-        XCTAssertTrue(shareButton.contains(".alert(\"Couldn't Prepare This Map\""))
+        XCTAssertTrue(shareButton.contains(".alert(\"Couldn't prepare this map\""))
         XCTAssertTrue(shareButton.contains(".onDisappear(perform: cancelSharePreparation)"))
     }
 
@@ -3179,7 +3179,7 @@ final class NavigationContractTests: XCTestCase {
                 "Wander/Features/Events/EventsComingSoonScreen.swift"
             )
         )
-        XCTAssertTrue(events.contains("Coming Soon. An Ocean Park Experiment."))
+        XCTAssertTrue(events.contains("Coming soon. An Ocean Park experiment."))
         XCTAssertTrue(events.contains("AVPlayerLayer()"))
         XCTAssertTrue(events.contains("Bundle.main.url(forResource:"))
         XCTAssertTrue(events.contains("isUserInteractionEnabled = false"))
@@ -3428,7 +3428,7 @@ final class NavigationContractTests: XCTestCase {
             before: "private var isEditing: Bool"
         )
         XCTAssertTrue(backButton.contains(".frame(width: 44, height: 44)"))
-        XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back To Lists\")"))
+        XCTAssertTrue(backButton.contains(".accessibilityLabel(\"Back to lists\")"))
         XCTAssertTrue(backButton.contains("Button {\n            dismiss()"))
         XCTAssertFalse(backButton.contains(".background("), "The native back chevron should not draw a custom background")
     }
@@ -3533,7 +3533,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertFalse(source.contains("PlaceProfileMapSurface("))
         XCTAssertFalse(fullScreen.contains("saves: []"))
-        XCTAssertFalse(fullScreen.contains("currentUserID: \"You\""))
+        XCTAssertFalse(fullScreen.contains("currentUserID: \"you\""))
         XCTAssertTrue(fullScreen.contains("focus(place)"), "A pin should focus its rail tile")
         XCTAssertTrue(fullScreen.contains("focusFromRail(place)"), "A rail swipe should focus the map camera")
         XCTAssertTrue(rail.contains("let onFocus: (ListPlaceMock) -> Void"))
@@ -3543,7 +3543,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(rail.contains("onSelect(place)"), "Rail selection should open the place directly")
         XCTAssertTrue(rail.contains("let onOpen: () -> Void"))
         XCTAssertTrue(rail.contains("Button(action: onOpen)"), "The whole tile should open on its first tap")
-        XCTAssertTrue(rail.contains(".accessibilityHint(\"Opens Place\")"))
+        XCTAssertTrue(rail.contains(".accessibilityHint(\"Opens place\")"))
     }
 
     func testListHomeKeepsRichMapProjectionOutOfTheGridHotPath() throws {
@@ -3594,7 +3594,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("listGrid(lists: renderedLists)"))
         XCTAssertTrue(detailScreen.contains("let renderedList = displayList"))
         XCTAssertEqual(detailScreen.components(separatedBy: "let renderedList = displayList").count - 1, 1)
-        XCTAssertTrue(detailScreen.contains("Text(\"There Are No Places Added To This List Yet.\")"))
+        XCTAssertTrue(detailScreen.contains("Text(\"There are no places added to this list yet.\")"))
         XCTAssertFalse(detailScreen.contains("Loading places in this list."))
         XCTAssertTrue(detailProjection.contains("itemCountOverride: visiblePlaces.count"))
         XCTAssertFalse(detailProjection.contains("itemCountOverride: list.cachedItemCount"))
@@ -3660,12 +3660,12 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(detailScreen.contains(".alert(\"Leave List?\""))
         XCTAssertTrue(
             detailScreen.contains(
-                "Are You Sure? You’ll Lose Collaborator Access. You May Still See This List In Friends If The Owner Continues Sharing It."
+                "Are you sure? You’ll lose collaborator access. You may still see this list in Friends if the owner continues sharing it."
             )
         )
         XCTAssertTrue(detailScreen.contains("sourceList.map(store.canLeave)"))
-        XCTAssertTrue(detailScreen.contains(".alert(\"Couldn't Leave List\""))
-        XCTAssertTrue(detailScreen.contains("Text(\"Try Again Later\")"))
+        XCTAssertTrue(detailScreen.contains(".alert(\"Couldn't leave list\""))
+        XCTAssertTrue(detailScreen.contains("Text(\"Try again later\")"))
         XCTAssertFalse(detailScreen.contains("store.lastRemoteError"))
     }
 
@@ -3779,7 +3779,7 @@ final class NavigationContractTests: XCTestCase {
     func testSharedVisitBannerUsesTaggedCopyAndOpensTheProfileInbox() {
         XCTAssertEqual(
             SharedVisitBannerCopy.title(inviterName: "Joe Lipshutz", placeName: "RVR"),
-            "Joe Lipshutz Tagged You At RVR"
+            "Joe Lipshutz tagged you at RVR"
         )
         XCTAssertEqual(WanderRootView.sharedVisitBannerDestinationTab, .profile)
     }
@@ -3814,7 +3814,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.text(companions: [joe, ryan], currentUserID: ryan.userID),
-            "With You And Joe Lipshutz"
+            "With You and Joe Lipshutz"
         )
         XCTAssertEqual(
             SharedVisitCompanionPresentation.ordered([joe, ryan], currentUserID: ryan.userID).first?.avatarURL,
@@ -3964,13 +3964,13 @@ final class NavigationContractTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(settings.contains("Label(\"Default Map Filter\", systemImage: \"map\")"))
+        XCTAssertTrue(settings.contains("Label(\"Default map filter\", systemImage: \"map\")"))
         XCTAssertTrue(settings.contains("DefaultMapFilterSettingsScreen()"))
         XCTAssertTrue(settings.contains("ForEach(MapSource.allCases)"))
         XCTAssertTrue(settings.contains("Text(source.subtitle)"))
         XCTAssertTrue(settings.contains("store.defaultMapFilter = source"))
         XCTAssertTrue(settings.contains("settings.map.defaultFilter"))
-        XCTAssertTrue(settings.contains("Used Whenever The Map Opens Or Resets On This Device."))
+        XCTAssertTrue(settings.contains("Used whenever the map opens or resets on this device."))
     }
 
     func testProfileSettingsUseBrandTintProfileBackedOverlayAndRequestedHierarchy() throws {
@@ -4037,10 +4037,10 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(settings.contains("Section(\"Account\")"))
-        XCTAssertTrue(settings.contains("Section(\"Privacy And Safety\")"))
+        XCTAssertTrue(settings.contains("Section(\"Privacy and safety\")"))
         XCTAssertTrue(settings.contains("Section(\"Notifications\")"))
         XCTAssertFalse(settings.contains("Section(\"App\")"))
-        XCTAssertTrue(settings.contains("Section(\"Account Actions\")"))
+        XCTAssertTrue(settings.contains("Section(\"Account actions\")"))
         XCTAssertTrue(settings.contains("Label(\"Resources\", systemImage: \"books.vertical\")"))
 
         let list = try XCTUnwrap(
@@ -4057,8 +4057,8 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private var resourcesSection").first
         )
         XCTAssertLessThan(
-            try XCTUnwrap(actions.range(of: "\"Sign Out\"")).lowerBound,
-            try XCTUnwrap(actions.range(of: "\"Delete My Account\"")).lowerBound
+            try XCTUnwrap(actions.range(of: "\"Sign out\"")).lowerBound,
+            try XCTUnwrap(actions.range(of: "\"Delete my account\"")).lowerBound
         )
         XCTAssertTrue(actions.contains("icon: \"trash\""))
         XCTAssertTrue(actions.contains("color: .red"))
@@ -4069,8 +4069,8 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private var mapSection").first
         )
         XCTAssertLessThan(
-            try XCTUnwrap(privacy.range(of: "Blocked And Muted Accounts")).lowerBound,
-            try XCTUnwrap(privacy.range(of: "Privacy Choices")).lowerBound
+            try XCTUnwrap(privacy.range(of: "Blocked and muted accounts")).lowerBound,
+            try XCTUnwrap(privacy.range(of: "Privacy choices")).lowerBound
         )
 
         let resources = try XCTUnwrap(
@@ -4078,15 +4078,15 @@ final class NavigationContractTests: XCTestCase {
                 .components(separatedBy: "private enum RecmeSettingsWebDestination").first
         )
         for title in [
-            "Import Help",
-            "Help And Support",
-            "Privacy Policy",
-            "Terms Of Use",
-            "Community Guidelines"
+            "Import help",
+            "Help and support",
+            "Privacy policy",
+            "Terms of use",
+            "Community guidelines"
         ] {
             XCTAssertTrue(resources.contains("title: \"\(title)\""))
         }
-        XCTAssertFalse(resources.contains("Privacy Choices"))
+        XCTAssertFalse(resources.contains("Privacy choices"))
 
         XCTAssertFalse(settings.localizedCaseInsensitiveContains("data and sync"))
         XCTAssertFalse(legacySettings.localizedCaseInsensitiveContains("data and sync"))
@@ -4098,9 +4098,9 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(authGate.contains("struct ClerkAccountManagementView: View"))
         XCTAssertTrue(authGate.contains("UserProfileView()"))
         XCTAssertTrue(authGate.contains(".environment(Clerk.shared)"))
-        XCTAssertTrue(settings.contains("title: \"Change Email\""))
-        XCTAssertTrue(settings.contains("title: \"Change Phone Number\""))
-        XCTAssertTrue(settings.contains("title: \"Change Password\""))
+        XCTAssertTrue(settings.contains("title: \"Change email\""))
+        XCTAssertTrue(settings.contains("title: \"Change phone number\""))
+        XCTAssertTrue(settings.contains("title: \"Change password\""))
         XCTAssertTrue(settings.contains("Button(action: onSelect)"))
         XCTAssertTrue(settings.contains("HStack(spacing: 0)"))
         XCTAssertTrue(settings.contains("Divider()"))
@@ -4355,7 +4355,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertFalse(discoverScreen.contains("Text(\"Discover\")"))
-        XCTAssertTrue(discoverScreen.contains("\"Back To Discover\" : \"Back To Feed\""))
+        XCTAssertTrue(discoverScreen.contains("\"Back to Discover\" : \"Back to Feed\""))
         XCTAssertTrue(discoverScreen.contains("startsInPlaceSearch: Bool = false"))
         XCTAssertTrue(discoverScreen.contains("searchFieldFocused = true"))
         XCTAssertTrue(discoverScreen.contains("private let suggestedSearches"))
@@ -4374,14 +4374,14 @@ final class NavigationContractTests: XCTestCase {
             after: "private struct DiscoverPlaceResultCard: View",
             before: "private struct DiscoverResultActionButton: View"
         )
-        XCTAssertTrue(resultCard.contains("Astir Rating"))
-        XCTAssertTrue(resultCard.contains("case nil:\n            \"Wanna Go\""))
+        XCTAssertTrue(resultCard.contains("Astir rating"))
+        XCTAssertTrue(resultCard.contains("case nil:\n            \"Wanna go\""))
         XCTAssertTrue(resultCard.contains("case .wannaGo:\n            \"In Wanna\""))
         XCTAssertTrue(resultCard.contains("case .been:\n            \"Visited\""))
         XCTAssertTrue(resultCard.contains("action: addToWanna"))
         XCTAssertTrue(resultCard.contains("isDisabled: currentUserStatus != nil"))
         XCTAssertFalse(resultCard.contains("\"Add visit\""))
-        XCTAssertTrue(resultCard.contains("title: \"Add To List\""))
+        XCTAssertTrue(resultCard.contains("title: \"Add to list\""))
         XCTAssertTrue(resultCard.contains("ShareCardButton(content: shareContent,"))
         XCTAssertTrue(resultCard.contains("serverID: place.id"))
         XCTAssertFalse(resultCard.contains("googleMapsSearchURL"))
@@ -4444,7 +4444,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(source.contains("activePlaceSearchHeader"))
-        XCTAssertTrue(source.contains("Back To Discover"))
+        XCTAssertTrue(source.contains("Back to Discover"))
         XCTAssertTrue(source.contains("private func exitPlaceSearch()"))
         XCTAssertTrue(source.contains("private func clearPlaceSearch(focusField: Bool = true)"))
         XCTAssertTrue(source.contains("placeSearchTask?.cancel()"))
@@ -4457,7 +4457,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(source.contains("includesSemanticProvider: semanticEnabled"))
         XCTAssertTrue(source.contains("backend.featureFlag(.semanticPlaceSearchV1"))
         XCTAssertTrue(source.contains("SemanticPlaceSearchAccessPolicy.isEnabled("))
-        XCTAssertTrue(source.contains("Saved On Astir"))
+        XCTAssertTrue(source.contains("Saved on Astir"))
         XCTAssertTrue(source.contains("From Apple Maps"))
         XCTAssertTrue(source.contains("sourceType: .manual"))
         XCTAssertTrue(source.contains("activePlaceSearchSubmissionID == submissionID"))
@@ -4466,15 +4466,15 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(externalSearch.contains("activeExternalSearchRequestID == requestID"))
         XCTAssertTrue(externalSearch.contains("activeExternalSearchRequestID = nil"))
         XCTAssertTrue(source.contains("refinedExternalInput != initialExternalInput"))
-        XCTAssertTrue(source.contains("Try A Search"))
+        XCTAssertTrue(source.contains("Try a search"))
         XCTAssertTrue(source.contains("coffee worth crossing town for"))
         XCTAssertTrue(source.contains("quiet cafes with wifi"))
-        XCTAssertTrue(source.contains("Understood As"))
+        XCTAssertTrue(source.contains("Understood as"))
         XCTAssertTrue(source.contains("evidence.summary"))
-        XCTAssertTrue(source.contains("Search Visited Instead"))
-        XCTAssertTrue(source.contains(#"We Checked \(successfulSearchSourceSummary)"#))
-        XCTAssertTrue(source.contains("Search Hit A Snag"))
-        XCTAssertTrue(source.contains("Search Places And People"))
+        XCTAssertTrue(source.contains("Search visited instead"))
+        XCTAssertTrue(source.contains(#"We checked \(successfulSearchSourceSummary)"#))
+        XCTAssertTrue(source.contains("Search hit a snag"))
+        XCTAssertTrue(source.contains("Search places and people"))
         XCTAssertTrue(feedSource.contains("startsInPlaceSearch: true"))
         XCTAssertTrue(feedSource.contains("onClose: closeDiscoverSearch"))
     }
@@ -5083,7 +5083,7 @@ final class NavigationContractTests: XCTestCase {
 
         XCTAssertTrue(placeTypeSection.contains("if isRestaurantsFoodSelected"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .cuisine"))
-        XCTAssertTrue(placeTypeSection.contains("title: \"Food Type\""))
+        XCTAssertTrue(placeTypeSection.contains("title: \"Food type\""))
         XCTAssertTrue(placeTypeSection.contains("} else {"))
         XCTAssertTrue(placeTypeSection.contains("placeTypePickerMode = .subcategory"))
         XCTAssertTrue(placeTypeSection.contains("PlaceTypeRow(title: \"Subcategory\""))
@@ -5094,7 +5094,7 @@ final class NavigationContractTests: XCTestCase {
         )
         XCTAssertTrue(
             mapScreen.contains(
-                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"Food Types\" : \"types\""
+                "let noun = category == WanderPlaceCategory.restaurantsFood ? \"food types\" : \"types\""
             )
         )
 
@@ -5116,7 +5116,7 @@ final class NavigationContractTests: XCTestCase {
             before: "private var cuisinePickerContent: some View {"
         )
 
-        XCTAssertTrue(picker.contains("title: \"Explore Types\""))
+        XCTAssertTrue(picker.contains("title: \"Explore types\""))
         XCTAssertTrue(picker.contains("selectedCategoryPills"))
         XCTAssertTrue(picker.contains("CategoryPickerSearchField"))
         XCTAssertTrue(picker.contains("SubcategoryAtlasFilters"))
@@ -5203,7 +5203,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(navigationRow.contains("editAction"))
         XCTAssertFalse(navigationRow.contains("profileShareButton"))
         XCTAssertFalse(navigationRow.contains("WanderGlassButtonCluster"))
-        XCTAssertFalse(identity.contains("Text(\"Profile\")"))
+        XCTAssertFalse(identity.contains("Text(\"profile\")"))
         XCTAssertTrue(navigationRow.contains("ProfileBackButton(action: backAction)"))
         XCTAssertTrue(navigationRow.contains("Text(\"@\\(profile.handle)\")"))
         XCTAssertLessThan(
@@ -5250,10 +5250,10 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(home.contains("case .been: \"Been\""))
         XCTAssertFalse(screen.contains("No Been activity"))
         XCTAssertTrue(recentActivity.contains("filteredItems.prefix(6)"))
-        XCTAssertTrue(recentActivity.contains("Text(\"See More\")"))
+        XCTAssertTrue(recentActivity.contains("Text(\"See more\")"))
         XCTAssertTrue(recentActivity.contains("Text(\"Activity\")"))
-        XCTAssertFalse(recentActivity.contains("Text(\"Recent Activity\")"))
-        XCTAssertTrue(screen.contains("Saved Places And Check-Ins Will Appear Here"))
+        XCTAssertFalse(recentActivity.contains("Text(\"Recent activity\")"))
+        XCTAssertTrue(screen.contains("Saved places and check-ins will appear here"))
         XCTAssertFalse(screen.contains("Your saved places and check-ins will appear here"))
         XCTAssertTrue(screen.contains("ProfileActivityHistoryScreen("))
         XCTAssertTrue(screen.contains("initialSection: .activity"))
@@ -5268,17 +5268,17 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: 0).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 0).accessibilityValue,
-            "No New Notifications"
+            "No new notifications"
         )
 
         XCTAssertTrue(ProfileInvitationBadgeState(pendingInvitationCount: 1).isVisible)
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 1).accessibilityValue,
-            "1 New Notification"
+            "1 new notification"
         )
         XCTAssertEqual(
             ProfileInvitationBadgeState(pendingInvitationCount: 4).accessibilityValue,
-            "4 New Notifications"
+            "4 new notifications"
         )
         XCTAssertFalse(ProfileInvitationBadgeState(pendingInvitationCount: -1).isVisible)
     }
@@ -5367,7 +5367,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(body.contains("profileID: profile.id"))
         XCTAssertTrue(body.contains("viewerID: viewerProfile.id"))
         XCTAssertFalse(body.contains("savedPlacesSection"))
-        XCTAssertTrue(inCommonRow.contains("See Where Your Maps Overlap"))
+        XCTAssertTrue(inCommonRow.contains("See where your maps overlap"))
         XCTAssertFalse(inCommonRow.contains(".wanderGlassPanel("))
         XCTAssertTrue(inCommonRow.contains(".contentShape(Rectangle())"))
         XCTAssertTrue(inCommonRow.contains(".overlay(alignment: .bottom)"))

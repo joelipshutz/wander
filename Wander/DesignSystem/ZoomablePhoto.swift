@@ -135,14 +135,14 @@ struct ZoomablePhoto<Content: View>: View {
                         zoom.toggleZoom(viewportSize: proxy.size)
                     }
                 }
-                .accessibilityHint("Pinch Or Double-Tap To Zoom")
-                .accessibilityValue("\(Int(displayedScale * 100)) Percent")
-                .accessibilityAction(named: "Zoom In") {
+                .accessibilityHint("Pinch or double-tap to zoom")
+                .accessibilityValue("\(Int(displayedScale * 100)) percent")
+                .accessibilityAction(named: "Zoom in") {
                     withAnimation(.snappy(duration: 0.24)) {
                         zoom.zoomIn(viewportSize: proxy.size)
                     }
                 }
-                .accessibilityAction(named: "Zoom Out") {
+                .accessibilityAction(named: "Zoom out") {
                     withAnimation(.snappy(duration: 0.24)) {
                         zoom.zoomOut(viewportSize: proxy.size)
                     }

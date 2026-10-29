@@ -60,13 +60,13 @@ enum DiscoverPeopleRecommendationReason: Equatable {
 
     var compactDisplayText: String {
         switch self {
-        case .contacts: "In Your Contacts"
-        case .nearby: "In Your Area"
-        case .followsYou: "Follows You"
+        case .contacts: "In your contacts"
+        case .nearby: "In your area"
+        case .followsYou: "Follows you"
         case .sharedFollows(let count):
-            count == 1 ? "Followed By 1 Person You Follow" : "Followed By \(count) People You Follow"
+            count == 1 ? "Followed by 1 person you follow" : "Followed by \(count) people you follow"
         case .contactFollows(let count):
-            count == 1 ? "Followed By 1 Contact" : "Followed By \(count) Contacts"
+            count == 1 ? "Followed by 1 contact" : "Followed by \(count) contacts"
         case .suggested: ""
         }
     }
@@ -74,19 +74,19 @@ enum DiscoverPeopleRecommendationReason: Equatable {
     func displayText(for profile: ProfileShell) -> String {
         switch self {
         case .contacts:
-            return "In Your Contacts"
+            return "In your contacts"
         case .nearby:
-            return profile.homeArea.map { "Also In \($0)" } ?? "In Your Area"
+            return profile.homeArea.map { "Also in \($0)" } ?? "In your area"
         case .followsYou:
-            return "Follows You"
+            return "Follows you"
         case .sharedFollows(let count):
             return count == 1
-                ? "1 Person You Follow Follows \(profile.displayName)"
-                : "\(count) People You Follow Follow \(profile.displayName)"
+                ? "1 person you follow follows \(profile.displayName)"
+                : "\(count) people you follow follow \(profile.displayName)"
         case .contactFollows(let count):
             return count == 1
-                ? "1 Of Your Contacts Follows \(profile.displayName)"
-                : "\(count) Of Your Contacts Follow \(profile.displayName)"
+                ? "1 of your contacts follows \(profile.displayName)"
+                : "\(count) of your contacts follow \(profile.displayName)"
         case .suggested:
             return ""
         }

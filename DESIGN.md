@@ -20,18 +20,18 @@ This is the project-level design source of truth for Astir (formerly rec.me and 
 
 ## App Copy Capitalization (REC-662)
 
-Capitalize the first letter of every word in app-owned visible copy, including
-small words and each part of a hyphenated word. Apply this to headings, body
-copy, controls, placeholders, accessibility labels, errors, and app-authored
-notification text. Preserve contractions, acronyms, intentional brand casing
-(such as iPhone), and conventional unit symbols.
+Use natural sentence case: capitalize the beginning of sentences, titles,
+section headings, and standalone controls or labels. Keep ordinary words inside
+sentences lowercase; retain proper nouns, acronyms, and intentional brand casing.
+For example: “Add a place”, “Privacy and trust”, and “Your map is still here”.
+Do not apply every-word capitalization to body copy or headings.
 
-Keep stored values, search terms, identifiers, and data contracts unchanged.
-Format built-in question choices and taxonomy labels only at presentation using
-`AppCopy.capitalizingWords` or `WanderPlaceCategory.displayLabel`. Preserve
-user-authored text, personal tags, usernames, URLs, and provider place names.
-System dialogs and incoming server-authored copy require separate ownership
-review; see `docs/reviews/rec-662-copy-capitalization.md` for coverage and flags.
+Author complete sentences in their intended case. For app-owned dynamic labels,
+`AppCopy.capitalizingInitial` changes only the initial character. Preserve user
+and provider content, persisted answers, search terms, identifiers, URLs, and
+units. Composed phrases such as “3 places” and “Alex checked in” retain natural
+casing even when their pieces are separate text views.
+See `docs/reviews/rec-662-copy-capitalization.md` for coverage and flags.
 
 ## Provisional Astir Visual Override (REC-383 / REC-397)
 

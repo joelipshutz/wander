@@ -42,7 +42,7 @@ final class LiveTotemStateTests: XCTestCase {
         XCTAssertFalse(pins[0].totemState.hasSavedStatus,
                        "A list event's required place status is not a Wanna action.")
         XCTAssertTrue(pins[0].totemState.rails.isEmpty)
-        XCTAssertEqual(pins[0].totemState.accessibilitySummary, "On A List")
+        XCTAssertEqual(pins[0].totemState.accessibilitySummary, "On a list")
         XCTAssertTrue(projection(saves: [place], memberships: [place.place], query: query).isEmpty,
                       "Current state must not introduce a pin outside query results.")
     }
@@ -65,7 +65,7 @@ final class LiveTotemStateTests: XCTestCase {
         XCTAssertEqual(pin.totemState.rails, [MapPinOutline(ownership: .currentUser, status: .been)])
         let featured = row("featured-list", ownerID: FeaturedCommunityPlaceSignal.ownerID)
         let listOnly = projection(featured: [featured], memberships: [featured.place])[0]
-        XCTAssertTrue(listOnly.accessibilityLabel.contains("On A List"))
+        XCTAssertTrue(listOnly.accessibilityLabel.contains("On a list"))
         XCTAssertFalse(listOnly.accessibilityLabel.contains("Featured"))
     }
 
