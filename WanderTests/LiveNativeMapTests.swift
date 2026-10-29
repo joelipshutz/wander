@@ -224,6 +224,74 @@ final class LiveNativeMapTests: XCTestCase {
         coordinator.detach(from: map)
     }
 
+    func testRotatedPitchedPreviewCameraSnapshotRestoresPinGeometryAndScale() throws {
+        let map = SafeAreaMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 714))
+        let proxy = LiveNativeMapProxy()
+        let collapsedMargins = EdgeInsets(top: 110, leading: 8, bottom: 88, trailing: 8)
+        let previewMargins = EdgeInsets(top: 110, leading: 8, bottom: 460, trailing: 8)
+        let initialCamera = MapCamera(centerCoordinate: region.center, distance: 2_400,
+                                      heading: 281, pitch: 35)
+        let parent = makeParent(proxy: proxy, positionRevision: 1,
+            commandPosition: .camera(initialCamera), contentInsets: collapsedMargins)
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        map.layoutIfNeeded()
+
+        // Capture the actual native pose before the preview changes its insets.
+        // A bounding region cannot preserve this rotated, pitched projection.
+        let snapshot = try XCTUnwrap(proxy.camera)
+        XCTAssertEqual(snapshot.heading, 281, accuracy: 0.001)
+        XCTAssertEqual(snapshot.pitch, 35, accuracy: 0.001)
+        let coordinates = try [CGPoint(x: 260, y: 570), CGPoint(x: 175, y: 460)].map {
+            try XCTUnwrap(proxy.coordinate(for: $0))
+        }
+        let originalPoints = try coordinates.map { try XCTUnwrap(proxy.point(for: $0)) }
+        let originalSeparation = hypot(originalPoints[0].x - originalPoints[1].x,
+                                       originalPoints[0].y - originalPoints[1].y)
+        XCTAssertGreaterThan(originalSeparation, 100)
+
+        // Opening a tall preview changes margins before revealing its pin.
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 1,
+            commandPosition: .camera(initialCamera), contentInsets: previewMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let pinPoint = try XCTUnwrap(proxy.point(for: coordinates[0]))
+        let previewCamera = try XCTUnwrap(proxy.camera)
+        let exposed = try XCTUnwrap(LiveMapSearchLayout(size: map.bounds.size,
+            controlsHeight: 102, drawerHeight: 460).visibleRect)
+        let offset = LiveMapViewportPolicy.revealOffset(pin: pinPoint, exposedRect: exposed)
+        XCTAssertGreaterThan(offset.height, 0, "The fixture must exercise a real preview reveal")
+        let revealedCenter = try XCTUnwrap(proxy.cameraCenter(after: offset, from: previewCamera))
+        let revealedCamera = MapCamera(centerCoordinate: revealedCenter, distance: previewCamera.distance,
+                                       heading: previewCamera.heading, pitch: previewCamera.pitch)
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 2,
+            commandPosition: .camera(revealedCamera), contentInsets: previewMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let revealedPoint = try XCTUnwrap(proxy.point(for: coordinates[0]))
+        XCTAssertGreaterThan(hypot(revealedPoint.x - originalPoints[0].x,
+                                   revealedPoint.y - originalPoints[0].y), 24)
+
+        // Closing must restore the camera snapshot with the collapsed margins,
+        // rather than fit the geographic bounding rectangle of the rotated map.
+        coordinator.update(parent: makeParent(proxy: proxy, positionRevision: 3,
+            commandPosition: .camera(snapshot), contentInsets: collapsedMargins), map: map, animated: false)
+        map.layoutIfNeeded()
+        let restored = try XCTUnwrap(proxy.camera)
+        XCTAssertEqual(restored.centerCoordinate.latitude, snapshot.centerCoordinate.latitude, accuracy: 0.000001)
+        XCTAssertEqual(restored.centerCoordinate.longitude, snapshot.centerCoordinate.longitude, accuracy: 0.000001)
+        XCTAssertEqual(restored.distance, snapshot.distance, accuracy: 0.1)
+        XCTAssertEqual(restored.heading, snapshot.heading, accuracy: 0.001)
+        XCTAssertEqual(restored.pitch, snapshot.pitch, accuracy: 0.001)
+        let restoredPoints = try coordinates.map { try XCTUnwrap(proxy.point(for: $0)) }
+        for (actual, original) in zip(restoredPoints, originalPoints) {
+            XCTAssertEqual(actual.x, original.x, accuracy: 0.5)
+            XCTAssertEqual(actual.y, original.y, accuracy: 0.5)
+        }
+        XCTAssertEqual(hypot(restoredPoints[0].x - restoredPoints[1].x,
+                             restoredPoints[0].y - restoredPoints[1].y), originalSeparation, accuracy: 0.5)
+    }
+
     func testGrayscaleSitsBelowColoredAreaAndRadiusAfterToggle() throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let proxy = LiveNativeMapProxy()

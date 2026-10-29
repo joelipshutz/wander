@@ -210,11 +210,11 @@ final class LiveTotemUITests: XCTestCase {
         }
     }
 
-    private func panMap(in app: XCUIApplication, by offset: CGVector) {
+    private func panMap(in app: XCUIApplication, by offset: CGVector, from point: CGPoint? = nil) {
         let viewport = zoomViewport(in: app)
         let origin = app.coordinate(withNormalizedOffset: .zero)
-        let start = origin.withOffset(CGVector(dx: viewport.midX - offset.dx / 2 - app.frame.minX,
-                                              dy: viewport.midY - offset.dy / 2 - app.frame.minY))
+        let point = point ?? CGPoint(x: viewport.midX - offset.dx / 2, y: viewport.midY - offset.dy / 2)
+        let start = origin.withOffset(CGVector(dx: point.x - app.frame.minX, dy: point.y - app.frame.minY))
         start.press(forDuration: 0.05, thenDragTo: start.withOffset(offset))
     }
 
@@ -408,29 +408,62 @@ final class LiveTotemUITests: XCTestCase {
 
     private func capturePinStates(_ app: XCUIApplication) {
         capture("01-live-with-feed")
-        collapseDrawer(app)
+        // Use the map's normal interaction to reveal it. Drawer-header dragging
+        // is a separate interaction; this flow exercises physical pin navigation.
+        let handle = app.descendants(matching: .any).matching(identifier: "live.drawerHandle").firstMatch
+        settle(handle)
+        let viewport = zoomViewport(in: app)
+        let start = CGPoint(x: viewport.minX + 24, y: viewport.minY + 24)
+        let gesturePath = CGRect(x: start.x, y: start.y - 8, width: 40, height: 16)
+        let pins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
+        XCTAssertFalse(pins.allElementsBoundByIndex.contains { $0.frame.intersects(gesturePath) },
+                       "Navigation setup must pan empty map rather than drag an annotation")
+        panMap(in: app, by: CGVector(dx: 40, dy: 0), from: start)
+        let collapsed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            app.descendants(matching: .any).matching(identifier: "live.drawerHandle")
+                .firstMatch.label.contains(", collapsed")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [collapsed], timeout: 10), .completed)
+        let mixed = app.buttons["live.pin.totem_mixed"]
+        let reference = app.buttons["live.pin.totem_bar"]
+        wait(mixed); wait(reference)
+        // Start navigation at a readable zoom, using real gestures, so a
+        // neighboring annotation's 44pt target cannot intercept a dense dot.
+        centerPin(mixed, reference: reference, in: app)
+        zoom(app.maps.firstMatch, in: app, target: mixed, reference: reference,
+             to: "Category pin", scale: 1.6)
+        centerPin(mixed, reference: reference, in: app)
         wait(app.buttons["live.pin.totem_featured"])
         settle(app.buttons["live.pin.totem_featured"])
         capture("02-all-states-map")
         assertUniquePins(app)
 
-        for (id, name) in [("coffee", "03-you-been-persistent-list"),
-                           ("tacos", "04-you-wanna-list"),
-                           ("bar", "05-social-been"),
-                           ("noodles", "06-social-wanna"),
-                           ("mixed", "07-mixed-one-place"),
-                           ("list", "08-list-only"),
-                           ("featured_list", "09-list-over-featured"),
-                           ("featured", "10-featured-only")] {
+        for (id, placeName, name) in [("coffee", "Woodcat Coffee", "03-you-been-persistent-list"),
+                           ("tacos", "Mariposa Tacos", "04-you-wanna-list"),
+                           ("bar", "Bar Nido", "05-social-been"),
+                           ("noodles", "Larchmont Noodles", "06-social-wanna"),
+                           ("mixed", "Circuit Coffee", "07-mixed-one-place"),
+                           ("list", "Echo Park Bookshop", "08-list-only"),
+                           ("featured_list", "Silver Lake Garden", "09-list-over-featured"),
+                           ("featured", "Sunday Studio", "10-featured-only")] {
             let pin = app.buttons["live.pin.totem_\(id)"]
             wait(pin)
             settle(pin)
+            let originalFrame = pin.frame
+            let originalReference = reference.frame
             pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             wait(app.buttons["live.placePreview.close"])
+            XCTAssertEqual(app.buttons["live.placePreview.open"].label, "Open \(placeName)")
             capture(name)
             app.buttons["live.placePreview.close"].tap()
             XCTAssertTrue(app.buttons["live.placePreview.close"].waitForNonExistence(timeout: 5))
             collapseDrawer(app)
+            settleZoom(pin, reference: reference)
+            XCTAssertEqual(pin.frame.midX, originalFrame.midX, accuracy: 2,
+                           "Closing a preview must restore the rotated map's original camera")
+            XCTAssertEqual(pin.frame.midY, originalFrame.midY, accuracy: 2)
+            XCTAssertEqual(reference.frame.midX, originalReference.midX, accuracy: 2)
+            XCTAssertEqual(reference.frame.midY, originalReference.midY, accuracy: 2)
             assertUniquePins(app)
         }
     }
@@ -548,7 +581,7 @@ final class LiveTotemUITests: XCTestCase {
         let handle = app.descendants(matching: .any).matching(identifier: "live.drawerHandle").firstMatch
         guard handle.exists, !handle.label.contains(", collapsed") else { return }
         wait(handle)
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
             .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85)),
                    withVelocity: .slow, thenHoldForDuration: 0.1)
         let collapsed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -561,21 +594,12 @@ final class LiveTotemUITests: XCTestCase {
     }
 
     private func visibleButton(_ title: String, in app: XCUIApplication) -> XCUIElement {
-        let matches = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", title))
-        func visibleMatches() -> [XCUIElement] {
-            matches.allElementsBoundByIndex.filter { element in
-                // A native menu also exposes a noninteractive accessibility
-                // container. On compact iOS it has no activation point.
-                guard [.button, .staticText, .menuItem].contains(element.elementType),
-                      !element.frame.isEmpty, app.frame.intersects(element.frame) else { return false }
-                return element.isHittable
-            }
-        }
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            !visibleMatches().isEmpty
-        }, object: nil)
-        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed)
-        return visibleMatches().first ?? matches.firstMatch
+        // Native Picker menus use collection cells. Scope to their buttons so
+        // the Lists tab and transient menu containers cannot shift the match.
+        let option = app.collectionViews.cells.buttons.matching(
+            NSPredicate(format: "label == %@", title)).firstMatch
+        wait(option)
+        return option
     }
 
     /// MapKit restores the camera after a card closes. Hittability can become
