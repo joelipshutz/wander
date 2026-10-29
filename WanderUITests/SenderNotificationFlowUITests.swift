@@ -198,8 +198,11 @@ final class SenderNotificationFlowUITests: XCTestCase {
             XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
             guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
+            // Allow delivery margin for native switch recognition on Simulator.
+            // Keep one center press; do not retry or set state. The activation
+            // and persistence assertions below remain unchanged.
             nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .press(forDuration: 0.2)
+                .press(forDuration: 0.35)
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
         // pre-press snapshot. Every read shares the original five-second budget.

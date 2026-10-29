@@ -422,9 +422,10 @@ struct WanderRootView: View {
         parser: any LLMFilterParser = DeterministicFilterParser(),
         socialImportUnderstandingRepository: (any SocialImportUnderstandingRepository)? = nil,
         storeFactory: (@MainActor () -> WanderStore)? = nil,
-        importStoreFactory: (@MainActor () -> PlaceImportStore)? = nil
+        importStoreFactory: (@MainActor () -> PlaceImportStore)? = nil,
+        fixtureMode: WanderFixtureMode? = nil
     ) {
-        let fixtureMode = Self.resolvedFixtureMode()
+        let fixtureMode = fixtureMode ?? Self.resolvedFixtureMode()
         let launchArguments = ProcessInfo.processInfo.arguments
         self.fixtureMode = fixtureMode
         self.isSessionValidated = isSessionValidated

@@ -4,6 +4,94 @@ import XCTest
 final class LiveExperienceUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testCategoryParentSelectsAllCuisinesAndPreservesExclusions() {
+        let app = launch()
+        openCategoryFilters(in: app)
+        let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
+        let parent = app.switches["live.filter.category.restaurants_food"]
+        let disclosure = app.buttons["live.filter.categoryDisclosure.restaurants_food"]
+        for _ in 0..<5 where !disclosure.isHittable { form.swipeUp() }
+        XCTAssertTrue(disclosure.isHittable)
+        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(parent.value as? String, "1")
+        disclosure.tap()
+        let american = app.buttons["live.filter.categoryOption.restaurants_food.american"]
+        let mexican = app.buttons["live.filter.categoryOption.restaurants_food.mexican"]
+        for _ in 0..<5 where !mexican.isHittable { form.swipeUp() }
+        XCTAssertEqual(american.value as? String, "Selected")
+        XCTAssertEqual(mexican.value as? String, "Selected")
+        american.tap()
+        XCTAssertEqual(american.value as? String, "Not selected")
+        XCTAssertEqual(mexican.value as? String, "Selected")
+        for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
+        XCTAssertEqual(parent.value as? String, "0")
+        capture("category-all-except-cuisine-width-\(Int(app.frame.width))")
+        disclosure.tap()
+        app.buttons["live.applyFilters"].tap()
+        openCategoryFilters(in: app)
+        for _ in 0..<5 where !mexican.isHittable { form.swipeUp() }
+        XCTAssertEqual(american.value as? String, "Not selected")
+        XCTAssertEqual(mexican.value as? String, "Selected")
+        american.tap()
+        for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
+        XCTAssertEqual(parent.value as? String, "1", "Reselecting the last missing cuisine selects the parent")
+        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(parent.value as? String, "0")
+        for option in [american, mexican] {
+            for _ in 0..<6 where !option.isHittable { form.swipeUp() }
+            XCTAssertEqual(option.value as? String, "Not selected")
+        }
+    }
+
+    func testCategoryParentSelectsAllSubcategoriesAndReset() {
+        let app = launch()
+        openCategoryFilters(in: app)
+        let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
+        let disclosure = app.buttons["live.filter.categoryDisclosure.outdoors_nature"]
+        let parent = app.switches["live.filter.category.outdoors_nature"]
+        revealFully(parent, in: form, app: app)
+        XCTAssertTrue(disclosure.isHittable)
+        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).press(forDuration: 0.1)
+        XCTAssertEqual(parent.value as? String, "1")
+        disclosure.tap()
+        let park = app.buttons["live.filter.categoryOption.outdoors_nature.park"]
+        let cityPark = app.buttons["live.filter.categoryOption.outdoors_nature.city park"]
+        for _ in 0..<5 where !cityPark.isHittable { form.swipeUp() }
+        XCTAssertEqual(park.value as? String, "Selected")
+        XCTAssertEqual(cityPark.value as? String, "Selected")
+        park.tap()
+        XCTAssertEqual(park.value as? String, "Not selected")
+        XCTAssertEqual(cityPark.value as? String, "Selected")
+        for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
+        XCTAssertEqual(parent.value as? String, "0")
+        capture("category-all-except-subcategory-width-\(Int(app.frame.width))")
+        for _ in 0..<12 where !app.buttons["live.filter.reset"].isHittable { form.swipeDown() }
+        app.buttons["live.filter.reset"].tap()
+        for option in [park, cityPark] {
+            for _ in 0..<10 where !option.isHittable { form.swipeUp() }
+            XCTAssertEqual(option.value as? String, "Not selected")
+        }
+    }
+
+    private func openCategoryFilters(in app: XCUIApplication) {
+        let button = app.buttons["Filters"]
+        var previousFrame = CGRect.null
+        var stableSince = ProcessInfo.processInfo.systemUptime
+        waitForCondition {
+            guard button.exists, button.isEnabled, button.isHittable else { return false }
+            let frame = button.frame
+            guard !frame.isEmpty, app.frame.contains(frame) else { return false }
+            if frame != previousFrame {
+                previousFrame = frame
+                stableSince = ProcessInfo.processInfo.systemUptime
+                return false
+            }
+            return ProcessInfo.processInfo.systemUptime - stableSince >= 0.5
+        }
+        button.press(forDuration: 0.1)
+        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForExistence(timeout: 5))
+    }
+
     func testRestoredPinOpensPreviewWithVisibleTitleAndAllControls() {
         let app = launch()
         let pin = app.buttons["live.pin.place_noodles"]
@@ -52,19 +140,30 @@ final class LiveExperienceUITests: XCTestCase {
     func testDrawingRequiresApplyAndCanBeCleared() {
         let app = launch()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["live.pin.place_noodles"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        capture("draw-clear-hidden-with-pins")
         app.buttons["live.draw"].tap()
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["live.applyArea"].isEnabled)
         app.buttons["Use visible area"].tap()
         XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["live.applyArea"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        app.buttons["live.draw"].tap()
+        app.buttons["Use visible area"].tap()
         capture("draw-review")
         app.buttons["live.applyArea"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
+        capture("draw-clear-visible-after-apply")
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
         app.buttons["live.clearArea"].tap()
-        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
+        capture("draw-clear-hidden-after-clear")
     }
 
     func testDrawingAfterSearchDoesNotReplaySearch() {
@@ -549,23 +648,25 @@ final class LiveExperienceUITests: XCTestCase {
     func testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset() throws {
         executionTimeAllowance = 180
         let app = launch()
-        waitLiveCount(5, in: app)
-        waitFeedCount(5, in: app)
+        // The initial query follows MapKit's viewport rather than a global
+        // fixture count. Wait for loaded map/Feed agreement before panning.
+        waitForCondition { (self.liveState(in: app)?.count ?? 0) > 0 }
+        waitFeedCount(try XCTUnwrap(liveState(in: app)).count, in: app)
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
         setDrawer("collapsed", in: app)
         XCTAssertFalse(app.buttons["live.searchArea"].exists, "Drawer resizing must not stage a map search.")
         let before = try XCTUnwrap(liveState(in: app))
         let viewport = try exposedMapFrame(in: app)
-        // Keep one actual visible pin well inside the pan's endpoint viewport.
-        // This permits an original place destination after committing the area.
+        // Track visible interior pins so place-return coverage can use an
+        // original pin retained by the committed viewport's adaptive markers.
         let delta = min(32, viewport.width * 0.08)
         let interior = viewport.insetBy(dx: delta + 44, dy: 44)
-        let anchor = try XCTUnwrap(app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.first {
+        let anchorIDs = Set(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.filter {
                 guard let snapshot = try? $0.snapshot() else { return false }
                 return interior.contains(CGPoint(x: snapshot.frame.midX, y: snapshot.frame.midY)) && $0.isHittable
-            }, "The fixture needs one visible interior pin for place-return coverage.")
-        let anchorID = anchor.identifier
+            }.map(\.identifier))
+        XCTAssertFalse(anchorIDs.isEmpty, "The fixture needs visible interior pins for place-return coverage.")
         panMap(in: app, viewport: viewport, distance: delta)
         XCTAssertTrue(app.buttons["live.searchArea"].waitForExistence(timeout: 10))
         XCTAssertEqual(try XCTUnwrap(liveState(in: app)).value, before.value,
@@ -574,16 +675,20 @@ final class LiveExperienceUITests: XCTestCase {
         app.buttons["live.searchArea"].tap()
         waitForCondition {
             guard let state = self.liveState(in: app) else { return false }
-            // The five-event fixture includes one unmapped list event. The
-            // area query must remove it while retaining the interior pin.
-            return state.count > 0 && state.count < before.count && state.value.contains("Map area")
+            // The initial viewport can already exclude the fixture's unmapped
+            // list event. Committing the pan must retain the interior pin
+            // and explicitly select Map area without broadening the results.
+            return state.count > 0 && state.count <= before.count && state.value.contains("Map area")
         }
         let committed = try XCTUnwrap(liveState(in: app))
         XCTAssertTrue(app.buttons["live.searchArea"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["live.clearArea"].exists)
+        XCTAssertFalse(app.buttons["live.clearArea"].exists,
+                       "A viewport search must not show the drawn-area Clear button.")
         XCTAssertEqual(app.buttons["live.draw"].label, "Draw area")
-        let retainedPin = app.buttons.matching(identifier: anchorID).element
-        XCTAssertTrue(retainedPin.waitForExistence(timeout: 5))
+        let retainedPin = try XCTUnwrap(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.first {
+                anchorIDs.contains($0.identifier) && $0.isHittable
+            }, "The committed viewport must retain an original visible pin.")
         XCTAssertTrue(retainedPin.isHittable)
         capture("search-area-committed")
         retainedPin.tap()
@@ -618,7 +723,12 @@ final class LiveExperienceUITests: XCTestCase {
         revealFully(reset, in: form, app: app)
         reset.tap()
         app.buttons["live.applyFilters"].tap()
-        waitLiveCount(5, in: app)
+        // Reset uses the current viewport, which can differ after place and
+        // tab returns; it must clear the explicit area without losing pins.
+        waitForCondition {
+            guard let state = self.liveState(in: app) else { return false }
+            return state.count > 0 && state.count <= before.count && !state.value.contains("Map area")
+        }
         XCTAssertFalse(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
         XCTAssertFalse(app.buttons["live.clearArea"].exists)
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
@@ -928,9 +1038,11 @@ final class LiveExperienceUITests: XCTestCase {
             let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
             XCTAssertTrue(handle.isHittable)
             let oldLabel = liveState(in: app)?.label
-            let destination = state == "expanded" ? 0.12 : 0.85
-            handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: destination)))
+            // Traverse adjacent detents with the same deliberate gesture as
+            // the drawer continuity suite; a screen-length fling can rebound.
+            let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: state == "expanded" ? -80 : 80))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
             waitForCondition { self.liveState(in: app)?.label != oldLabel }
         }
         XCTAssertEqual(liveState(in: app)?.label, "Activity drawer, \(state)")

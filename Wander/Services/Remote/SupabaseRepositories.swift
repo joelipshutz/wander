@@ -757,13 +757,14 @@ struct SupabaseFeedRepository: FeedRepository, LiveMapPinStateRepository {
         let boundedLimit = min(max(limit, 1), 50)
         let response: RemoteFollowedFeedPageDTO
         if let query, let audience {
-            response = try await rpc.call("live_activity_feed", params: LiveActivityFeedParams(
+            response = try await rpc.call(query.categoryOptions.isEmpty ? "live_activity_feed" : "live_activity_feed_category_options", params: LiveActivityFeedParams(
                 input_audience: audience.rawValue, input_after: LiveFeedQuery.timestamp(query.occurredAfter),
                 input_until: LiveFeedQuery.timestamp(query.occurredBefore), input_activity_type: query.activityType.rawValue,
                 input_polygon: query.polygon, input_before: before, input_limit: boundedLimit,
                 input_center_latitude: query.center?.latitude, input_center_longitude: query.center?.longitude,
                 input_radius_meters: query.radiusMeters, input_category_ids: query.categoryIDs,
-                input_person_ids: query.personIDs))
+                input_person_ids: query.personIDs,
+                input_category_options: query.categoryOptions.isEmpty ? nil : query.categoryOptions.mapValues { $0.sorted() }))
         } else {
             response = try await followedFeedResponse(audience: audience, before: before, limit: boundedLimit)
         }
@@ -3922,6 +3923,7 @@ private struct LiveActivityFeedParams: Encodable {
     let input_radius_meters: Int?
     let input_category_ids: [String]
     let input_person_ids: [String]
+    let input_category_options: [String: [String]]?
 }
 
 private struct FollowedFeedParams: Encodable {

@@ -16,13 +16,14 @@ struct LiveFeedQuery: Equatable, Sendable {
     let center: Vertex?
     let radiusMeters: Int?
     let categoryIDs: [String]
+    let categoryOptions: [String: Set<String>]
     let personIDs: [String]
     private let polygonIsValid: Bool
 
     init(occurredAfter: Date? = nil, occurredBefore: Date? = nil,
          activityType: ActivityType = .all, polygon: [Vertex]? = nil,
          center: Vertex? = nil, radiusMeters: Int? = nil,
-         categoryIDs: Set<String> = [], personIDs: Set<String> = []) {
+         categoryIDs: Set<String> = [], categoryOptions: [String: Set<String>] = [:], personIDs: Set<String> = []) {
         // Use the same millisecond precision as the wire representation.
         self.occurredAfter = occurredAfter.map { Date(timeIntervalSince1970: floor($0.timeIntervalSince1970 * 1_000) / 1_000) }
         self.occurredBefore = occurredBefore.map { Date(timeIntervalSince1970: floor($0.timeIntervalSince1970 * 1_000) / 1_000) }
@@ -31,6 +32,7 @@ struct LiveFeedQuery: Equatable, Sendable {
         self.center = center
         self.radiusMeters = radiusMeters
         self.categoryIDs = categoryIDs.sorted()
+        self.categoryOptions = categoryOptions
         self.personIDs = personIDs.sorted()
         self.polygonIsValid = Self.validPolygon(polygon)
     }
@@ -45,6 +47,7 @@ struct LiveFeedQuery: Equatable, Sendable {
         center = source.center
         radiusMeters = source.radiusMeters
         categoryIDs = source.categoryIDs
+        categoryOptions = source.categoryOptions
         personIDs = source.personIDs
         polygonIsValid = source.polygonIsValid
     }
@@ -56,6 +59,11 @@ struct LiveFeedQuery: Equatable, Sendable {
         guard categoryIDs.count <= 100, personIDs.count <= 100,
               personIDs.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.unicodeScalars.count <= 256 }),
               categoryIDs.allSatisfy({ $0.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil }) else { return false }
+        guard categoryOptions.count <= 100, categoryOptions.allSatisfy({ category, options in
+            WanderPlaceCategory.allowedCategories.contains(category) && !options.isEmpty && options.count <= 200
+                && options.allSatisfy { !$0.isEmpty && $0.count <= 128
+                    && $0 == WanderPlaceCategory.normalizedCategoryText($0) }
+        }) else { return false }
         if let center {
             guard center.latitude.isFinite, center.longitude.isFinite,
                   (-90...90).contains(center.latitude), (-180...180).contains(center.longitude),
@@ -77,8 +85,8 @@ struct LiveFeedQuery: Equatable, Sendable {
         case .lists: if activity.resolvedTicketKind != .list { return false }
         }
         if !personIDs.isEmpty, !personIDs.contains(activity.actor.id) { return false }
-        if !categoryIDs.isEmpty {
-            guard let place = activity.place, categoryIDs.contains(Self.categoryID(for: place)) else { return false }
+        if !categoryIDs.isEmpty || !categoryOptions.isEmpty {
+            guard let place = activity.place, includesCategory(place) else { return false }
         }
         if let center, let radiusMeters {
             guard let place = activity.place?.place,
@@ -97,6 +105,19 @@ struct LiveFeedQuery: Equatable, Sendable {
     static func categoryID(for place: VisiblePlace) -> String {
         place.userPlace.viewerPrimaryCategory.map(WanderPlaceCategory.normalizedPrimaryCategory)
             ?? place.effectiveCategory
+    }
+
+    func includesCategory(_ place: VisiblePlace) -> Bool {
+        guard !categoryIDs.isEmpty || !categoryOptions.isEmpty else { return true }
+        let category = Self.categoryID(for: place)
+        if categoryIDs.contains(category) { return true }
+        // These are viewer-scoped projections, not another member's private edits.
+        let option = category == WanderPlaceCategory.restaurantsFood
+            ? (place.userPlace.viewerFoodType ?? (place.userPlace.viewerPrimaryCategory == nil ? place.restaurantCuisine : nil))
+            : (place.userPlace.viewerPrimaryCategory != nil
+                ? place.userPlace.viewerSubcategory : place.effectiveSubcategory)
+        guard let option else { return false }
+        return categoryOptions[category, default: []].contains(WanderPlaceCategory.normalizedCategoryText(option))
     }
 
     func contains(latitude: Double, longitude: Double) -> Bool {
@@ -191,7 +212,7 @@ struct LiveFeedActivitySection: Identifiable {
 extension LiveFeedQuery {
     var hasDiscoveryFilters: Bool {
         activityType != .all || polygon != nil || center != nil
-            || !categoryIDs.isEmpty || !personIDs.isEmpty
+            || !categoryIDs.isEmpty || !categoryOptions.isEmpty || !personIDs.isEmpty
     }
 
     func nextExpansion(after stage: LiveFeedExpansionStage) -> LiveFeedExpansionStage? {
@@ -244,7 +265,7 @@ extension LiveFeedQuery {
         let date = visible.userPlace.visitedAt ?? visible.userPlace.savedAt
         if let occurredAfter, date < occurredAfter { return false }
         if let occurredBefore, date > occurredBefore { return false }
-        if !categoryIDs.isEmpty, !categoryIDs.contains(Self.categoryID(for: visible)) { return false }
+        if !includesCategory(visible) { return false }
         let place = visible.place
         if polygon != nil && !contains(latitude: place.latitude, longitude: place.longitude) { return false }
         if let center, let radiusMeters,

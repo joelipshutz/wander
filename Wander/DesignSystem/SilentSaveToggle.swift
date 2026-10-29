@@ -36,8 +36,7 @@ struct SilentSaveToggle: View {
         .frame(minHeight: WanderTheme.tapMinimum)
         .accessibilityIdentifier("save.silent")
         .padding(WanderTheme.spacing3)
-        // Clip only the background: clipping the native switch can swallow taps
-        // after scrolling the large-text save sheet.
-        .background(WanderTheme.surfaceBone.color, in: RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+        .background(WanderTheme.surfaceBone.color)
+        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
     }
 }

@@ -164,6 +164,12 @@ async function main() {
         await client.query("rollback to savepoint live_feed_smoke");
         await client.query("release savepoint live_feed_smoke");
         console.log("ok - Live filters precede pagination and cursors remain account/query scoped without widening visibility");
+        await client.query("savepoint live_category_options_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/live_category_options.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint live_category_options_smoke");
+        await client.query("release savepoint live_category_options_smoke");
+        console.log("ok - Live cuisine/subcategory choices filter before pagination and preserve viewer taxonomy and access");
         await client.query("savepoint live_place_smoke");
         await client.query(transactionBody(readFileSync(
           new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback"));
@@ -2869,6 +2875,10 @@ savepoint live_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_feed_smoke;
 release savepoint live_feed_smoke;
+savepoint live_category_options_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/live_category_options.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint live_category_options_smoke;
+release savepoint live_category_options_smoke;
 savepoint live_place_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_place_activity.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_place_smoke;
