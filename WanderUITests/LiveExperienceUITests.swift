@@ -74,7 +74,7 @@ final class LiveExperienceUITests: XCTestCase {
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
         app.buttons["live.clearArea"].tap()
-        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
         capture("draw-clear-hidden-after-clear")
     }
 
@@ -560,23 +560,25 @@ final class LiveExperienceUITests: XCTestCase {
     func testSearchThisAreaRequiresTapAndSurvivesPlaceTabsAndReset() throws {
         executionTimeAllowance = 180
         let app = launch()
-        waitLiveCount(5, in: app)
-        waitFeedCount(5, in: app)
+        // The initial query follows MapKit's viewport rather than a global
+        // fixture count. Wait for loaded map/Feed agreement before panning.
+        waitForCondition { (self.liveState(in: app)?.count ?? 0) > 0 }
+        waitFeedCount(try XCTUnwrap(liveState(in: app)).count, in: app)
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
         setDrawer("collapsed", in: app)
         XCTAssertFalse(app.buttons["live.searchArea"].exists, "Drawer resizing must not stage a map search.")
         let before = try XCTUnwrap(liveState(in: app))
         let viewport = try exposedMapFrame(in: app)
-        // Keep one actual visible pin well inside the pan's endpoint viewport.
-        // This permits an original place destination after committing the area.
+        // Track visible interior pins so place-return coverage can use an
+        // original pin retained by the committed viewport's adaptive markers.
         let delta = min(32, viewport.width * 0.08)
         let interior = viewport.insetBy(dx: delta + 44, dy: 44)
-        let anchor = try XCTUnwrap(app.buttons.matching(
-            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.first {
+        let anchorIDs = Set(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.filter {
                 guard let snapshot = try? $0.snapshot() else { return false }
                 return interior.contains(CGPoint(x: snapshot.frame.midX, y: snapshot.frame.midY)) && $0.isHittable
-            }, "The fixture needs one visible interior pin for place-return coverage.")
-        let anchorID = anchor.identifier
+            }.map(\.identifier))
+        XCTAssertFalse(anchorIDs.isEmpty, "The fixture needs visible interior pins for place-return coverage.")
         panMap(in: app, viewport: viewport, distance: delta)
         XCTAssertTrue(app.buttons["live.searchArea"].waitForExistence(timeout: 10))
         XCTAssertEqual(try XCTUnwrap(liveState(in: app)).value, before.value,
@@ -585,17 +587,20 @@ final class LiveExperienceUITests: XCTestCase {
         app.buttons["live.searchArea"].tap()
         waitForCondition {
             guard let state = self.liveState(in: app) else { return false }
-            // The five-event fixture includes one unmapped list event. The
-            // area query must remove it while retaining the interior pin.
-            return state.count > 0 && state.count < before.count && state.value.contains("Map area")
+            // The initial viewport can already exclude the fixture's unmapped
+            // list event. Committing the pan must retain the interior pin
+            // and explicitly select Map area without broadening the results.
+            return state.count > 0 && state.count <= before.count && state.value.contains("Map area")
         }
         let committed = try XCTUnwrap(liveState(in: app))
         XCTAssertTrue(app.buttons["live.searchArea"].waitForNonExistence(timeout: 5))
         XCTAssertFalse(app.buttons["live.clearArea"].exists,
                        "A viewport search must not show the drawn-area Clear button.")
         XCTAssertEqual(app.buttons["live.draw"].label, "Draw area")
-        let retainedPin = app.buttons.matching(identifier: anchorID).element
-        XCTAssertTrue(retainedPin.waitForExistence(timeout: 5))
+        let retainedPin = try XCTUnwrap(app.buttons.matching(
+            NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.first {
+                anchorIDs.contains($0.identifier) && $0.isHittable
+            }, "The committed viewport must retain an original visible pin.")
         XCTAssertTrue(retainedPin.isHittable)
         capture("search-area-committed")
         retainedPin.tap()
@@ -630,7 +635,12 @@ final class LiveExperienceUITests: XCTestCase {
         revealFully(reset, in: form, app: app)
         reset.tap()
         app.buttons["live.applyFilters"].tap()
-        waitLiveCount(5, in: app)
+        // Reset uses the current viewport, which can differ after place and
+        // tab returns; it must clear the explicit area without losing pins.
+        waitForCondition {
+            guard let state = self.liveState(in: app) else { return false }
+            return state.count > 0 && state.count <= before.count && !state.value.contains("Map area")
+        }
         XCTAssertFalse(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
         XCTAssertFalse(app.buttons["live.clearArea"].exists)
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
@@ -940,9 +950,11 @@ final class LiveExperienceUITests: XCTestCase {
             let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
             XCTAssertTrue(handle.isHittable)
             let oldLabel = liveState(in: app)?.label
-            let destination = state == "expanded" ? 0.12 : 0.85
-            handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: destination)))
+            // Traverse adjacent detents with the same deliberate gesture as
+            // the drawer continuity suite; a screen-length fling can rebound.
+            let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            let end = start.withOffset(CGVector(dx: 0, dy: state == "expanded" ? -80 : 80))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
             waitForCondition { self.liveState(in: app)?.label != oldLabel }
         }
         XCTAssertEqual(liveState(in: app)?.label, "Activity drawer, \(state)")
