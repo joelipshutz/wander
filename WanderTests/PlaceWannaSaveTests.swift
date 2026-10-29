@@ -9,6 +9,18 @@ final class PlaceWannaSaveTests: XCTestCase {
                        sourceProviderPlaceID: "repeat-wanna-cafe", confidence: 1)
     }
 
+    func testRepeatWannaCreationAndEditInvalidateLiveContent() async throws {
+        let store = WanderStore(fixtures: .seed())
+        _ = store.saveCandidate(candidate, status: .been, visibility: .selfOnly, note: nil, sourceType: .manual)
+        let before = store.liveContentRevision
+        _ = await store.saveNewWanna(candidate, visibility: .selfOnly, note: "First", plannedDate: nil, attributes: [], backend: nil)
+        XCTAssertNotEqual(store.liveContentRevision, before)
+        let afterCreation = store.liveContentRevision
+        let wanna = try XCTUnwrap(store.placeWannaSaves.last)
+        _ = store.updateWanna(wanna, visibility: .selfOnly, note: "Edited", plannedDate: nil, attributes: [])
+        XCTAssertNotEqual(store.liveContentRevision, afterCreation)
+    }
+
     func testRemovedWannaPersistsRetriesAndRejectsStaleReads() async throws {
         var snapshot: WanderStoreSnapshot?
         let persistence = WanderStorePersistence(load: { snapshot }, save: { snapshot = $0 })

@@ -477,6 +477,39 @@ final class WanderStore: ObservableObject {
         groups: [VisiblePlaceGroup]
     )?
     private(set) var presentationRevision: UInt64 = 0
+    private var liveContentKeyCache: (revision: UInt64, key: UInt64)?
+
+    /// Recomputed once per store publication. Preferences, notification receipts,
+    /// and sync bookkeeping alone must not restart the entire Live query.
+    var liveContentRevision: UInt64 {
+        if let cached = liveContentKeyCache, cached.revision == presentationRevision { return cached.key }
+        var hash = Hasher()
+        hash.combine(currentUser.id)
+        for row in userPlaces {
+            hash.combine(row.localID); hash.combine(row.updatedAt); hash.combine(row.deletedAt)
+            hash.combine(row.statusRaw); hash.combine(row.visibilityRaw); hash.combine(row.placeID)
+        }
+        for row in placeVisits { hash.combine(row.localID); hash.combine(row.updatedAt); hash.combine(row.deletedAt) }
+        for row in places { hash.combine(row.localID); hash.combine(row.updatedAt) }
+        for row in placeAttributes { hash.combine(row.localID); hash.combine(row.updatedAt) }
+        for row in visitPhotos { hash.combine(row.localID); hash.combine(row.updatedAt); hash.combine(row.deletedAt) }
+        for row in placeWannaSaves {
+            hash.combine(row.id); hash.combine(row.editedAt); hash.combine(row.deletedAt)
+            hash.combine(row.visibility.rawValue); hash.combine(row.note); hash.combine(row.plannedDate)
+            hash.combine(row.attributeAnswersJSON)
+        }
+        for row in follows { hash.combine(row.followerUserID); hash.combine(row.followedUserID) }
+        for row in blocks { hash.combine(row.blockerUserID); hash.combine(row.blockedUserID) }
+        for row in mutes { hash.combine(row.muterUserID); hash.combine(row.mutedUserID) }
+        for row in profiles { hash.combine(row.id); hash.combine(row.isPrivateProfile); hash.combine(row.deletedAt) }
+        for row in placeLists { hash.combine(row.localID); hash.combine(row.updatedAt); hash.combine(row.deletedAt) }
+        for row in placeListItems { hash.combine(row.localID); hash.combine(row.updatedAt); hash.combine(row.deletedAt) }
+        for row in placeListMembers { hash.combine(row) }
+        let key = UInt64(bitPattern: Int64(hash.finalize()))
+        liveContentKeyCache = (presentationRevision, key)
+        return key
+    }
+
     private(set) var firstVisitPhotoIndexBuildCount = 0
     private(set) var activityBookmarkIndexBuildCount = 0
     private(set) var listPhotoAuthorizationScopeKeyBuildCount = 0
@@ -1900,18 +1933,28 @@ final class WanderStore: ObservableObject {
 
     /// A committed Live query is session-only and independent of Profile data.
     /// Cancel before replacement; explicit nil restores the legacy Feed API.
-    func selectLiveFeedQuery(_ query: LiveFeedQuery?) {
+    func selectLiveFeedQuery(_ query: LiveFeedQuery?, preservingMatchingContent: Bool = false) {
         guard liveFeedQuery != query else { return }
+        let retainedVisibleLimit = feedVisibleTileLimit
         resetFeedPagination()
+        if preservingMatchingContent { feedVisibleTileLimit = retainedVisibleLimit }
         feedRefreshTask?.task.cancel()
         feedRefreshTask = nil
         feedRefreshCompletedAt = nil
         feedRefreshCompletedRevision = nil
+        let previous = preservingMatchingContent ? followedFeedPage : nil
         followedFeedPage = nil
         feedLoadState = .idle
         lastFeedRefreshAt = nil
         liveFeedQuery = query
-        clearLiveFeedLease()
+        if let previous, let query {
+            followedFeedPage = FollowedFeedPage(activity: previous.activity.filter {
+                query.includes($0) && canDisplayLiveMapActivity($0)
+                    && liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: liveFeedClock())
+            }, featuredPlaces: [], nextCursor: nil, fetchedAt: previous.fetchedAt)
+            feedLoadState = .stale
+            refreshLiveFeedDisplayLease()
+        } else { clearLiveFeedLease() }
     }
 
     /// Recommendations can publish while posts are waiting on the network, and
@@ -1937,7 +1980,7 @@ final class WanderStore: ObservableObject {
     ) async -> Bool {
         guard !Task.isCancelled else { return false }
         let requestUserID = currentUser.id
-        let requestRevision = presentationRevision
+        let requestRevision = liveContentRevision
         if let pending = feedRefreshTask, pending.userID == requestUserID {
             let result = await pending.task.value
             guard !Task.isCancelled, currentUser.id == requestUserID else { return false }
@@ -1954,21 +1997,24 @@ final class WanderStore: ObservableObject {
                 }
             }
             return await refreshFollowedFeed(
-                backend: backend, preservingActivityID: preservingActivityID, force: true
+                backend: backend, preservingActivityID: preservingActivityID,
+                force: force || pending.preservingActivityID != preservingActivityID
             )
         }
         if !force, followedFeedPage != nil, feedLoadState == .loaded,
-           feedRefreshCompletedRevision == presentationRevision,
+           feedRefreshCompletedRevision == liveContentRevision,
            FeedRefreshPolicy.isFresh(completedAt: feedRefreshCompletedAt) {
             return true
         }
-        resetFeedPagination()
+        let retainedPage = !force && liveFeedQuery != nil ? followedFeedPage : nil
+        if retainedPage == nil { resetFeedPagination() }
+        else { feedPageTask?.task.cancel(); feedPageTask = nil; isLoadingMoreFeed = false }
         let id = UUID()
         let task = Task { @MainActor [weak self] in
             guard let self else { return false }
             return await self.performFollowedFeedRefresh(
                 backend: backend, preservingActivityID: preservingActivityID,
-                requestID: id, requestUserID: requestUserID
+                requestID: id, requestUserID: requestUserID, retainedPage: retainedPage
             )
         }
         feedRefreshTask = (id, requestUserID, preservingActivityID, requestRevision, task)
@@ -1986,7 +2032,7 @@ final class WanderStore: ObservableObject {
 
     private func performFollowedFeedRefresh(
         backend: WanderBackend?, preservingActivityID: String?,
-        requestID: UUID, requestUserID: String
+        requestID: UUID, requestUserID: String, retainedPage: FollowedFeedPage?
     ) async -> Bool {
         guard !Task.isCancelled, currentUser.id == requestUserID,
               feedRefreshTask?.id == requestID else { return false }
@@ -2024,8 +2070,34 @@ final class WanderStore: ObservableObject {
                 guard !Task.isCancelled, currentUser.id == requestUserID,
                       feedAudience == audience, liveFeedQuery == query,
                       feedRefreshTask?.id == requestID else { return false }
-                followedFeedPage = resolvedPage
-                acceptLiveFeedAuthorization(resolvedPage, at: authorizedAt ?? liveFeedClock(), replacing: true)
+                acceptLiveFeedAuthorization(resolvedPage, at: authorizedAt ?? liveFeedClock(), replacing: retainedPage == nil)
+                if let retainedPage {
+                    let oldestFresh = resolvedPage.activity.min {
+                        $0.occurredAt == $1.occurredAt ? $0.id < $1.id : $0.occurredAt < $1.occurredAt
+                    }
+                    // Omissions in the refreshed selected range are authoritative.
+                    // Expanded sections were not queried by this read and retain
+                    // their original receipts and their own query-bound cursor.
+                    let freshIDs = Set(resolvedPage.activity.map(\.id))
+                    let tail = retainedPage.activity.filter { event in
+                        let expanded = query.map {
+                            liveFeedExpansionStage != .selected && !$0.includes(event)
+                                && $0.includes(event, through: liveFeedExpansionStage)
+                        } ?? false
+                        let beyondFreshPage = oldestFresh.map {
+                            event.occurredAt < $0.occurredAt || (event.occurredAt == $0.occurredAt && event.id < $0.id)
+                        } ?? false
+                        return (expanded || (resolvedPage.nextCursor != nil && beyondFreshPage))
+                            && !freshIDs.contains(event.id) && canDisplayLiveMapActivity(event)
+                            && liveFeedDisplayLease.permits(activityID: event.id,
+                                isOwn: event.actor.id == currentUser.id, at: liveFeedClock())
+                    }
+                    let nextCursor = liveFeedExpansionStage != .selected ? retainedPage.nextCursor
+                        : (tail.isEmpty ? resolvedPage.nextCursor : retainedPage.nextCursor ?? resolvedPage.nextCursor)
+                    followedFeedPage = FollowedFeedPage(activity: resolvedPage.activity + tail,
+                        featuredPlaces: resolvedPage.featuredPlaces, nextCursor: nextCursor,
+                        fetchedAt: resolvedPage.fetchedAt)
+                } else { followedFeedPage = resolvedPage }
                 feedLoadState = .loaded
                 lastFeedRefreshAt = page.fetchedAt
                 lastRemoteError = nil

@@ -342,6 +342,156 @@ final class LiveFeedStoreTests: XCTestCase {
         XCTAssertEqual(store.followedFeedPage?.fetchedAt, Date(timeIntervalSince1970: 3))
     }
 
+    func testProfileBookkeepingDoesNotInvalidateWarmFeedOrPagination() async {
+        let store = WanderStore(fixtures: .seed())
+        store.selectLiveFeedQuery(.init())
+        let repository = LiveStoreRepository(pages: [emptyPage(1)])
+        let backend = WanderBackend(feedRepository: repository)
+        _ = await store.refreshFollowedFeed(backend: backend, force: false)
+        let revision = store.liveContentRevision
+        let presentation = store.presentationRevision
+        store.updateCurrentUserProfile(bio: "Warm resume fixture")
+        XCTAssertGreaterThan(store.presentationRevision, presentation)
+        XCTAssertEqual(store.liveContentRevision, revision)
+        _ = await store.refreshFollowedFeed(backend: backend, force: false)
+        XCTAssertEqual(repository.queries.count, 1)
+        store.setPrivateProfile(!store.currentUser.isPrivateProfile)
+        XCTAssertNotEqual(store.liveContentRevision, revision)
+    }
+
+    func testAutomaticMovementKeepsMatchingRowsButNeverOldCursorOrExpiredAuthorization() async {
+        let start = ContinuousClock.now
+        var instant = start
+        let store = WanderStore(fixtures: .seed(), liveFeedClock: { instant })
+        let actor = ProfileShell(id: "friend", handle: "friend", displayName: "Friend", avatarURL: nil, bio: nil, relationship: .follower)
+        let row = FeedActivity(id: "retained", kind: .listCreated, actor: actor, occurredAt: Date(timeIntervalSince1970: 100))
+        let repository = LiveStoreRepository(pages: [.init(activity: [row], featuredPlaces: [], nextCursor: "old-cursor", fetchedAt: .now)])
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 200)))
+        _ = await store.refreshFollowedFeed(backend: WanderBackend(feedRepository: repository))
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 300)), preservingMatchingContent: true)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [row.id])
+        XCTAssertNil(store.followedFeedPage?.nextCursor)
+        instant = start.advanced(by: .seconds(900))
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 400)), preservingMatchingContent: true)
+        XCTAssertTrue(store.followedFeedPage?.activity.isEmpty == true)
+    }
+
+    func testBackgroundRefreshKeepsPaginatedTailWhileManualRefreshResetsIt() async throws {
+        let store = WanderStore(fixtures: .seed())
+        store.selectLiveFeedQuery(.init())
+        let actor = store.shell(for: store.currentUser)
+        func row(_ number: Int) -> FeedActivity {
+            .init(id: "tail-\(number)", kind: .listCreated, actor: actor,
+                  occurredAt: Date(timeIntervalSince1970: Double(1000-number)))
+        }
+        func page(_ range: Range<Int>, cursor: String?) -> FollowedFeedPage {
+            .init(activity: range.map(row), featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
+        }
+        let repository = LiveStoreRepository(pages: [page(0..<20, cursor: "second"), page(20..<40, cursor: "third"),
+            page(0..<20, cursor: "second"), page(0..<20, cursor: "second")])
+        let backend = WanderBackend(feedRepository: repository)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        _ = await store.loadMoreFeed(backend: backend)
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 40)
+        // A real access/content mutation bypasses freshness, but automatic
+        // refresh must keep the reader's older page and visible window.
+        store.setPrivateProfile(!store.currentUser.isPrivateProfile)
+        let limit = store.feedVisibleTileLimit
+        repository.suspendedCall = 3
+        let task = Task { await store.refreshFollowedFeed(backend: backend, force: false) }
+        await waitFor(repository, calls: 3)
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 40)
+        repository.suspendedCall = nil
+        _ = await task.value
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 40)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "third")
+        XCTAssertEqual(store.feedVisibleTileLimit, limit)
+        _ = await store.refreshFollowedFeed(backend: backend, force: true)
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 20)
+        XCTAssertEqual(store.feedVisibleTileLimit, FeedPagination.pageSize)
+    }
+
+    func testWarmTimeWindowAdvancePreservesVisibleLimitAndAdoptsNewQueryCursor() async {
+        let store = WanderStore(fixtures: .seed())
+        let actor = store.shell(for: store.currentUser)
+        func page(_ range: Range<Int>, cursor: String?) -> FollowedFeedPage {
+            .init(activity: range.map { .init(id: "warm-window-\($0)", kind: .listCreated, actor: actor,
+                occurredAt: Date(timeIntervalSince1970: Double(1000-$0))) }, featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
+        }
+        let repository = LiveStoreRepository(pages: [page(0..<20, cursor: "old-second"), page(20..<40, cursor: "old-third"),
+            page(0..<20, cursor: "new-second"), page(20..<40, cursor: "new-third"), page(40..<60, cursor: nil)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 1100)))
+        _ = await store.refreshFollowedFeed(backend: backend)
+        _ = await store.loadMoreFeed(backend: backend)
+        let limit = store.feedVisibleTileLimit
+        store.selectLiveFeedQuery(.init(occurredBefore: Date(timeIntervalSince1970: 1220)), preservingMatchingContent: true)
+        XCTAssertEqual(store.feedVisibleTileLimit, limit)
+        XCTAssertNil(store.followedFeedPage?.nextCursor, "Never reuse a cursor bound to the old query")
+        _ = await store.refreshFollowedFeed(backend: backend, force: false)
+        XCTAssertEqual(store.feedVisibleTileLimit, limit)
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 40)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "new-second")
+        _ = await store.loadMoreFeed(backend: backend)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "new-third")
+        // The embedded Feed automatically continues duplicate-only pages while
+        // its bottom remains visible, one bounded server read per request.
+        _ = await store.loadMoreFeed(backend: backend)
+        XCTAssertEqual(store.followedFeedPage?.activity.count, 60)
+        XCTAssertEqual(repository.cursors.compactMap { $0 }, ["old-second", "new-second", "new-third"])
+    }
+
+    func testWarmRefreshRetainsTimestampTiesAcrossPageBoundary() async {
+        let store = WanderStore(fixtures: .seed())
+        store.selectLiveFeedQuery(.init())
+        let actor = store.shell(for: store.currentUser)
+        func page(_ numbers: [Int], cursor: String?) -> FollowedFeedPage {
+            .init(activity: numbers.map { .init(id: "tie-\($0)", kind: .listCreated, actor: actor,
+                occurredAt: Date(timeIntervalSince1970: $0 >= 30 ? 500 : 400)) },
+                featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
+        }
+        let first = page(Array((41...60).reversed()), cursor: "second")
+        let second = page(Array((21...40).reversed()), cursor: "third")
+        let repository = LiveStoreRepository(pages: [first, second, first])
+        let backend = WanderBackend(feedRepository: repository)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        _ = await store.loadMoreFeed(backend: backend)
+        store.setPrivateProfile(!store.currentUser.isPrivateProfile)
+        _ = await store.refreshFollowedFeed(backend: backend, force: false)
+        XCTAssertEqual(Set(store.followedFeedPage?.activity.map(\.id) ?? []), Set((21...60).map { "tie-\($0)" }))
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, "third")
+    }
+
+    func testAutomaticRefreshKeepsExpandedSectionsAndTheirOwnCursor() async {
+        for includeAll in [false, true] {
+            let store = WanderStore(fixtures: .seed())
+            let actor = store.shell(for: store.currentUser)
+            let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100),
+                occurredBefore: Date(timeIntervalSince1970: 200), activityType: .checkIns)
+            let recent = FeedActivity(id: "warm-recent", kind: .placeBeen, actor: actor, occurredAt: Date(timeIntervalSince1970: 150))
+            let older = FeedActivity(id: "warm-older", kind: .placeBeen, actor: actor, occurredAt: Date(timeIntervalSince1970: 50))
+            let outside = FeedActivity(id: "warm-outside", kind: .placeWannaGo, actor: actor, occurredAt: Date(timeIntervalSince1970: 190))
+            func page(_ rows: [FeedActivity], cursor: String? = nil) -> FollowedFeedPage {
+                .init(activity: rows, featuredPlaces: [], nextCursor: cursor, fetchedAt: .now)
+            }
+            var pages = [page([recent]), page([older])]
+            if includeAll { pages.append(page([outside])) }
+            pages.append(page([recent], cursor: "selected-query-cursor"))
+            let repository = LiveStoreRepository(pages: pages), backend = WanderBackend(feedRepository: repository)
+            store.selectLiveFeedQuery(query)
+            _ = await store.refreshFollowedFeed(backend: backend)
+            _ = await store.loadMoreFeed(backend: backend)
+            if includeAll { _ = await store.loadMoreFeed(backend: backend) }
+            let limit = store.feedVisibleTileLimit
+            store.setPrivateProfile(!store.currentUser.isPrivateProfile)
+            _ = await store.refreshFollowedFeed(backend: backend, force: false)
+            XCTAssertEqual(store.liveFeedExpansionStage, includeAll ? .allActivity : .older)
+            XCTAssertEqual(store.feedVisibleTileLimit, limit)
+            XCTAssertEqual(store.followedFeedPage?.activity.count, includeAll ? 3 : 2)
+            XCTAssertNil(store.followedFeedPage?.nextCursor, "A selected-query cursor cannot replace an expanded query cursor")
+        }
+    }
+
     private func assertDelayedMediaDoesNotRenewLease(paging: Bool) async {
         var clock = ContinuousClock.now
         let store = WanderStore(fixtures: .seed(), liveFeedClock: { clock })

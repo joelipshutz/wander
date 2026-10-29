@@ -26,6 +26,10 @@ struct LiveScreen: View {
     @State private var committedMapViewport: MapViewport?
     @State private var mapRefresh: UInt64 = 0
     @State private var mapRefreshDeferred = false
+    @State private var didRestoreBrowse = false
+    @State private var restoredWithoutLocation = false
+    @State private var lastLocationCenter: CLLocationCoordinate2D?
+    @State private var backgroundedAt: ContinuousClock.Instant?
     @State private var fullProfilePin: LivePlacePin?
     @State private var fullProfileCandidate: PlaceCandidate?
     @State private var nativeFeature: MKMapFeatureAnnotation?
@@ -120,7 +124,7 @@ struct LiveScreen: View {
         guard !usesTotemReviewFixture, let request = mapRequest else { return nil }
         return LiveMapPinStateRequest(map: request,
             placeIDs: Array(Set(mapPins.flatMap { $0.identity.persistedPlaceIDs })).sorted(),
-            resultRevision: mapResults.revision, storeRevision: store.presentationRevision)
+            resultRevision: mapResults.revision, storeRevision: store.liveContentRevision)
     }
     private var mapRequest: LiveMapRequest? {
         guard let query = store.liveFeedQuery else { return nil }
@@ -351,7 +355,11 @@ struct LiveScreen: View {
         .onChange(of: pinStateLoader.revision) { _, _ in rebuildMapProjection() }
         .onReceive(store.$followedFeedPage) { page in refreshEnrichedMapActivity(page) }
         .onChange(of: store.presentationRevision) { _, _ in
+            mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
+        }
+        .onChange(of: store.liveContentRevision) { _, _ in
             pinStateLoader.reset()
+            mapResults.invalidateFreshness()
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
             if isMapCovered || !isActive { mapRefreshDeferred = true }
             else { mapRefresh &+= 1 }
@@ -368,6 +376,7 @@ struct LiveScreen: View {
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
             fullProfilePin = nil; fullProfileCandidate = nil; committedMapBoundary = nil; committedMapViewport = nil
             mapActivity = []; mapPins = []
+            didRestoreBrowse = false; restoredWithoutLocation = false; lastLocationCenter = nil; backgroundedAt = nil
             launchLocation = LiveMapLaunchLocation()
             mapSearch = LiveMapSearchState(); setMapCamera(.region(launchLocation.region))
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
@@ -400,6 +409,7 @@ struct LiveScreen: View {
             Button("OK", role: .cancel) {}
         } message: { Text("Choose a region smaller than half the world, then draw or use the visible area.") }
         .onAppear {
+            restoreBrowseState()
             locationPermission.refreshAuthorizationStatus()
             viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
             installCommittedQuery()
@@ -417,8 +427,25 @@ struct LiveScreen: View {
             else { restoreFeedPresentation() }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { launchLocation.reset() }
+            if phase == .background {
+                backgroundedAt = .now
+                saveBrowseState()
+                launchLocation.reset()
+            }
             if phase == .active {
+                let elapsed = backgroundedAt.map { $0.duration(to: .now) } ?? .zero
+                backgroundedAt = nil
+                if elapsed >= .seconds(60) || Date.now.timeIntervalSince(selection.occurredBefore) >= 60 {
+                    if store.liveFeedExpansionStage == .selected {
+                        selection = selection.committed(at: .now)
+                        installCommittedQuery(preservingContent: true)
+                    } else {
+                        // Keep the cursor-bound time window while reading Older
+                        // or All Activity; pull to refresh starts a new window.
+                        mapRefresh &+= 1
+                        installCommittedQuery()
+                    }
+                } else { installCommittedQuery() }
                 pinStateLoader.revalidate()
                 locationPermission.refreshAuthorizationStatus()
                 store.refreshLiveFeedDisplayLease()
@@ -508,7 +535,12 @@ struct LiveScreen: View {
         guard let region = await launchLocation.resolve(
             hasExplicitGeographicScope: area != nil || selection.scope == .nearby
         ), !Task.isCancelled, locationActivation.isActive else { return }
-        applyLaunchRegion(region)
+        if restoredWithoutLocation {
+            restoredWithoutLocation = false; lastLocationCenter = region.center; return
+        }
+        guard LiveLocationRefreshPolicy.shouldMove(from: lastLocationCenter, to: region.center) else { return }
+        lastLocationCenter = region.center
+        applyLaunchRegion(region, preservingContent: true)
     }
 
     private func map(size: CGSize, drawerHeight: CGFloat) -> some View {
@@ -1125,10 +1157,10 @@ struct LiveScreen: View {
             + (area.map { [$0.summary] } ?? [])).joined(separator: " · ")
     }
 
-    private func installCommittedQuery(refresh: Bool = true) {
+    private func installCommittedQuery(refresh: Bool = true, preservingContent: Bool = false) {
         guard selection.isValid else { return }
         let boundary = resolvedMapBoundary()
-        store.selectLiveFeedQuery(selection.query(area: boundary))
+        store.selectLiveFeedQuery(selection.query(area: boundary), preservingMatchingContent: preservingContent)
         store.refreshLiveFeedDisplayLease()
         if refresh {
             let userID = store.currentUser.id, query = store.liveFeedQuery
@@ -1175,12 +1207,12 @@ struct LiveScreen: View {
         return MapViewport(minLatitude: minLat, minLongitude: minLng, maxLatitude: maxLat, maxLongitude: maxLng)
     }
 
-    private func featuredMapPlaces(request: LiveMapRequest) async -> [VisiblePlace] {
+    private func featuredMapPlaces(request: LiveMapRequest) async -> [VisiblePlace]? {
         guard request.featured, request.audience == .everyone, request.query.personIDs.isEmpty,
               request.query.activityType != .wannas, request.query.activityType != .lists,
               let viewport = request.viewport else { return [] }
-        let candidates = await store.fetchRemoteFeaturedViewportPlaces(in: viewport, backend: auth.isSignedIn ? backend : nil)
-            ?? (usesTotemReviewFixture || !auth.isSignedIn ? store.visiblePlaces() : [])
+        guard let candidates = await store.fetchRemoteFeaturedViewportPlaces(in: viewport, backend: auth.isSignedIn ? backend : nil)
+            ?? (usesTotemReviewFixture || !auth.isSignedIn ? store.visiblePlaces() : nil) else { return nil }
         guard !Task.isCancelled, request.userID == store.currentUser.id else { return [] }
         let region = MKCoordinateRegion(center: .init(latitude: (viewport.minLatitude + viewport.maxLatitude)/2,
             longitude: (viewport.minLongitude + viewport.maxLongitude)/2),
@@ -1455,13 +1487,33 @@ struct LiveScreen: View {
         }
         return LiveDrawnArea(coordinates: [point(lat-dy, lon-dx), point(lat-dy, lon+dx), point(lat+dy, lon+dx), point(lat+dy, lon-dx)])
     }
+    private func saveBrowseState() {
+        guard LiveBrowseRestoration.enabledForProcess, let region = drawerMapOrigin ?? viewport else { return }
+        LiveBrowseRestoration(selection: selection, audience: store.feedAudience, area: area,
+            boundary: committedMapBoundary, region: region, detent: detent, lastLocation: lastLocationCenter).save(userID: store.currentUser.id)
+    }
+
+    private func restoreBrowseState() {
+        guard !didRestoreBrowse else { return }
+        didRestoreBrowse = true
+        guard LiveBrowseRestoration.enabledForProcess, let saved = LiveBrowseRestoration.load(userID: store.currentUser.id) else { return }
+        selection = saved.selection.committed(at: .now); draftSelection = selection
+        store.selectFeedAudience(saved.audience)
+        area = saved.area; committedMapBoundary = saved.boundary
+        committedMapViewport = saved.boundary.flatMap(Self.viewport)
+        detent = saved.detent
+        lastLocationCenter = saved.lastLocation.map { .init(latitude: $0.latitude, longitude: $0.longitude) }
+        restoredWithoutLocation = lastLocationCenter == nil
+        setMapCamera(.region(saved.region)); didFrame = true
+    }
+
     private func frameInitialMap() {
-        guard mapSize.width > 0, mapControlsHeight > 0,
+        guard didRestoreBrowse, mapSize.width > 0, mapControlsHeight > 0,
               !didFrame, !hasPlacePreview else { return }
         applyLaunchRegion(launchLocation.region)
     }
 
-    private func applyLaunchRegion(_ region: MKCoordinateRegion) {
+    private func applyLaunchRegion(_ region: MKCoordinateRegion, preservingContent: Bool = false) {
         // A foreground refresh must not separate a chosen area's camera from its query.
         guard area == nil, selection.scope != .nearby else { return }
         mapSearch.willMoveProgrammatically()
@@ -1469,7 +1521,7 @@ struct LiveScreen: View {
         didFrame = mapSize.width > 0 && mapControlsHeight > 0
         committedMapBoundary = Self.areaForViewport(region)
         committedMapViewport = MapViewportRefreshPolicy.viewport(for: region)
-        installCommittedQuery()
+        installCommittedQuery(preservingContent: preservingContent)
     }
 
     private func presentMapRegion(_ region: MKCoordinateRegion) {

@@ -158,7 +158,65 @@ final class LiveTotemUITests: XCTestCase {
         }
     }
 
-    private func launch() -> XCUIApplication {
+    func testWarmReturnsKeepSelectedPinAndFeedPosition() {
+        let app = launch()
+        collapseDrawer(app)
+        let pin = app.buttons["live.pin.totem_coffee"]
+        wait(pin); settle(pin)
+        pin.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        wait(app.buttons["live.placePreview.close"])
+        capture("rec667-before-five-second-return")
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 5)
+        app.activate()
+        XCTAssertTrue(app.buttons["live.placePreview.close"].exists, "A warm return must preserve the selected pin")
+        capture("rec667-after-five-second-return")
+        app.buttons["live.placePreview.close"].tap()
+        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        handle.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.15)))
+        let scroll = app.scrollViews["feed.places.scroll"]
+        wait(scroll)
+        scroll.swipeUp()
+        let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH 'feed.activity.' AND identifier ENDSWITH '.postcard'"))
+        for seconds in [30.0, 120.0] {
+            let anchor = cards.allElementsBoundByIndex.first { $0.isHittable }
+            XCTAssertNotNil(anchor, "Expected a visible Feed card before backgrounding")
+            guard let anchor else { return }
+            let identifier = anchor.identifier, before = anchor.frame.minY
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: seconds)
+            app.activate()
+            let restored = app.descendants(matching: .any)[identifier].firstMatch
+            XCTAssertTrue(restored.exists, "Warm return must retain the reader's card")
+            XCTAssertEqual(restored.frame.minY, before, accuracy: 8, "Warm refresh must preserve Feed position")
+            capture("rec667-after-\(Int(seconds))-second-return")
+        }
+    }
+
+    func testColdLaunchRestoresFilterAndDrawerBookmark() {
+        let app = launch(restoration: true)
+        app.buttons["Filters"].tap()
+        app.buttons["live.filter.people"].tap()
+        app.buttons["live.filter.option.People.Only Friends"].tap()
+        app.buttons["live.applyFilters"].tap()
+        let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
+        wait(handle)
+        handle.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.5)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: .init(dx: 0.5, dy: 0.15)))
+        let savedLabel = handle.label
+        XCUIDevice.shared.press(.home)
+        app.terminate()
+        app.launch()
+        wait(app.buttons["live.draw"], timeout: 30)
+        XCTAssertEqual(app.descendants(matching: .any)["live.drawerHandle"].firstMatch.label, savedLabel)
+        app.buttons["Filters"].tap()
+        wait(app.buttons["live.filter.people"])
+        XCTAssertTrue(app.buttons["live.filter.people"].label.contains("Only Friends"))
+        capture("rec667-cold-restored-filters")
+    }
+
+    private func launch(restoration: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
             "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest",
@@ -166,6 +224,7 @@ final class LiveTotemUITests: XCTestCase {
             "-astir.live.viewedPins.user_joe", "",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3",
             "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
+        if restoration { app.launchArguments.append("-WanderLiveRestorationUITest") }
         app.launch()
         wait(app.buttons["live.draw"], timeout: 30)
         if app.buttons["live.introduction.notNow"].exists {

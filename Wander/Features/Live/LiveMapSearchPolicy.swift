@@ -2,7 +2,7 @@ import MapKit
 
 /// Geographic queries are explicit, session-only choices. A rectangular map
 /// search must not masquerade as a freehand drawing in the controls or summary.
-enum LiveSelectedArea: Equatable {
+enum LiveSelectedArea: Codable, Equatable {
     case drawn(LiveDrawnArea)
     case mapViewport(LiveDrawnArea)
 
