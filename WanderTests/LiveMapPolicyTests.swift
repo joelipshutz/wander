@@ -143,7 +143,10 @@ final class LiveMapPolicyTests: XCTestCase {
             storeFactory: { store },
             importStoreFactory: {
                 PlaceImportStore(persistence: EphemeralPlaceImportPersistence(), resolver: DevicePlaceImportResolver())
-            }
+            },
+            // UI journeys persist a demo session for icon relaunches. These
+            // hosted tests exercise live launch gating even on a reused simulator.
+            fixtureMode: .empty
         )
         .environmentObject(auth)
         .environmentObject(backend)

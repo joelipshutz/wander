@@ -705,11 +705,16 @@ struct LiveScreen: View {
                     .font(.system(size: 20, weight: .medium))
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
                     .accessibilityIdentifier("live.draw")
-                if area != nil {
-                    Button("Clear") { area = nil; resetCommittedMapWindow(); mapSearch.didCommit(); commitSelection(selection) }
-                        .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
-                        .astirGlassSurface(cornerRadius: 22, interactive: true)
-                        .accessibilityIdentifier("live.clearArea")
+                if case .drawn? = area {
+                    Button {
+                        area = nil; resetCommittedMapWindow(); mapSearch.didCommit(); commitSelection(selection)
+                    } label: {
+                        Text("Clear")
+                            .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
+                            .astirGlassSurface(cornerRadius: 22, interactive: true)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("live.clearArea")
                 }
                 Spacer()
                 if nearbyLoading { ProgressView().padding(12).background(.regularMaterial, in: Circle()) }
