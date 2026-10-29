@@ -480,6 +480,7 @@ struct SharedVisitInvitationInboxScreen: View {
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var viewport: CGRect = .zero
+    @State private var nativeVisibleIDs: Set<String> = []
     @State private var selectedFollower: FollowNotificationProfileRoute?
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
@@ -618,15 +619,26 @@ struct SharedVisitInvitationInboxScreen: View {
                         .padding(.horizontal, WanderTheme.spacing4)
                         .padding(.top, WanderTheme.spacing3)
                         .padding(.bottom, WanderTheme.spacing8)
+                        .background(alignment: .top) {
+                            AstirScrollOffsetReader(coordinateSpaceName: "notificationViewport")
+                        }
                     }
                     .coordinateSpace(name: "notificationViewport")
+                    .astirScrollTracking(coordinateSpaceName: "notificationViewport") { offset in
+                        guard offset > 1, scenePhase == .active, selectedPlan == nil, selectedFollower == nil else { return }
+                        notificationBadge.scrolled(userID: store.currentUser.id)
+                    }
                     .onPreferenceChange(NotificationRowFrames.self) { frames in
                         rowFrames = frames
-                        viewport = CGRect(origin: .zero, size: geometry.size)
+                        viewport = visibleViewport(in: geometry)
                         observeRows()
                     }
-                    .onChange(of: geometry.size) { _, size in
-                        viewport = CGRect(origin: .zero, size: size)
+                    .onChange(of: geometry.size) { _, _ in
+                        viewport = visibleViewport(in: geometry)
+                        observeRows()
+                    }
+                    .onChange(of: geometry.safeAreaInsets) { _, _ in
+                        viewport = visibleViewport(in: geometry)
                         observeRows()
                     }
                     .refreshable { await refresh() }
@@ -650,6 +662,7 @@ struct SharedVisitInvitationInboxScreen: View {
             notificationBadge.updateVisibleInbox(snapshot)
             observeRows()
         }
+        .onChange(of: nativeVisibleIDs) { _, _ in observeRows() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 notificationBadge.open(badgeSnapshot)
@@ -682,12 +695,24 @@ struct SharedVisitInvitationInboxScreen: View {
             selectedPlan = nil
             selectedFollower = nil
             rowFrames = [:]
+            nativeVisibleIDs = []
             notificationBadge.open(badgeSnapshot)
         }
     }
 
     private func unreadRow(_ id: String) -> NotificationUnreadRow {
-        NotificationUnreadRow(id: id, isUnseen: notificationBadge.isUnseen(id, in: badgeSnapshot))
+        NotificationUnreadRow(id: id, isUnseen: notificationBadge.isUnseen(id, in: badgeSnapshot)) { visible in
+            if visible { nativeVisibleIDs.insert(id) }
+            else { nativeVisibleIDs.remove(id) }
+        }
+    }
+
+    private func visibleViewport(in geometry: GeometryProxy) -> CGRect {
+        let frame = geometry.frame(in: .global)
+        let insets = geometry.safeAreaInsets
+        return CGRect(x: frame.minX + insets.leading, y: frame.minY + insets.top,
+                      width: max(0, frame.width - insets.leading - insets.trailing),
+                      height: max(0, frame.height - insets.top - insets.bottom))
     }
 
     private func acknowledge(_ id: String) {
@@ -696,7 +721,11 @@ struct SharedVisitInvitationInboxScreen: View {
 
     private func observeRows() {
         guard scenePhase == .active, selectedPlan == nil, selectedFollower == nil else { return }
-        notificationBadge.observe(frames: rowFrames, viewport: viewport, userID: store.currentUser.id)
+        if #available(iOS 18.0, *) {
+            notificationBadge.observeVisibleIDs(nativeVisibleIDs, userID: store.currentUser.id)
+        } else {
+            notificationBadge.observe(frames: rowFrames, viewport: viewport, userID: store.currentUser.id)
+        }
     }
 
     private func updateCoveredInbox() {

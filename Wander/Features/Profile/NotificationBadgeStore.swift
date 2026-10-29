@@ -31,6 +31,8 @@ struct NotificationBadgeSnapshot: Equatable {
     private let storageKey = "wander.notifications.seenIDs.v1"
     private var visibleSnapshot: NotificationBadgeSnapshot?
     private var exposedIDs: Set<String> = []
+    private var visibleIDs: Set<String> = []
+    private var hasScrolled = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -55,7 +57,11 @@ struct NotificationBadgeSnapshot: Equatable {
     }
 
     func open(_ snapshot: NotificationBadgeSnapshot) {
-        if visibleSnapshot?.userID != snapshot.userID { exposedIDs = [] }
+        if visibleSnapshot?.userID != snapshot.userID {
+            exposedIDs = []
+            visibleIDs = []
+            hasScrolled = false
+        }
         visibleSnapshot = snapshot
     }
 
@@ -64,25 +70,45 @@ struct NotificationBadgeSnapshot: Equatable {
         guard visibleSnapshot?.userID == snapshot.userID else { return }
         visibleSnapshot = snapshot
         exposedIDs.formIntersection(snapshot.notificationIDs)
+        visibleIDs.formIntersection(snapshot.notificationIDs)
     }
 
     /// Lazy stacks can mount rows beyond the viewport. Use actual intersections
     /// instead of onAppear. Keep dots while reading; clear them after scrolling
     /// past the row, or on leaving after it was visible.
     func observe(frames: [String: CGRect], viewport: CGRect, userID: String) {
-        guard let snapshot = visibleSnapshot, snapshot.userID == userID,
-              viewport.width > 0, viewport.height > 0 else { return }
-        let intersecting = Set(frames.compactMap { id, frame in
-            frame.intersects(viewport) ? id : nil
-        })
-        markSeen(exposedIDs.subtracting(intersecting), in: snapshot)
-        exposedIDs.formIntersection(intersecting)
-        for (id, frame) in frames where snapshot.notificationIDs.contains(id) {
-            let intersection = frame.intersection(viewport)
-            if !intersection.isNull, intersection.height >= min(frame.height, viewport.height) * 0.5 {
-                exposedIDs.insert(id)
-            }
+        guard viewport.width > 0, viewport.height > 0 else { return }
+        let laidOutFrames = frames.filter { _, frame in
+            !frame.isNull && !frame.isInfinite && frame.width > 0 && frame.height > 0
         }
+        let visible = Set(laidOutFrames.compactMap { id, frame -> String? in
+            let intersection = frame.intersection(viewport)
+            guard !intersection.isNull,
+                  intersection.width >= min(frame.width, viewport.width) * 0.5,
+                  intersection.height >= min(frame.height, viewport.height) * 0.5 else { return nil }
+            return id
+        })
+        observeVisibleIDs(visible, userID: userID)
+    }
+
+    /// Native scroll visibility excludes preloaded rows and content insets.
+    /// Layout changes during navigation are not evidence of scrolling past a row.
+    func observeVisibleIDs(_ ids: Set<String>, userID: String) {
+        guard let snapshot = visibleSnapshot, snapshot.userID == userID else { return }
+        visibleIDs = ids.intersection(snapshot.notificationIDs)
+        exposedIDs.formUnion(visibleIDs)
+        if hasScrolled { acknowledgePassedRows(in: snapshot) }
+    }
+
+    func scrolled(userID: String) {
+        guard let snapshot = visibleSnapshot, snapshot.userID == userID else { return }
+        hasScrolled = true
+        acknowledgePassedRows(in: snapshot)
+    }
+
+    private func acknowledgePassedRows(in snapshot: NotificationBadgeSnapshot) {
+        markSeen(exposedIDs.subtracting(visibleIDs), in: snapshot)
+        exposedIDs.formIntersection(visibleIDs)
     }
 
     func acknowledge(_ id: String, userID: String) {
@@ -94,6 +120,8 @@ struct NotificationBadgeSnapshot: Equatable {
         if let snapshot = visibleSnapshot { markSeen(exposedIDs, in: snapshot) }
         visibleSnapshot = nil
         exposedIDs = []
+        visibleIDs = []
+        hasScrolled = false
     }
 
     private func markSeen(_ ids: Set<String>, in snapshot: NotificationBadgeSnapshot) {

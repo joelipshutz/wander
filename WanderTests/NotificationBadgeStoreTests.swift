@@ -45,6 +45,7 @@ import XCTest
                                other: CGRect(x: 0, y: 800, width: 300, height: 100)],
                       viewport: viewport, userID: "recipient")
         XCTAssertTrue(badge.isUnseen(id, in: snapshot))
+        badge.scrolled(userID: "recipient")
         badge.observe(frames: [id: CGRect(x: 0, y: -101, width: 300, height: 100),
                                other: CGRect(x: 0, y: 680, width: 300, height: 100)],
                       viewport: viewport, userID: "recipient")
@@ -109,8 +110,46 @@ import XCTest
         let id = snapshot.notificationIDs.first!
         badge.open(snapshot)
         badge.observe(frames: [id: CGRect(x: 0, y: 0, width: 300, height: 900)], viewport: viewport, userID: "recipient")
+        badge.scrolled(userID: "recipient")
         badge.observe(frames: [:], viewport: viewport, userID: "recipient")
         XCTAssertEqual(badge.count(for: snapshot), 0)
+    }
+
+    func testUnlaidOutAndOccludedRowsAreNotExposed() {
+        let badge = NotificationBadgeStore(defaults: defaults)
+        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan(), makePlan(), makePlan(), makePlan()], checkIns: [])
+        let ids = snapshot.notificationIDs.sorted()
+        badge.open(snapshot)
+        badge.observe(frames: [ids[0]: .zero,
+                              ids[1]: CGRect(x: 0, y: 20, width: 320, height: 70),
+                              ids[2]: CGRect(x: 0, y: 570, width: 320, height: 100),
+                              ids[3]: CGRect(x: 310, y: 200, width: 320, height: 100)],
+                      viewport: CGRect(x: 0, y: 100, width: 320, height: 500), userID: "recipient")
+        badge.close()
+        XCTAssertEqual(badge.count(for: snapshot), 4, "Navigation, tab-bar and horizontal slivers are not viewed rows")
+    }
+
+    func testNativeVisibilityRequiresScrollingBeforeAcknowledgingAndHandlesCallbackOrder() {
+        let badge = NotificationBadgeStore(defaults: defaults)
+        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan(), makePlan()], checkIns: [])
+        let ids = snapshot.notificationIDs.sorted()
+        badge.open(snapshot)
+        badge.observeVisibleIDs([ids[0]], userID: "recipient")
+        badge.observeVisibleIDs([], userID: "recipient")
+        XCTAssertEqual(badge.count(for: snapshot), 2, "Navigation layout alone must not consume a row")
+        badge.observeVisibleIDs([ids[0]], userID: "recipient")
+        badge.scrolled(userID: "recipient")
+        XCTAssertTrue(badge.isUnseen(ids[0], in: snapshot), "Keep the dot while the row is still visible")
+        badge.observeVisibleIDs([], userID: "recipient")
+        XCTAssertFalse(badge.isUnseen(ids[0], in: snapshot))
+        XCTAssertTrue(badge.isUnseen(ids[1], in: snapshot), "An offscreen preloaded row remains new")
+        badge.close()
+        badge.open(snapshot)
+        badge.observeVisibleIDs([ids[1]], userID: "recipient")
+        badge.observeVisibleIDs([], userID: "recipient")
+        XCTAssertTrue(badge.isUnseen(ids[1], in: snapshot))
+        badge.scrolled(userID: "recipient")
+        XCTAssertEqual(badge.count(for: snapshot), 0, "Visibility may arrive before the scroll-offset callback")
     }
 
     private var viewport: CGRect { CGRect(x: 0, y: 0, width: 320, height: 500) }
