@@ -17,72 +17,103 @@ import XCTest
         super.tearDown()
     }
 
-    func testCombinesPlansAndPendingCheckInsWithoutCountingDuplicatesOrOpenedPlans() {
+    func testOpenAndRefreshNeverAcknowledgeOffscreenRows() {
         let badge = NotificationBadgeStore(defaults: defaults)
         let plan = makePlan()
         let checkIn = makeCheckIn()
         let snapshot = NotificationBadgeSnapshot(userID: "recipient",
             plans: [plan, plan, makePlan(readAt: .now)], checkIns: [checkIn, checkIn, makeCheckIn(status: .accepted)])
-        XCTAssertEqual(badge.count(for: snapshot), 2)
         badge.open(snapshot)
-        XCTAssertEqual(badge.count(for: snapshot), 0)
-        XCTAssertTrue(plan.isUnread, "Visiting Notifications must not open the plan")
-        XCTAssertEqual(checkIn.status, .pending, "Visiting Notifications must not accept or decline")
+        badge.updateVisibleInbox(snapshot)
+        XCTAssertEqual(badge.count(for: snapshot), 2)
+        let id = "plan:\(plan.id.uuidString)"
+        badge.observe(frames: [id: CGRect(x: 0, y: 800, width: 300, height: 100)],
+                      viewport: viewport, userID: snapshot.userID)
+        badge.close()
+        XCTAssertEqual(badge.count(for: snapshot), 2, "Lazy preloading is not exposure")
+        XCTAssertTrue(plan.isUnread)
+        XCTAssertEqual(checkIn.status, .pending)
     }
 
-    func testClearedCountSurvivesReopeningRelaunchAndTemporaryEmptyRefresh() {
-        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan()], checkIns: [makeCheckIn()])
+    func testDotsRemainWhileReadingThenClearAfterScrollingPast() {
         let badge = NotificationBadgeStore(defaults: defaults)
+        let first = makePlan(), second = makePlan()
+        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [first, second], checkIns: [])
+        let id = "plan:\(first.id.uuidString)", other = "plan:\(second.id.uuidString)"
         badge.open(snapshot)
+        badge.observe(frames: [id: CGRect(x: 0, y: 20, width: 300, height: 100),
+                               other: CGRect(x: 0, y: 800, width: 300, height: 100)],
+                      viewport: viewport, userID: "recipient")
+        XCTAssertTrue(badge.isUnseen(id, in: snapshot))
+        badge.observe(frames: [id: CGRect(x: 0, y: -101, width: 300, height: 100),
+                               other: CGRect(x: 0, y: 680, width: 300, height: 100)],
+                      viewport: viewport, userID: "recipient")
+        XCTAssertFalse(badge.isUnseen(id, in: snapshot))
+        XCTAssertTrue(badge.isUnseen(other, in: snapshot))
+        XCTAssertEqual(badge.count(for: snapshot), 1)
+    }
+
+    func testVisibleRowsPersistOnExitButSliversAndOffscreenRowsStayNew() {
+        let badge = NotificationBadgeStore(defaults: defaults)
+        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan(), makePlan(), makePlan()], checkIns: [])
+        let ids = snapshot.notificationIDs.sorted()
+        badge.open(snapshot)
+        badge.observe(frames: [ids[0]: CGRect(x: 0, y: 20, width: 300, height: 100),
+                               ids[1]: CGRect(x: 0, y: 490, width: 300, height: 100),
+                               ids[2]: CGRect(x: 0, y: 700, width: 300, height: 100)],
+                      viewport: viewport, userID: "recipient")
         badge.close()
         badge.open(NotificationBadgeSnapshot(userID: "recipient", plans: [], checkIns: []))
         badge.close()
-        let relaunched = NotificationBadgeStore(defaults: defaults)
-        XCTAssertEqual(relaunched.count(for: snapshot), 0)
-        relaunched.open(snapshot)
-        XCTAssertEqual(relaunched.count(for: snapshot), 0)
+        let restored = NotificationBadgeStore(defaults: defaults)
+        XCTAssertFalse(restored.isUnseen(ids[0], in: snapshot))
+        XCTAssertTrue(restored.isUnseen(ids[1], in: snapshot))
+        XCTAssertTrue(restored.isUnseen(ids[2], in: snapshot))
     }
 
-    func testOnlyNewPlansAndNewCheckInGenerationsRestoreTheCount() {
-        let badge = NotificationBadgeStore(defaults: defaults)
-        let oldPlan = makePlan()
-        badge.open(NotificationBadgeSnapshot(userID: "recipient", plans: [oldPlan], checkIns: [makeCheckIn()]))
-        badge.close()
-        let refreshed = NotificationBadgeSnapshot(userID: "recipient", plans: [oldPlan, makePlan()],
-            checkIns: [makeCheckIn(), makeCheckIn(generation: 2)])
-        XCTAssertEqual(badge.count(for: refreshed), 2)
-        badge.open(refreshed)
-        XCTAssertEqual(badge.count(for: refreshed), 0)
-    }
-
-    func testLateResultsClearWhileVisibleButRemainNewAfterLeaving() {
-        let badge = NotificationBadgeStore(defaults: defaults)
-        let empty = NotificationBadgeSnapshot(userID: "recipient", plans: [], checkIns: [])
-        let loaded = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan()], checkIns: [makeCheckIn()])
-        badge.open(empty)
-        badge.updateVisibleInbox(loaded)
-        XCTAssertEqual(badge.count(for: loaded), 0)
-        badge.close()
-        let late = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan()], checkIns: [makeCheckIn(generation: 2)])
-        badge.updateVisibleInbox(late)
-        XCTAssertEqual(badge.count(for: late), 2)
-    }
-
-    func testAccountSwitchCannotAcknowledgeAnotherAccountsNotifications() {
+    func testAccountSwitchAndClosedInboxRejectLateExposure() {
         let badge = NotificationBadgeStore(defaults: defaults)
         let plan = makePlan()
-        let first = NotificationBadgeSnapshot(userID: "first", plans: [plan], checkIns: [makeCheckIn()])
-        let second = NotificationBadgeSnapshot(userID: "second", plans: [plan], checkIns: [makeCheckIn()])
+        let first = NotificationBadgeSnapshot(userID: "first", plans: [plan], checkIns: [])
+        let second = NotificationBadgeSnapshot(userID: "second", plans: [plan], checkIns: [])
+        let id = first.notificationIDs.first!
         badge.open(first)
         badge.updateVisibleInbox(second)
-        XCTAssertEqual(badge.count(for: second), 2)
+        badge.observe(frames: [id: viewport], viewport: viewport, userID: "second")
+        badge.acknowledge(id, userID: "second")
+        badge.open(second)
+        badge.observe(frames: [id: viewport], viewport: viewport, userID: "first")
         badge.close()
-        let relaunched = NotificationBadgeStore(defaults: defaults)
-        XCTAssertEqual(relaunched.count(for: first), 0)
-        XCTAssertEqual(relaunched.count(for: second), 2)
-        relaunched.open(second)
-        XCTAssertEqual(relaunched.count(for: second), 0)
+        badge.observe(frames: [id: viewport], viewport: viewport, userID: "second")
+        badge.acknowledge(id, userID: "second")
+        XCTAssertEqual(badge.count(for: first), 1)
+        XCTAssertEqual(badge.count(for: second), 1)
     }
+
+    func testRefreshAddsNewRowsWithoutClearingThemAndNewGenerationStaysUnread() {
+        let badge = NotificationBadgeStore(defaults: defaults)
+        let original = NotificationBadgeSnapshot(userID: "recipient", plans: [], checkIns: [makeCheckIn()])
+        badge.open(original)
+        badge.acknowledge(original.notificationIDs.first!, userID: "recipient")
+        let refreshed = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan()],
+                                                  checkIns: [makeCheckIn(), makeCheckIn(generation: 2)])
+        badge.updateVisibleInbox(refreshed)
+        XCTAssertEqual(badge.count(for: refreshed), 2)
+        badge.acknowledge("not-a-current-row", userID: "recipient")
+        XCTAssertEqual(badge.count(for: refreshed), 2)
+    }
+
+    func testOversizedAccessibleRowCanBeEncounteredAndLazyRemovalAcknowledgesIt() {
+        let badge = NotificationBadgeStore(defaults: defaults)
+        let snapshot = NotificationBadgeSnapshot(userID: "recipient", plans: [makePlan()], checkIns: [])
+        let id = snapshot.notificationIDs.first!
+        badge.open(snapshot)
+        badge.observe(frames: [id: CGRect(x: 0, y: 0, width: 300, height: 900)], viewport: viewport, userID: "recipient")
+        badge.observe(frames: [:], viewport: viewport, userID: "recipient")
+        XCTAssertEqual(badge.count(for: snapshot), 0)
+    }
+
+    private var viewport: CGRect { CGRect(x: 0, y: 0, width: 320, height: 500) }
 
     private func makePlan(readAt: Date? = nil) -> ReceivedPlacePlanInvitation {
         ReceivedPlacePlanInvitation(id: UUID(), invitation: PlacePlanInvitation(payload: PlacePlanInvitationPayload(

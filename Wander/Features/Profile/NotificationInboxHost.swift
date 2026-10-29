@@ -112,3 +112,33 @@ struct NotificationCountBadge: View {
         }
     }
 }
+
+/// Coordinates are measured in the inbox viewport, not the lazy stack's bounds.
+struct NotificationRowFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] { [:] }
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+struct NotificationUnreadRow: ViewModifier {
+    let id: String
+    let isUnseen: Bool
+
+    func body(content: Content) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Circle()
+                .fill(isUnseen ? Color(uiColor: .systemRed) : .clear)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            content
+                .accessibilityValue(isUnseen ? "New notification" : "Seen")
+        }
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(key: NotificationRowFrames.self,
+                    value: [id: geometry.frame(in: .named("notificationViewport"))])
+            }
+        }
+    }
+}
