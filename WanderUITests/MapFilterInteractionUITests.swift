@@ -779,6 +779,8 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertFalse(parent.isSelected)
         XCTAssertFalse(american.isSelected)
         XCTAssertFalse(mexican.isSelected)
+        XCTAssertTrue(app.buttons["map.more.categories.all"].isSelected)
+        american.tap()
         panel.buttons["Reset"].tap()
         XCTAssertTrue(app.buttons["map.more.categories.all"].isSelected)
     }

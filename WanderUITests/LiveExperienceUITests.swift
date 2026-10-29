@@ -49,9 +49,10 @@ final class LiveExperienceUITests: XCTestCase {
         let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
         let disclosure = app.buttons["live.filter.categoryDisclosure.outdoors_nature"]
         let parent = app.switches["live.filter.category.outdoors_nature"]
-        for _ in 0..<5 where !disclosure.isHittable { form.swipeUp() }
+        revealFully(parent, in: form, app: app)
         XCTAssertTrue(disclosure.isHittable)
-        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).press(forDuration: 0.1)
+        XCTAssertEqual(parent.value as? String, "1")
         disclosure.tap()
         let park = app.buttons["live.filter.categoryOption.outdoors_nature.park"]
         let cityPark = app.buttons["live.filter.categoryOption.outdoors_nature.city park"]
