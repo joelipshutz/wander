@@ -375,6 +375,112 @@ final class LiveNativeMapTests: XCTestCase {
         }
     }
 
+    func testHostedPinRetainsColorPixelsAcrossDensityChangesAndReuse() async throws {
+        let original = try fixturePin()
+        let state = LiveTotemState(rails: [
+            MapPinOutline(ownership: .currentUser, status: .been),
+            MapPinOutline(ownership: .social, status: .wannaGo)
+        ], hasListMembership: false, hasSavedStatus: true, isFeatured: false)
+        let pin = LivePlacePin(id: original.id, place: original.place, activities: [], totemState: state)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }.first)
+        let previousWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        controller.view.backgroundColor = .white
+        window.rootViewController = controller
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            previousWindow?.makeKey()
+        }
+        let view = LiveNativePinView(annotation: nil, reuseIdentifier: LiveNativePinView.reuseIdentifier)
+        controller.view.addSubview(view)
+        view.center = CGPoint(x: window.bounds.midX, y: window.bounds.midY)
+
+        // Exercise the actual retained hosting view, including its removal and
+        // reuse. ImageRenderer alone cannot catch a hosted Canvas losing color.
+        let stages = [("full", false, false), ("dense", true, false),
+                      ("full-again", false, false), ("reused-dense", true, true),
+                      ("reused-full", false, false)]
+        let clock = ContinuousClock()
+        for (name, compact, reuse) in stages {
+            if reuse {
+                view.removeFromSuperview()
+                view.prepareForReuse()
+            }
+            let started = clock.now
+            view.configure(pin: pin, selected: false, viewed: reuse, compact: compact, brand: .editorialLight)
+            if reuse { controller.view.addSubview(view) }
+            window.layoutIfNeeded()
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+            // Attempt samples during the former 180ms fade, then after it.
+            // Rendering can delay a sample; recorded elapsed times define the
+            // observed coverage. A density swap must keep colors opaque.
+            let sampleTimes = name == "full" ? [400] : [30, 60, 90, 120, 150, 180, 240, 400]
+            var observations: [String] = []
+            for milliseconds in sampleTimes {
+                try await clock.sleep(until: started.advanced(by: .milliseconds(milliseconds)))
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 3
+                format.preferredRange = .standard
+                var rendered = false
+                let image = UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in
+                    rendered = view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
+                }
+                let elapsed = started.duration(to: clock.now)
+                let sample = "\(name) at \(elapsed) (target \(milliseconds)ms)"
+                XCTAssertTrue(rendered, sample)
+                XCTAssertEqual(view.bounds.size, CGSize(width: 44, height: 44), sample)
+                XCTAssertEqual(view.accessibilityIdentifier, "live.pin.\(pin.id)", sample)
+                XCTAssertEqual(view.accessibilityLabel, pin.accessibilityLabel, sample)
+                let counts = try semanticPixelCounts(image)
+                observations.append("\(sample); coral=\(counts[0xF05A3C, default: 0]); blue=\(counts[0x69B8D7, default: 0])")
+                for color: UInt32 in [0xF05A3C, 0x69B8D7] {
+                    XCTAssertGreaterThan(counts[color, default: 0], 12,
+                        "\(sample) lost semantic color \(String(color, radix: 16))")
+                }
+                if !rendered || counts.values.contains(where: { $0 <= 12 }) {
+                    let attachment = XCTAttachment(image: image)
+                    attachment.name = "hosted-pin-\(name)-\(milliseconds)ms"
+                    attachment.lifetime = .keepAlways
+                    add(attachment)
+                }
+            }
+            let timing = XCTAttachment(string: observations.joined(separator: "\n"))
+            timing.name = "hosted-pin-\(name)-transition-pixels"
+            timing.lifetime = .keepAlways
+            add(timing)
+        }
+    }
+
+    private func semanticPixelCounts(_ image: UIImage) throws -> [UInt32: Int] {
+        let cgImage = try XCTUnwrap(image.cgImage)
+        let width = cgImage.width, height = cgImage.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(data: buffer.baseAddress, width: width, height: height,
+                bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+        var counts: [UInt32: Int] = [0xF05A3C: 0, 0x69B8D7: 0]
+        for color in Array(counts.keys) {
+            let red = Int((color >> 16) & 0xFF), green = Int((color >> 8) & 0xFF), blue = Int(color & 0xFF)
+            for index in stride(from: 0, to: bytes.count, by: 4) where bytes[index + 3] >= 250 {
+                if abs(Int(bytes[index]) - red) <= 5,
+                   abs(Int(bytes[index + 1]) - green) <= 5,
+                   abs(Int(bytes[index + 2]) - blue) <= 5 {
+                    counts[color, default: 0] += 1
+                }
+            }
+        }
+        return counts
+    }
+
     func testCameraCallbackUsesCenterDistanceAndActualUserProvenance() async throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let proxy = LiveNativeMapProxy()

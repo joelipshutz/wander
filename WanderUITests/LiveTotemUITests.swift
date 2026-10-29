@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 
 /// Real app/MapKit interaction captures with fictional, memory-only content.
 @MainActor
@@ -161,6 +162,248 @@ final class LiveTotemUITests: XCTestCase {
         settle(mixed)
         capture("22-social-been-three-wanna-dots")
         assertUniquePins(app)
+    }
+
+    func testNativeZoomPreservesColorsInFullPinsAndDenseDots() throws {
+        executionTimeAllowance = 300
+        let previousAppearance = XCUIDevice.shared.appearance
+        XCUIDevice.shared.appearance = .light
+        let app = launch()
+        defer { app.terminate(); XCUIDevice.shared.appearance = previousAppearance }
+        // The UIKit adapter exposes live.map on its container; MapKit's
+        // native Map child is the gesture target and has no identifier.
+        let map = app.maps.firstMatch
+        wait(map)
+        // Production map interaction collapses the drawer. A short pan keeps
+        // this zoom regression independent of the drawer's own drag gesture.
+        panMap(in: app, by: CGVector(dx: 40, dy: 0))
+        let handle = app.descendants(matching: .any).matching(identifier: "live.drawerHandle").firstMatch
+        let collapsed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            handle.label.contains(", collapsed")
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [collapsed], timeout: 10), .completed)
+        let mixed = app.buttons["live.pin.totem_mixed"]
+        let reference = app.buttons["live.pin.totem_bar"]
+        XCTAssertTrue(mixed.waitForExistence(timeout: 10))
+        XCTAssertTrue(reference.waitForExistence(timeout: 10))
+        let label = mixed.label
+        XCTAssertTrue(label.contains("You, Been"))
+        XCTAssertTrue(label.contains("Social, Been and Wanna"))
+        XCTAssertTrue(label.contains("On a list"))
+        // No selection, filter commit, camera injection, or fixture density
+        // override: only real native MapKit pans and pinches change the camera.
+        for (stage, density, scale) in [
+            ("01-full", "Category pin", CGFloat(1.6)),
+            ("02-dense", "Map dot", CGFloat(0.8))
+        ] {
+            centerPin(mixed, reference: reference, in: app)
+            zoom(map, in: app, target: mixed, reference: reference, to: density, scale: scale)
+            centerPin(mixed, reference: reference, in: app)
+            XCTAssertEqual(mixed.label, label, "Zoom must preserve the same pin's semantic evidence")
+            XCTAssertEqual(mixed.value as? String, density)
+            XCTAssertFalse(app.buttons["live.placePreview.close"].exists)
+            assertUniquePins(app)
+            let measured = try assertNativePinColors(stage, in: app, requiredPin: mixed)
+            if stage == "01-full" {
+                XCTAssertTrue(measured, "The full capture must directly verify both mixed-pin colors")
+            }
+        }
+    }
+
+    private func panMap(in app: XCUIApplication, by offset: CGVector) {
+        let viewport = zoomViewport(in: app)
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let start = origin.withOffset(CGVector(dx: viewport.midX - offset.dx / 2 - app.frame.minX,
+                                              dy: viewport.midY - offset.dy / 2 - app.frame.minY))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(offset))
+    }
+
+    private func centerPin(_ pin: XCUIElement, reference: XCUIElement, in app: XCUIApplication) {
+        // XCTest pinches can shift the camera as well as scale it. Recenter
+        // with a native pan instead of injecting a camera position.
+        for _ in 0..<3 {
+            settleZoom(pin, reference: reference)
+            let viewport = zoomViewport(in: app)
+            let dx = viewport.midX - pin.frame.midX, dy = viewport.midY - pin.frame.midY
+            if abs(dx) < 12 && abs(dy) < 12 { return }
+            panMap(in: app, by: CGVector(dx: max(-viewport.width * 0.6, min(viewport.width * 0.6, dx)),
+                                        dy: max(-viewport.height * 0.6, min(viewport.height * 0.6, dy))))
+        }
+        settleZoom(pin, reference: reference)
+        XCTAssertTrue(zoomViewport(in: app).contains(pin.frame), "A native pan must bring the tracked pin into view")
+    }
+
+    private func zoom(_ map: XCUIElement, in app: XCUIApplication, target: XCUIElement,
+                      reference: XCUIElement, to density: String, scale: CGFloat) {
+        func separation() -> CGFloat {
+            hypot(target.frame.midX - reference.frame.midX, target.frame.midY - reference.frame.midY)
+        }
+        var gestures = 0
+        var observedScaleChange = false
+        var samples: [String] = []
+        defer {
+            let diagnostic = XCTAttachment(string: samples.joined(separator: "\n"))
+            diagnostic.name = "REC-669-native-zoom-to-\(density)"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+        }
+        for _ in 0..<10 {
+            settleZoom(target, reference: reference)
+            if target.value as? String == density {
+                XCTAssertTrue(gestures == 0 || observedScaleChange,
+                              "The native zoom must change annotation separation as well as density")
+                return
+            }
+            let before = separation()
+            XCTAssertGreaterThan(before, 1)
+            let viewport = zoomViewport(in: app)
+            XCTAssertTrue(viewport.contains(CGPoint(x: map.frame.midX, y: map.frame.midY)),
+                          "The native pinch center must be in uncovered map content")
+            map.pinch(withScale: scale, velocity: scale < 1 ? -1 : 1)
+            gestures += 1
+            settleZoom(target, reference: reference)
+            let after = separation()
+            observedScaleChange = observedScaleChange || (scale < 1 ? after < before * 0.95 : after > before * 1.05)
+            samples.append("gesture=\(gestures); requestedScale=\(scale); separationBefore=\(before); separationAfter=\(after); density=\(target.value as? String ?? "missing")")
+        }
+        settleZoom(target, reference: reference)
+        XCTAssertEqual(target.value as? String, density, "Ten native pinches must reach the requested density")
+        XCTAssertTrue(observedScaleChange, "Native pinches must produce a measurable scale change")
+    }
+
+    private func settleZoom(_ target: XCUIElement, reference: XCUIElement) {
+        var previous: [CGRect] = []
+        var stableSince = Date.now
+        let stable = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard target.exists, reference.exists else { return false }
+            let frames = [target.frame, reference.frame]
+            guard frames.allSatisfy({ !$0.isEmpty && !$0.isInfinite && !$0.isNull }) else { return false }
+            if frames != previous { previous = frames; stableSince = .now; return false }
+            return Date.now.timeIntervalSince(stableSince) >= 0.8
+        }, object: nil)
+        XCTAssertEqual(XCTWaiter.wait(for: [stable], timeout: 10), .completed)
+    }
+
+    private func zoomViewport(in app: XCUIApplication) -> CGRect {
+        let map = app.maps.firstMatch.frame.intersection(app.frame)
+        let handle = app.descendants(matching: .any).matching(identifier: "live.drawerHandle").firstMatch
+        let top = max(map.minY, app.buttons["live.draw"].frame.maxY + 8)
+        let bottom = min(map.maxY, handle.frame.minY - 8)
+        return CGRect(x: map.minX, y: top, width: map.width, height: max(0, bottom - top))
+    }
+
+    private func assertNativePinColors(_ stage: String, in app: XCUIApplication,
+                                       requiredPin: XCUIElement) throws -> Bool {
+        let screenshot = XCUIScreen.main.screenshot()
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "REC-669-\(stage)-native-pinch"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        let image = try XCTUnwrap(screenshot.image.cgImage)
+        let scaleX = CGFloat(image.width) / app.frame.width
+        let scaleY = CGFloat(image.height) / app.frame.height
+        let viewport = zoomViewport(in: app)
+        XCTAssertTrue(viewport.contains(requiredPin.frame), "The tracked pin must be fully visible for pixel verification")
+        let palette: [String: (Int, Int, Int)] = [
+            "coral": (240, 90, 60), "blue": (105, 184, 215), "green": (111, 185, 133)
+        ]
+        let expected: [(String, [String])] = [
+            ("mixed", ["coral", "blue"]), ("coffee", ["coral"]), ("tacos", ["coral"]),
+            ("bar", ["blue"]), ("noodles", ["blue"]), ("featured", ["green"])
+        ]
+        var observations: [String] = []
+        var verifiedColors = Set<String>()
+        var verifiedMixedColors = false
+        var failures: [String] = []
+        let fullPins = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
+            .allElementsBoundByIndex.filter { $0.value as? String == "Category pin" }
+        let fullIDs = Set(fullPins.map(\.identifier))
+        let fullColors = Set(expected.filter { fullIDs.contains("live.pin.totem_\($0.0)") }.flatMap { $0.1 })
+        var directlyVerifiedDensePalette = false
+        for (id, colors) in expected {
+            let pin = app.buttons["live.pin.totem_\(id)"]
+            guard pin.exists, viewport.contains(pin.frame) else { continue }
+            let frame = pin.frame
+            let density = pin.value as? String ?? "missing"
+            let glyphFrame = density == "Map dot"
+                ? CGRect(x: frame.midX - 6, y: frame.midY - 6, width: 12, height: 12) : frame
+            // Only rendered footprints can obscure this sample. The 44pt
+            // accessibility/tap bounds are deliberately not occlusion bounds.
+            var possibleOccluders: [String] = []
+            if density == "Map dot" {
+                for other in fullPins where other.identifier != pin.identifier {
+                    let otherFrame = other.frame
+                    guard !otherFrame.isEmpty, !otherFrame.isNull, !otherFrame.isInfinite else { continue }
+                    let tile = CGRect(x: otherFrame.midX - 14.5, y: otherFrame.midY - 20,
+                                      width: 29, height: 40)
+                    if glyphFrame.intersects(tile) {
+                        possibleOccluders.append("\(other.identifier) tile=\(tile)")
+                    }
+                    if other.label.contains("On a list") {
+                        let badge = CGRect(x: otherFrame.midX + 13.5 - 5.5,
+                                           y: otherFrame.midY - 18 - 5.5, width: 11, height: 11)
+                        if glyphFrame.intersects(badge) {
+                            possibleOccluders.append("\(other.identifier) listBadge=\(badge)")
+                        }
+                    }
+                }
+            }
+            let rect = CGRect(x: (glyphFrame.minX - app.frame.minX) * scaleX,
+                              y: (glyphFrame.minY - app.frame.minY) * scaleY,
+                              width: glyphFrame.width * scaleX, height: glyphFrame.height * scaleY).integral
+            let crop = try XCTUnwrap(image.cropping(to: rect))
+            var bytes = [UInt8](repeating: 0, count: crop.width * crop.height * 4)
+            try bytes.withUnsafeMutableBytes { buffer in
+                let context = try XCTUnwrap(CGContext(data: buffer.baseAddress,
+                    width: crop.width, height: crop.height, bitsPerComponent: 8, bytesPerRow: crop.width * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue))
+                context.draw(crop, in: CGRect(x: 0, y: 0, width: crop.width, height: crop.height))
+            }
+            var allColorsObserved = true
+            for name in colors {
+                let rgb = try XCTUnwrap(palette[name])
+                var count = 0
+                for offset in stride(from: 0, to: bytes.count, by: 4) {
+                    let redMatches = abs(Int(bytes[offset]) - rgb.0) <= 22
+                    let greenMatches = abs(Int(bytes[offset + 1]) - rgb.1) <= 22
+                    let blueMatches = abs(Int(bytes[offset + 2]) - rgb.2) <= 22
+                    if redMatches && greenMatches && blueMatches && bytes[offset + 3] >= 240 {
+                        count += 1
+                    }
+                }
+                let squarePoints = CGFloat(count) / (scaleX * scaleY)
+                observations.append("pin=\(id); density=\(density); frame=\(frame); color=\(name); pixels=\(count); squarePoints=\(squarePoints)")
+                if squarePoints >= 3 {
+                    verifiedColors.insert(name)
+                } else {
+                    allColorsObserved = false
+                    if possibleOccluders.isEmpty {
+                        failures.append("\(id) lost \(name) in \(stage): \(count) matching pixels")
+                    } else {
+                        observations.append("unobservable color=\(name); pin=\(id); glyph=\(glyphFrame); overlappingDrawnFootprints=\(possibleOccluders.joined(separator: "; "))")
+                    }
+                }
+            }
+            if id == "mixed", allColorsObserved { verifiedMixedColors = true }
+            // At least one complete dense palette must be proven by pixels
+            // whose colors cannot have come from an overlapping full tile.
+            if density == "Map dot", allColorsObserved,
+               colors.allSatisfy({ !fullColors.contains($0) }) {
+                directlyVerifiedDensePalette = true
+            }
+        }
+        let diagnostic = XCTAttachment(string: observations.joined(separator: "\n"))
+        diagnostic.name = "REC-669-\(stage)-native-pixel-counts"
+        diagnostic.lifetime = .keepAlways
+        add(diagnostic)
+        XCTAssertTrue(verifiedColors.isSuperset(of: ["coral", "blue", "green"]),
+                      "Each zoom capture must include visible own, social, and Featured color evidence")
+        XCTAssertTrue(failures.isEmpty, failures.joined(separator: "\n"))
+        if stage == "02-dense" {
+            XCTAssertTrue(directlyVerifiedDensePalette, "Dense color evidence must come from a dot, not a full tile")
+        }
+        return verifiedMixedColors
     }
 
     private func capturePinStates(_ app: XCUIApplication) {
