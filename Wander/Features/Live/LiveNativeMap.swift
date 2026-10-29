@@ -486,6 +486,7 @@ final class LiveNativePinView: MKAnnotationView {
     func configure(pin: LivePlacePin, selected: Bool, viewed: Bool, compact: Bool, brand: AstirBrandMode) {
         accessibilityIdentifier = "live.pin.\(pin.id)"
         accessibilityLabel = pin.accessibilityLabel
+        accessibilityValue = compact && !selected ? "Map dot" : "Category pin"
         accessibilityTraits = selected ? [.button, .selected] : .button
         zPriority = selected ? .max : .defaultUnselected
         let root = LiveNativeHostedPin(state: pin.totemState, categoryEmoji: pin.place.categoryEmoji,
