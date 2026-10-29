@@ -19,7 +19,7 @@ extension PlaceCheckInQuestionCatalog {
 
         p("coffee_tea_sweets", "Coffee shop", "laptop outlets dog_access"),
         p("coffee_tea_sweets", "Cafe", "laptop outlets dog_access"),
-        p("coffee_tea_sweets", "Working cafe", "wifi outlets noise"),
+        p("coffee_tea_sweets", "Working cafe", "wifi outlets dog_access"),
         p("coffee_tea_sweets", "Coffee stand", "waiting milk dog_access"),
         p("coffee_tea_sweets", "Coffee lounge", "laptop outlets dog_access"),
         p("coffee_tea_sweets", "Roastery", "beans tasting dog_access"),
