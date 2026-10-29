@@ -390,13 +390,14 @@ final class SenderNotificationFlowUITests: XCTestCase {
                               y: admitted.grabber.midY - admitted.app.minY)
         let target = CGPoint(x: admitted.grabber.midX - admitted.app.minX, y: 22)
         origin.withOffset(CGVector(dx: contact.x, dy: contact.y))
-            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)))
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
         // Use only the remainder of the same entry deadline after native input.
         // The later Silent activation retains its separate original 5s clock.
         let responseStartedAt = ProcessInfo.processInfo.systemUptime
         var responseReads = 0
         var lastReadFinishedAt: TimeInterval?
-        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        func observeExpansion() -> Bool {
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             responseReads += 1
             let snapshot = try? editor.snapshot()
@@ -407,9 +408,19 @@ final class SenderNotificationFlowUITests: XCTestCase {
                 && finite(after)
                 && after.minY <= admitted.editor.minY - 44
                 && after.height >= admitted.editor.height + 44
-        }, object: nil)
-        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
-        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
+        // Observe immediately: the waiter's first polling tick can consume the
+        // remaining budget without reading an already-expanded compact sheet.
+        let result: XCTWaiter.Result
+        if observeExpansion() {
+            result = .completed
+        } else {
+            let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeExpansion()
+            }, object: nil)
+            let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
         let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
         observation.name = "REC-636-save-editor-expansion-observation"
         observation.lifetime = .keepAlways
