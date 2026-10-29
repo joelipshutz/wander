@@ -52,19 +52,30 @@ final class LiveExperienceUITests: XCTestCase {
     func testDrawingRequiresApplyAndCanBeCleared() {
         let app = launch()
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
+        XCTAssertTrue(app.buttons["live.pin.place_noodles"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        capture("draw-clear-hidden-with-pins")
         app.buttons["live.draw"].tap()
         XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["live.applyArea"].isEnabled)
         app.buttons["Use visible area"].tap()
         XCTAssertTrue(app.buttons["live.applyArea"].isEnabled)
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["live.applyArea"].waitForNonExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        app.buttons["live.draw"].tap()
+        app.buttons["Use visible area"].tap()
         capture("draw-review")
         app.buttons["live.applyArea"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
+        capture("draw-clear-visible-after-apply")
         app.tabBars.buttons["Lists"].tap()
         app.tabBars.buttons["Live"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].exists)
         app.buttons["live.clearArea"].tap()
         XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        capture("draw-clear-hidden-after-clear")
     }
 
     func testDrawingAfterSearchDoesNotReplaySearch() {
@@ -580,7 +591,8 @@ final class LiveExperienceUITests: XCTestCase {
         }
         let committed = try XCTUnwrap(liveState(in: app))
         XCTAssertTrue(app.buttons["live.searchArea"].waitForNonExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["live.clearArea"].exists)
+        XCTAssertFalse(app.buttons["live.clearArea"].exists,
+                       "A viewport search must not show the drawn-area Clear button.")
         XCTAssertEqual(app.buttons["live.draw"].label, "Draw area")
         let retainedPin = app.buttons.matching(identifier: anchorID).element
         XCTAssertTrue(retainedPin.waitForExistence(timeout: 5))

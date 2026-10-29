@@ -668,7 +668,7 @@ struct LiveScreen: View {
                     .font(.system(size: 20, weight: .medium))
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
                     .accessibilityIdentifier("live.draw")
-                if area != nil {
+                if case .drawn? = area {
                     Button("Clear") { area = nil; resetCommittedMapWindow(); mapSearch.didCommit(); commitSelection(selection) }
                         .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
                         .astirGlassSurface(cornerRadius: 22, interactive: true)
