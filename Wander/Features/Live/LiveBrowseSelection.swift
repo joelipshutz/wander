@@ -36,28 +36,33 @@ struct LiveBrowseSelection: Codable, Equatable {
     var hasCategorySelection: Bool { !categoryIDs.isEmpty || !categoryOptions.isEmpty }
 
     mutating func setCategory(_ category: String, selected: Bool) {
-        if selected {
-            categoryIDs.insert(category)
-            storedCategoryOptions?.removeValue(forKey: category)
-            if storedCategoryOptions?.isEmpty == true { storedCategoryOptions = nil }
-        } else {
-            categoryIDs.remove(category)
-        }
+        storedCategoryOptions?.removeValue(forKey: category)
+        if storedCategoryOptions?.isEmpty == true { storedCategoryOptions = nil }
+        if selected { categoryIDs.insert(category) }
+        else { categoryIDs.remove(category) }
     }
 
     mutating func toggleCategoryOption(_ option: String, in category: String) {
         let option = WanderPlaceCategory.normalizedCategoryText(option)
         guard !option.isEmpty else { return }
-        categoryIDs.remove(category)
+        let allOptions = MapMoreFilterPolicy.normalizedOptions(for: category)
         var selections = categoryOptions
-        var options = selections[category, default: []]
+        // Keep full categories compact; only partial selections need explicit children.
+        var options = categoryIDs.remove(category) != nil
+            ? allOptions : selections[category, default: []]
         if !options.insert(option).inserted { options.remove(option) }
-        selections[category] = options.isEmpty ? nil : options
+        if !allOptions.isEmpty, options == allOptions {
+            categoryIDs.insert(category)
+            selections.removeValue(forKey: category)
+        } else {
+            selections[category] = options.isEmpty ? nil : options
+        }
         storedCategoryOptions = selections.isEmpty ? nil : selections
     }
 
     func isCategoryOptionSelected(_ option: String, in category: String) -> Bool {
-        categoryOptions[category, default: []].contains(WanderPlaceCategory.normalizedCategoryText(option))
+        categoryIDs.contains(category)
+            || categoryOptions[category, default: []].contains(WanderPlaceCategory.normalizedCategoryText(option))
     }
 
     mutating func clearCategories() {

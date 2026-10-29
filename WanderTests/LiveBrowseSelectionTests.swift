@@ -8,7 +8,7 @@ import XCTest
         let food = WanderPlaceCategory.restaurantsFood
         let coffee = WanderPlaceCategory.coffeeTeaSweets
         var selection = LiveBrowseSelection(now: now)
-        selection.categoryIDs = [food, coffee]
+        selection.categoryIDs = [coffee]
         selection.toggleCategoryOption("Italian", in: food)
         selection.toggleCategoryOption("Mexican", in: food)
         XCTAssertEqual(selection.categoryIDs, [coffee])
@@ -35,6 +35,33 @@ import XCTest
         XCTAssertTrue(restored.categoryOptions.isEmpty)
     }
 
+    func testParentSelectsAllThenSupportsExclusionsRestorationAndTurningOff() throws {
+        for category in WanderPlaceCategory.editableCategories {
+            let choices = MapMoreFilterPolicy.options(for: category)
+            let first = try XCTUnwrap(choices.first, category)
+            var selection = LiveBrowseSelection(now: now)
+            selection.setCategory(category, selected: true)
+            XCTAssertTrue(choices.allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertFalse(selection.categoryIDs.contains(category))
+            XCTAssertFalse(selection.isCategoryOptionSelected(first, in: category))
+            XCTAssertTrue(choices.dropFirst().allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            XCTAssertEqual(selection.query().categoryOptions[category],
+                MapMoreFilterPolicy.normalizedOptions(for: category).subtracting([WanderPlaceCategory.normalizedCategoryText(first)]))
+            XCTAssertTrue(selection.query().isValid)
+            selection = try JSONDecoder().decode(LiveBrowseSelection.self, from: JSONEncoder().encode(selection))
+            XCTAssertFalse(selection.isCategoryOptionSelected(first, in: category))
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertTrue(selection.categoryIDs.contains(category))
+            XCTAssertTrue(selection.query().categoryOptions.isEmpty)
+            selection.setCategory(category, selected: false)
+            XCTAssertFalse(selection.hasCategorySelection)
+            XCTAssertTrue(choices.allSatisfy { !selection.isCategoryOptionSelected($0, in: category) })
+            for choice in choices { selection.toggleCategoryOption(choice, in: category) }
+            XCTAssertTrue(selection.categoryIDs.contains(category))
+        }
+    }
+
     func testCuisineAndSubcategoryChoicesFilterActualActivityAndFeaturedPlaces() {
         let food = WanderPlaceCategory.restaurantsFood
         let outdoors = WanderPlaceCategory.outdoorsNature
@@ -50,6 +77,7 @@ import XCTest
         let beach = place("beach", category: outdoors)
         beach.userPlace.viewerPrimaryCategory = outdoors
         beach.userPlace.viewerSubcategory = "Beach"
+        for visible in [italian, french, park, beach] { visible.userPlace.visitedAt = now }
         var selection = LiveBrowseSelection(now: now)
         selection.toggleCategoryOption("Italian", in: food)
         selection.toggleCategoryOption("Park", in: outdoors)
@@ -69,6 +97,13 @@ import XCTest
         XCTAssertTrue(selection.includes(event("french", place: french)))
         XCTAssertTrue(selection.includes(event("park", place: park)))
         XCTAssertFalse(selection.includes(event("beach", place: beach)))
+        selection.toggleCategoryOption("French", in: food)
+        XCTAssertFalse(selection.categoryIDs.contains(food))
+        XCTAssertFalse(selection.includes(event("french", place: french)))
+        XCTAssertTrue(selection.includes(event("italian", place: italian)))
+        XCTAssertTrue(selection.includes(event("park", place: park)))
+        XCTAssertFalse(selection.query().includesFeatured(french))
+        XCTAssertTrue(selection.query().includesFeatured(italian))
     }
 
     func testDefaultFeaturedUsesAllTimeIncludingUnmappedHistoricalActivity() {

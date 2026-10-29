@@ -4,7 +4,7 @@ import XCTest
 final class LiveExperienceUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    func testCategoryDropdownReplacesParentWithMultipleCuisinesAndPreservesApply() {
+    func testCategoryParentSelectsAllCuisinesAndPreservesExclusions() {
         let app = launch()
         openCategoryFilters(in: app)
         let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
@@ -12,65 +12,62 @@ final class LiveExperienceUITests: XCTestCase {
         let disclosure = app.buttons["live.filter.categoryDisclosure.restaurants_food"]
         for _ in 0..<5 where !disclosure.isHittable { form.swipeUp() }
         XCTAssertTrue(disclosure.isHittable)
-        // A SwiftUI switch's accessibility frame includes its label. Tap the
-        // trailing switch control, which is the user-facing toggle target.
         parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         XCTAssertEqual(parent.value as? String, "1")
         disclosure.tap()
         let american = app.buttons["live.filter.categoryOption.restaurants_food.american"]
         let mexican = app.buttons["live.filter.categoryOption.restaurants_food.mexican"]
-        for _ in 0..<5 where !american.isHittable { form.swipeUp() }
-        XCTAssertTrue(american.isHittable)
-        american.tap()
         for _ in 0..<5 where !mexican.isHittable { form.swipeUp() }
-        XCTAssertTrue(mexican.isHittable)
-        mexican.tap()
         XCTAssertEqual(american.value as? String, "Selected")
+        XCTAssertEqual(mexican.value as? String, "Selected")
+        american.tap()
+        XCTAssertEqual(american.value as? String, "Not selected")
         XCTAssertEqual(mexican.value as? String, "Selected")
         for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
         XCTAssertEqual(parent.value as? String, "0")
-        capture("category-cuisines-width-\(Int(app.frame.width))")
+        capture("category-all-except-cuisine-width-\(Int(app.frame.width))")
         disclosure.tap()
         app.buttons["live.applyFilters"].tap()
         openCategoryFilters(in: app)
-        for _ in 0..<5 where !american.isHittable { form.swipeUp() }
-        XCTAssertEqual(american.value as? String, "Selected")
+        for _ in 0..<5 where !mexican.isHittable { form.swipeUp() }
+        XCTAssertEqual(american.value as? String, "Not selected")
         XCTAssertEqual(mexican.value as? String, "Selected")
+        american.tap()
         for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
-        // A SwiftUI switch's accessibility frame includes its label. Tap the
-        // trailing switch control, which is the user-facing toggle target.
+        XCTAssertEqual(parent.value as? String, "1", "Reselecting the last missing cuisine selects the parent")
         parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
-        XCTAssertEqual(parent.value as? String, "1")
+        XCTAssertEqual(parent.value as? String, "0")
         for option in [american, mexican] {
             for _ in 0..<6 where !option.isHittable { form.swipeUp() }
-            XCTAssertTrue(option.isHittable)
             XCTAssertEqual(option.value as? String, "Not selected")
         }
     }
 
-    func testCategoryDropdownAllowsMultipleSubcategoriesAndReset() {
+    func testCategoryParentSelectsAllSubcategoriesAndReset() {
         let app = launch()
         openCategoryFilters(in: app)
         let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
         let disclosure = app.buttons["live.filter.categoryDisclosure.outdoors_nature"]
+        let parent = app.switches["live.filter.category.outdoors_nature"]
         for _ in 0..<5 where !disclosure.isHittable { form.swipeUp() }
         XCTAssertTrue(disclosure.isHittable)
+        parent.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         disclosure.tap()
         let park = app.buttons["live.filter.categoryOption.outdoors_nature.park"]
-        let beach = app.buttons["live.filter.categoryOption.outdoors_nature.beach"]
-        for option in [park, beach] {
-            for _ in 0..<5 where !option.isHittable { form.swipeUp() }
-            XCTAssertTrue(option.isHittable)
-            option.tap()
-        }
+        let cityPark = app.buttons["live.filter.categoryOption.outdoors_nature.city park"]
+        for _ in 0..<5 where !cityPark.isHittable { form.swipeUp() }
         XCTAssertEqual(park.value as? String, "Selected")
-        XCTAssertEqual(beach.value as? String, "Selected")
-        capture("category-subcategories-width-\(Int(app.frame.width))")
+        XCTAssertEqual(cityPark.value as? String, "Selected")
+        park.tap()
+        XCTAssertEqual(park.value as? String, "Not selected")
+        XCTAssertEqual(cityPark.value as? String, "Selected")
+        for _ in 0..<6 where !parent.isHittable { form.swipeDown() }
+        XCTAssertEqual(parent.value as? String, "0")
+        capture("category-all-except-subcategory-width-\(Int(app.frame.width))")
         for _ in 0..<12 where !app.buttons["live.filter.reset"].isHittable { form.swipeDown() }
         app.buttons["live.filter.reset"].tap()
-        for option in [park, beach] {
+        for option in [park, cityPark] {
             for _ in 0..<10 where !option.isHittable { form.swipeUp() }
-            XCTAssertTrue(option.isHittable)
             XCTAssertEqual(option.value as? String, "Not selected")
         }
     }

@@ -755,23 +755,28 @@ final class MapFilterInteractionUITests: XCTestCase {
         let american = app.buttons["map.more.category.\(category).option.American"]
         let mexican = app.buttons["map.more.category.\(category).option.Mexican"]
         XCTAssertTrue(american.waitForExistence(timeout: 3))
-        american.tap()
-        mexican.tap()
-        XCTAssertFalse(parent.isSelected)
         XCTAssertTrue(american.isSelected)
+        XCTAssertTrue(mexican.isSelected)
+        american.tap()
+        XCTAssertFalse(parent.isSelected)
+        XCTAssertFalse(american.isSelected)
         XCTAssertTrue(mexican.isSelected)
         XCTAssertFalse(app.buttons["map.more.categories.all"].isSelected)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-671 multiple cuisines"
+        screenshot.name = "REC-671 all except one cuisines"
         screenshot.lifetime = .keepAlways
         add(screenshot)
 
         expand.tap()
         expand.tap()
-        XCTAssertTrue(american.isSelected, "Collapsing must preserve child selections")
+        XCTAssertFalse(american.isSelected, "Collapsing must preserve the excluded cuisine")
         XCTAssertTrue(mexican.isSelected)
         parent.tap()
         XCTAssertTrue(parent.isSelected)
+        XCTAssertTrue(american.isSelected)
+        XCTAssertTrue(mexican.isSelected)
+        parent.tap()
+        XCTAssertFalse(parent.isSelected)
         XCTAssertFalse(american.isSelected)
         XCTAssertFalse(mexican.isSelected)
         panel.buttons["Reset"].tap()
@@ -793,13 +798,14 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(options.firstMatch.waitForExistence(timeout: 3))
         let first = options.element(boundBy: 0)
         let second = options.element(boundBy: 1)
-        first.tap()
-        second.tap()
-        XCTAssertFalse(parent.isSelected)
         XCTAssertTrue(first.isSelected)
         XCTAssertTrue(second.isSelected)
+        first.tap()
+        XCTAssertFalse(parent.isSelected)
+        XCTAssertFalse(first.isSelected)
+        XCTAssertTrue(second.isSelected)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        screenshot.name = "REC-671 multiple subcategories"
+        screenshot.name = "REC-671 all except one subcategories"
         screenshot.lifetime = .keepAlways
         add(screenshot)
     }

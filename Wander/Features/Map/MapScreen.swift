@@ -8552,6 +8552,10 @@ enum MapHitTesting {
 enum MapMoreFilterPolicy {
     static let collapsedCategoryCount = 6
 
+    static func normalizedOptions(for category: String) -> Set<String> {
+        Set(options(for: category).map { WanderPlaceCategory.normalizedCategoryText($0) })
+    }
+
     static func options(for category: String) -> [String] {
         guard category == WanderPlaceCategory.restaurantsFood else {
             return WanderPlaceCategory.subcategorySuggestions(for: category)
@@ -8923,16 +8927,23 @@ struct MapMoreFilterSelection: Equatable {
         let category = WanderPlaceCategory.normalizedPrimaryCategory(category)
         let option = WanderPlaceCategory.normalizedCategoryText(option)
         guard !option.isEmpty else { return }
-        categories.remove(category)
-        var options = categoryOptions[category, default: []]
-        if !options.insert(option).inserted {
-            options.remove(option)
+        let allOptions = MapMoreFilterPolicy.normalizedOptions(for: category)
+        // A selected parent represents every child. Removing one materializes
+        // the remaining choices so matching no longer includes the whole category.
+        var options = categories.remove(category) != nil
+            ? allOptions : categoryOptions[category, default: []]
+        if !options.insert(option).inserted { options.remove(option) }
+        if !allOptions.isEmpty, options == allOptions {
+            categories.insert(category)
+            categoryOptions.removeValue(forKey: category)
+        } else {
+            categoryOptions[category] = options.isEmpty ? nil : options
         }
-        categoryOptions[category] = options.isEmpty ? nil : options
     }
 
     func isCategoryOptionSelected(_ option: String, in category: String) -> Bool {
-        categoryOptions[WanderPlaceCategory.normalizedPrimaryCategory(category), default: []]
+        let category = WanderPlaceCategory.normalizedPrimaryCategory(category)
+        return categories.contains(category) || categoryOptions[category, default: []]
             .contains(WanderPlaceCategory.normalizedCategoryText(option))
     }
 

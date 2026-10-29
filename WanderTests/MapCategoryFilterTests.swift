@@ -7,7 +7,7 @@ final class MapCategoryFilterTests: XCTestCase {
     private let outdoors = WanderPlaceCategory.outdoorsNature
 
     func testSelectingChildrenClearsOnlyTheirParentAndAllowsMultipleChoices() {
-        var selection = MapMoreFilterSelection(categories: [food, outdoors])
+        var selection = MapMoreFilterSelection(categories: [outdoors])
         selection.toggleCategoryOption("Italian", in: food)
         selection.toggleCategoryOption("Mexican", in: food)
 
@@ -23,7 +23,7 @@ final class MapCategoryFilterTests: XCTestCase {
         XCTAssertTrue(selection.matchesCategory(outdoors, subcategory: "Park", cuisine: nil))
     }
 
-    func testSelectingParentClearsOnlyItsChildren() {
+    func testSelectingParentSelectsAllItsChildren() {
         var selection = MapMoreFilterSelection()
         selection.toggleCategoryOption("Italian", in: food)
         selection.toggleCategoryOption("Mexican", in: food)
@@ -32,10 +32,36 @@ final class MapCategoryFilterTests: XCTestCase {
 
         XCTAssertEqual(selection.categories, [food])
         XCTAssertNil(selection.categoryOptions[food])
+        XCTAssertTrue(selection.isCategoryOptionSelected("Italian", in: food))
+        XCTAssertTrue(selection.isCategoryOptionSelected("French", in: food))
         XCTAssertTrue(selection.isCategoryOptionSelected("Park", in: outdoors))
         XCTAssertTrue(selection.matchesCategory(food, subcategory: nil, cuisine: "French"))
         selection.toggleCategory(food)
         XCTAssertFalse(selection.matchesCategory(food, subcategory: nil, cuisine: "Italian"))
+    }
+
+    func testEveryParentSupportsAllExceptOneAndReselectingAll() throws {
+        for category in WanderPlaceCategory.editableCategories {
+            let choices = MapMoreFilterPolicy.options(for: category)
+            let first = try XCTUnwrap(choices.first, category)
+            var selection = MapMoreFilterSelection()
+            selection.toggleCategory(category)
+            XCTAssertTrue(choices.allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertFalse(selection.categories.contains(category))
+            XCTAssertFalse(selection.isCategoryOptionSelected(first, in: category))
+            XCTAssertTrue(choices.dropFirst().allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            XCTAssertEqual(selection.categoryOptions[category],
+                MapMoreFilterPolicy.normalizedOptions(for: category).subtracting([WanderPlaceCategory.normalizedCategoryText(first)]))
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertTrue(selection.categories.contains(category))
+            XCTAssertNil(selection.categoryOptions[category])
+            selection.toggleCategory(category)
+            XCTAssertFalse(selection.hasCategorySelection)
+            XCTAssertTrue(choices.allSatisfy { !selection.isCategoryOptionSelected($0, in: category) })
+            for choice in choices { selection.toggleCategoryOption(choice, in: category) }
+            XCTAssertTrue(selection.categories.contains(category))
+        }
     }
 
     func testDeselectingLastChildRestoresAllOnlyWhenNoOtherCategoryIsSelected() {
