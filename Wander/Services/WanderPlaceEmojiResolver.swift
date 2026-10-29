@@ -297,6 +297,7 @@ enum WanderPlaceEmojiResolver {
         Rule(emoji: "🥡", terms: ["takeout"]),
         Rule(emoji: "🍱", terms: ["buffet", "food court", "cafeteria"]),
         Rule(emoji: "🍿", terms: ["snack bar"]),
+        Rule(emoji: "🍎", terms: ["fruit stand"]),
         Rule(emoji: "🍷", terms: ["bistro"]),
         Rule(emoji: "🍺", terms: ["bar and grill", "gastropub"]),
         Rule(emoji: "🍽️", terms: ["fine dining", "casual family"])
@@ -337,6 +338,7 @@ enum WanderPlaceEmojiResolver {
 
     private static let subcategoryRules: [String: [Rule]] = [
         WanderPlaceCategory.coffeeTeaSweets: [
+            Rule(emoji: "💻", terms: ["working cafe", "internet cafe"]),
             Rule(emoji: "🐈", terms: ["cat cafe"]),
             Rule(emoji: "🐕", terms: ["dog cafe"]),
             Rule(emoji: "🥯", terms: ["bagel shop", "bagel"]),
@@ -655,7 +657,7 @@ enum WanderPlaceEmojiResolver {
             ("Tex-Mex", "🌮"),
             ("Asian fusion", "🥢"),
             ("Cantonese", "🥟"),
-            ("Taiwanese", "🧋"),
+            ("Taiwanese", "🇹🇼"),
             ("Izakaya", "🍶"),
             ("Yakitori", "🍢"),
             ("Yakiniku", "🥩"),
