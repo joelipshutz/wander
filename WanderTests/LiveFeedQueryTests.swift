@@ -104,6 +104,25 @@ final class LiveFeedQueryTests: XCTestCase {
         XCTAssertEqual(contentCalls, 1)
     }
 
+    func testChildFiltersReachTheServerForFeedAndMapBeforePagination() async throws {
+        let transport = LiveQueryTransport()
+        let repository = SupabaseFeedRepository(rpc: transport)
+        let query = LiveFeedQuery(categoryIDs: [WanderPlaceCategory.coffeeTeaSweets],
+            categoryOptions: [WanderPlaceCategory.restaurantsFood: ["italian", "mexican"],
+                              WanderPlaceCategory.outdoorsNature: ["park"]])
+        _ = try await repository.liveFeed(audience: .everyone, query: query, before: "cursor", limit: 2) { _ in }
+        XCTAssertEqual(transport.names.last, "live_activity_feed_category_options")
+        XCTAssertEqual(transport.parameters?["input_category_options"] as? [String: [String]],
+            [WanderPlaceCategory.restaurantsFood: ["italian", "mexican"], WanderPlaceCategory.outdoorsNature: ["park"]])
+        XCTAssertEqual(transport.parameters?["input_category_ids"] as? [String], [WanderPlaceCategory.coffeeTeaSweets])
+        XCTAssertEqual(transport.parameters?["input_before"] as? String, "cursor")
+        _ = try await repository.liveMapActivity(audience: .everyone, query: query, before: "next", limit: 2)
+        XCTAssertEqual(transport.names.last, "live_activity_feed_category_options")
+        XCTAssertEqual(transport.parameters?["input_before"] as? String, "next")
+        XCTAssertEqual(transport.parameters?["input_category_options"] as? [String: [String]],
+            query.categoryOptions.mapValues { $0.sorted() })
+    }
+
     func testListsFeedAndMapKeepCommittedFiltersAcrossOpaqueCursorPages() async throws {
         let transport = LiveQueryTransport()
         transport.nextCursors = ["feed|timestamp|id", nil, "map|timestamp|id", nil]

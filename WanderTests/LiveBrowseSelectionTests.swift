@@ -4,6 +4,108 @@ import XCTest
 @MainActor final class LiveBrowseSelectionTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 
+    func testChildChoicesReplaceTheirParentAndRemainIndependentAcrossCategories() throws {
+        let food = WanderPlaceCategory.restaurantsFood
+        let coffee = WanderPlaceCategory.coffeeTeaSweets
+        var selection = LiveBrowseSelection(now: now)
+        selection.categoryIDs = [coffee]
+        selection.toggleCategoryOption("Italian", in: food)
+        selection.toggleCategoryOption("Mexican", in: food)
+        XCTAssertEqual(selection.categoryIDs, [coffee])
+        XCTAssertEqual(selection.categoryOptions[food], ["italian", "mexican"])
+        XCTAssertEqual(selection.activeFilterCount, 1)
+        let committed = selection.committed(at: now)
+        selection.toggleCategoryOption("Italian", in: food)
+        XCTAssertEqual(committed.query().categoryOptions[food], ["italian", "mexican"])
+        XCTAssertEqual(selection.query().categoryOptions[food], ["mexican"])
+        selection.setCategory(food, selected: true)
+        XCTAssertNil(selection.categoryOptions[food])
+        XCTAssertEqual(selection.categoryIDs, [food, coffee])
+        selection.clearCategories()
+        XCTAssertFalse(selection.hasCategorySelection)
+        XCTAssertEqual(selection.activeFilterCount, 0)
+
+        let data = try JSONEncoder().encode(committed)
+        XCTAssertEqual(try JSONDecoder().decode(LiveBrowseSelection.self, from: data), committed)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "storedCategoryOptions")
+        let restored = try JSONDecoder().decode(LiveBrowseSelection.self,
+            from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertEqual(restored.categoryIDs, [coffee])
+        XCTAssertTrue(restored.categoryOptions.isEmpty)
+    }
+
+    func testParentSelectsAllThenSupportsExclusionsRestorationAndTurningOff() throws {
+        for category in WanderPlaceCategory.editableCategories {
+            let choices = MapMoreFilterPolicy.options(for: category)
+            let first = try XCTUnwrap(choices.first, category)
+            var selection = LiveBrowseSelection(now: now)
+            selection.setCategory(category, selected: true)
+            XCTAssertTrue(choices.allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertFalse(selection.categoryIDs.contains(category))
+            XCTAssertFalse(selection.isCategoryOptionSelected(first, in: category))
+            XCTAssertTrue(choices.dropFirst().allSatisfy { selection.isCategoryOptionSelected($0, in: category) })
+            XCTAssertEqual(selection.query().categoryOptions[category],
+                MapMoreFilterPolicy.normalizedOptions(for: category).subtracting([WanderPlaceCategory.normalizedCategoryText(first)]))
+            XCTAssertTrue(selection.query().isValid)
+            selection = try JSONDecoder().decode(LiveBrowseSelection.self, from: JSONEncoder().encode(selection))
+            XCTAssertFalse(selection.isCategoryOptionSelected(first, in: category))
+            selection.toggleCategoryOption(first, in: category)
+            XCTAssertTrue(selection.categoryIDs.contains(category))
+            XCTAssertTrue(selection.query().categoryOptions.isEmpty)
+            selection.setCategory(category, selected: false)
+            XCTAssertFalse(selection.hasCategorySelection)
+            XCTAssertTrue(choices.allSatisfy { !selection.isCategoryOptionSelected($0, in: category) })
+            for choice in choices { selection.toggleCategoryOption(choice, in: category) }
+            XCTAssertTrue(selection.categoryIDs.contains(category))
+        }
+    }
+
+    func testCuisineAndSubcategoryChoicesFilterActualActivityAndFeaturedPlaces() {
+        let food = WanderPlaceCategory.restaurantsFood
+        let outdoors = WanderPlaceCategory.outdoorsNature
+        let italian = place("italian", category: food)
+        italian.userPlace.viewerPrimaryCategory = food
+        italian.userPlace.viewerFoodType = "Italian"
+        let french = place("french", category: food)
+        french.userPlace.viewerPrimaryCategory = food
+        french.userPlace.viewerFoodType = "French"
+        let park = place("park", category: outdoors)
+        park.userPlace.viewerPrimaryCategory = outdoors
+        park.userPlace.viewerSubcategory = "Park"
+        let beach = place("beach", category: outdoors)
+        beach.userPlace.viewerPrimaryCategory = outdoors
+        beach.userPlace.viewerSubcategory = "Beach"
+        for visible in [italian, french, park, beach] { visible.userPlace.visitedAt = now }
+        var selection = LiveBrowseSelection(now: now)
+        selection.toggleCategoryOption("Italian", in: food)
+        selection.toggleCategoryOption("Park", in: outdoors)
+        XCTAssertTrue(selection.includes(event("italian", place: italian)))
+        XCTAssertTrue(selection.includes(event("park", place: park)))
+        XCTAssertFalse(selection.includes(event("french", place: french)))
+        XCTAssertFalse(selection.includes(event("beach", place: beach)))
+        XCTAssertFalse(selection.includes(event("unmapped")))
+        XCTAssertTrue(selection.query().includesFeatured(italian))
+        XCTAssertTrue(selection.query().includesFeatured(park))
+        XCTAssertFalse(selection.query().includesFeatured(french))
+        XCTAssertFalse(selection.query().includesFeatured(beach))
+        selection.time = .week
+        XCTAssertEqual(selection.query().expandedQuery(for: .older).categoryOptions, selection.categoryOptions)
+        XCTAssertTrue(selection.query().expandedQuery(for: .allActivity).categoryOptions.isEmpty)
+        selection.setCategory(food, selected: true)
+        XCTAssertTrue(selection.includes(event("french", place: french)))
+        XCTAssertTrue(selection.includes(event("park", place: park)))
+        XCTAssertFalse(selection.includes(event("beach", place: beach)))
+        selection.toggleCategoryOption("French", in: food)
+        XCTAssertFalse(selection.categoryIDs.contains(food))
+        XCTAssertFalse(selection.includes(event("french", place: french)))
+        XCTAssertTrue(selection.includes(event("italian", place: italian)))
+        XCTAssertTrue(selection.includes(event("park", place: park)))
+        XCTAssertFalse(selection.query().includesFeatured(french))
+        XCTAssertTrue(selection.query().includesFeatured(italian))
+    }
+
     func testDefaultFeaturedUsesAllTimeIncludingUnmappedHistoricalActivity() {
         let selection = LiveBrowseSelection(now: now)
         XCTAssertEqual(selection.scope, .featured)
