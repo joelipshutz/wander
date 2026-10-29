@@ -739,12 +739,78 @@ final class MapFilterInteractionUITests: XCTestCase {
         XCTAssertTrue(permissionAlert.waitForNonExistence(timeout: 3))
     }
 
+    func testCategoryDropdownSupportsMultipleCuisinesAndParentSelection() {
+        let app = launchMoreFilters(source: "featured")
+        let panel = app.scrollViews["map.moreFilters.popover"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 8))
+        let category = "restaurants_food"
+        let parent = app.buttons["map.more.category.\(category)"]
+        let expand = app.buttons["map.more.category.\(category).expand"]
+        XCTAssertTrue(parent.waitForExistence(timeout: 3))
+        parent.tap()
+        XCTAssertTrue(parent.isSelected)
+        expand.tap()
+        XCTAssertTrue(parent.isSelected, "Expanding must not change selection")
+
+        let american = app.buttons["map.more.category.\(category).option.American"]
+        let mexican = app.buttons["map.more.category.\(category).option.Mexican"]
+        XCTAssertTrue(american.waitForExistence(timeout: 3))
+        american.tap()
+        mexican.tap()
+        XCTAssertFalse(parent.isSelected)
+        XCTAssertTrue(american.isSelected)
+        XCTAssertTrue(mexican.isSelected)
+        XCTAssertFalse(app.buttons["map.more.categories.all"].isSelected)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-671 multiple cuisines"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+
+        expand.tap()
+        expand.tap()
+        XCTAssertTrue(american.isSelected, "Collapsing must preserve child selections")
+        XCTAssertTrue(mexican.isSelected)
+        parent.tap()
+        XCTAssertTrue(parent.isSelected)
+        XCTAssertFalse(american.isSelected)
+        XCTAssertFalse(mexican.isSelected)
+        panel.buttons["Reset"].tap()
+        XCTAssertTrue(app.buttons["map.more.categories.all"].isSelected)
+    }
+
+    func testCategoryDropdownSupportsMultipleSubcategories() {
+        let app = launchMoreFilters()
+        let panel = app.scrollViews["map.moreFilters.popover"]
+        XCTAssertTrue(panel.waitForExistence(timeout: 8))
+        let category = "coffee_tea_sweets"
+        let parent = app.buttons["map.more.category.\(category)"]
+        XCTAssertTrue(parent.waitForExistence(timeout: 3))
+        parent.tap()
+        app.buttons["map.more.category.\(category).expand"].tap()
+        let options = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@", "map.more.category.\(category).option."
+        ))
+        XCTAssertTrue(options.firstMatch.waitForExistence(timeout: 3))
+        let first = options.element(boundBy: 0)
+        let second = options.element(boundBy: 1)
+        first.tap()
+        second.tap()
+        XCTAssertFalse(parent.isSelected)
+        XCTAssertTrue(first.isSelected)
+        XCTAssertTrue(second.isSelected)
+        let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        screenshot.name = "REC-671 multiple subcategories"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     private func launchMoreFilters(source: String = "friends", resetSeconds: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "-WanderMapCapture",
             "-WanderUseDemoFixtures",
             "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs",
             "-WanderMapCaptureMode", source,
             "-WanderMapMoreFiltersOpen"
         ]

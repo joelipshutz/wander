@@ -295,6 +295,7 @@
 		737BC9405DD665CF297D9D3F /* PlaceCheckInBinaryPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0695052B1BCB6ABABC889B87 /* PlaceCheckInBinaryPrompts.swift */; };
 		7381FF95DF13660C5D6B20B4 /* LivePlanDemo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5B077EA116B8617B808B652 /* LivePlanDemo.swift */; };
 		73924B066BD7D0F8917C6F09 /* WanderPlaceCategoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6ED62905F6326D6F0D2246E /* WanderPlaceCategoryTests.swift */; };
+		7431AE6DDDA5A3D9AFDE4D27 /* MapCategoryFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77F0BB532A756CAD97B28570 /* MapCategoryFilterTests.swift */; };
 		74A35271B61D71C5E6823428 /* DiscoverParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 260AFCEFE1676DA113FBED9A /* DiscoverParserTests.swift */; };
 		74AAAADD6470333A4F1A1508 /* WanderWidgetDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B7A4455BD4F27A2FDEFB01 /* WanderWidgetDeepLink.swift */; };
 		7561E9029184DA9E62EA3E42 /* PlaceCheckInQuestionCatalog+EverydayProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DACED1D7FE5DDE78CCA5AD0 /* PlaceCheckInQuestionCatalog+EverydayProfiles.swift */; };
@@ -984,6 +985,7 @@
 		770CA9E53CEAA2C41B7F7350 /* AstirBrandShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirBrandShell.swift; sourceTree = "<group>"; };
 		77C1142E68C7909C2F8E4AFB /* WanderShareButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderShareButton.swift; sourceTree = "<group>"; };
 		77E52D1EBC16B66D03A58DE1 /* PrivateMessageRPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivateMessageRPCClient.swift; sourceTree = "<group>"; };
+		77F0BB532A756CAD97B28570 /* MapCategoryFilterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapCategoryFilterTests.swift; sourceTree = "<group>"; };
 		781C8C7015C78D2D28319036 /* MapDesignLabUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapDesignLabUITests.swift; sourceTree = "<group>"; };
 		7910E21543B7D69F1F53B1E6 /* FutureDateSaveMockups.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FutureDateSaveMockups.swift; sourceTree = "<group>"; };
 		79222AFB765645D8E0C1538E /* ClipService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipService.swift; sourceTree = "<group>"; };
@@ -1730,6 +1732,7 @@
 				31ED4365A7B8DE54C9B542C8 /* MapAnnotationVisibilityTests.swift */,
 				8DCC48CE680B97A013BFCFA0 /* MapAppearancePreferenceTests.swift */,
 				9021F616340DA52D13BDBA17 /* MapCapturePhotoRepositoryTests.swift */,
+				77F0BB532A756CAD97B28570 /* MapCategoryFilterTests.swift */,
 				1C4941BEA806387932190453 /* MapDesignLabTests.swift */,
 				7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */,
 				2501CCE4DDE0DD7DF68F8F4A /* MapMoreFilterResetTests.swift */,
@@ -3100,6 +3103,7 @@
 				5CC56B645B017939CCED1BF9 /* MapAnnotationVisibilityTests.swift in Sources */,
 				1EC92B54DDF998220872B490 /* MapAppearancePreferenceTests.swift in Sources */,
 				3A50E098004ACA4FA7A18F95 /* MapCapturePhotoRepositoryTests.swift in Sources */,
+				7431AE6DDDA5A3D9AFDE4D27 /* MapCategoryFilterTests.swift in Sources */,
 				AFEE75ECA79608BFDA586C3E /* MapDesignLabTests.swift in Sources */,
 				585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */,
 				EA20FADB4391084DB096A69F /* MapMoreFilterResetTests.swift in Sources */,

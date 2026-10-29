@@ -568,13 +568,11 @@ enum MapSearchExternalCandidatePolicy {
         guard allowsAnyExternalResults(refinements: refinements) else {
             return false
         }
-        guard !refinements.categories.isEmpty else { return true }
-
-        let normalizedCategories = Set(
-            refinements.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
-        )
-        return normalizedCategories.contains(
-            WanderPlaceCategory.normalizedPrimaryCategory(candidate.primaryCategory)
+        guard refinements.hasCategorySelection else { return true }
+        return refinements.matchesCategory(
+            candidate.primaryCategory,
+            subcategory: candidate.subcategory,
+            cuisine: candidate.inferredRestaurantFoodType
         )
     }
 }
@@ -8554,6 +8552,14 @@ enum MapHitTesting {
 enum MapMoreFilterPolicy {
     static let collapsedCategoryCount = 6
 
+    static func options(for category: String) -> [String] {
+        guard category == WanderPlaceCategory.restaurantsFood else {
+            return WanderPlaceCategory.subcategorySuggestions(for: category)
+        }
+        let popular = WanderPlaceCategory.restaurantPopularCuisineOptions
+        return popular + WanderPlaceCategory.restaurantCuisineOptions.filter { !popular.contains($0) }
+    }
+
     static func showsStatus(for source: MapSource) -> Bool {
         switch source {
         case .featured: false
@@ -8877,31 +8883,67 @@ enum MapStatusFilter: String, CaseIterable, Identifiable {
 
 struct MapMoreFilterSelection: Equatable {
     var categories: Set<String> = []
+    private(set) var categoryOptions: [String: Set<String>] = [:]
     var people: Set<String> = []
     var status: MapStatusFilter = .all
 
+    var hasCategorySelection: Bool {
+        !categories.isEmpty || categoryOptions.values.contains { !$0.isEmpty }
+    }
+
     var activeSectionCount: Int {
-        (categories.isEmpty ? 0 : 1)
+        (hasCategorySelection ? 1 : 0)
             + (people.isEmpty ? 0 : 1)
             + (status == .all ? 0 : 1)
     }
 
     var activeOptionCount: Int {
         categories.count
+            + categoryOptions.values.reduce(0) { $0 + $1.count }
             + people.count
             + (status == .all ? 0 : 1)
     }
 
     mutating func selectAllCategories() {
         categories.removeAll()
+        categoryOptions.removeAll()
     }
 
     mutating func toggleCategory(_ category: String) {
+        let category = WanderPlaceCategory.normalizedPrimaryCategory(category)
+        categoryOptions.removeValue(forKey: category)
         if categories.contains(category) {
             categories.remove(category)
         } else {
             categories.insert(category)
         }
+    }
+
+    mutating func toggleCategoryOption(_ option: String, in category: String) {
+        let category = WanderPlaceCategory.normalizedPrimaryCategory(category)
+        let option = WanderPlaceCategory.normalizedCategoryText(option)
+        guard !option.isEmpty else { return }
+        categories.remove(category)
+        var options = categoryOptions[category, default: []]
+        if !options.insert(option).inserted {
+            options.remove(option)
+        }
+        categoryOptions[category] = options.isEmpty ? nil : options
+    }
+
+    func isCategoryOptionSelected(_ option: String, in category: String) -> Bool {
+        categoryOptions[WanderPlaceCategory.normalizedPrimaryCategory(category), default: []]
+            .contains(WanderPlaceCategory.normalizedCategoryText(option))
+    }
+
+    func matchesCategory(_ category: String, subcategory: String?, cuisine: String?) -> Bool {
+        guard hasCategorySelection else { return true }
+        let category = WanderPlaceCategory.normalizedPrimaryCategory(category)
+        if categories.contains(where: { WanderPlaceCategory.normalizedPrimaryCategory($0) == category }) {
+            return true
+        }
+        let option = category == WanderPlaceCategory.restaurantsFood ? cuisine : subcategory
+        return isCategoryOptionSelected(option ?? "", in: category)
     }
 
     mutating func selectAllPeople() {
@@ -9270,16 +9312,15 @@ enum MapFilterSelection {
     ) -> [VisiblePlace] {
         guard selection.activeSectionCount > 0 else { return places }
 
-        let normalizedCategories = Set(
-            selection.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
-        )
         let selectedStatuses = statuses(for: selection.status)
 
         return places.filter { visiblePlace in
-            let matchesCategory = normalizedCategories.isEmpty
-                || normalizedCategories.contains(
-                    WanderPlaceCategory.normalizedPrimaryCategory(visiblePlace.effectiveCategory)
-                )
+            let presentation = visiblePlace.categoryPresentation
+            let matchesCategory = selection.matchesCategory(
+                presentation.assignment.primaryCategory,
+                subcategory: presentation.assignment.subcategory,
+                cuisine: presentation.restaurantCuisine
+            )
             let matchesPerson = selection.people.isEmpty
                 || selection.people.contains(visiblePlace.owner.id)
             let matchesStatus = selectedStatuses.isEmpty
@@ -9291,14 +9332,14 @@ enum MapFilterSelection {
     static func matches(
         status: PlaceStatus,
         category: String,
+        subcategory: String? = nil,
+        cuisine: String? = nil,
         ownerID: String,
         selection: MapMoreFilterSelection
     ) -> Bool {
-        let normalizedCategories = Set(
-            selection.categories.map(WanderPlaceCategory.normalizedPrimaryCategory)
+        let matchesCategory = selection.matchesCategory(
+            category, subcategory: subcategory, cuisine: cuisine
         )
-        let matchesCategory = normalizedCategories.isEmpty
-            || normalizedCategories.contains(WanderPlaceCategory.normalizedPrimaryCategory(category))
         let matchesPerson = selection.people.isEmpty || selection.people.contains(ownerID)
         let matchesStatus = statuses(for: selection.status).isEmpty
             || statuses(for: selection.status).contains(status)
@@ -10165,6 +10206,7 @@ private struct MapMoreFiltersPopover: View {
     let peopleOptions: [MapSocialOwnerOption]
     let dismiss: () -> Void
     @State private var showsAllCategories = false
+    @State private var expandedCategories: Set<String> = []
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -10188,25 +10230,18 @@ private struct MapMoreFiltersPopover: View {
                     title: "Categories",
                     detail: "Choose one or more"
                 ) {
-                    VStack(spacing: WanderTheme.spacing2) {
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
-                            MapMoreOptionChip(
-                                title: "All",
-                                systemImage: "square.grid.2x2",
-                                isSelected: selection.categories.isEmpty
-                            ) {
-                                selection.selectAllCategories()
-                            }
+                    VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                        MapMoreOptionChip(
+                            title: "All",
+                            systemImage: "square.grid.2x2",
+                            isSelected: !selection.hasCategorySelection
+                        ) {
+                            selection.selectAllCategories()
+                        }
+                        .accessibilityIdentifier("map.more.categories.all")
 
-                            ForEach(visibleCategories, id: \.self) { category in
-                                MapMoreOptionChip(
-                                    title: AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category)),
-                                    emoji: WanderPlaceCategory.broadEmoji(for: category),
-                                    isSelected: selection.categories.contains(category)
-                                ) {
-                                    selection.toggleCategory(category)
-                                }
-                            }
+                        ForEach(visibleCategories, id: \.self) { category in
+                            categoryRow(category)
                         }
 
                         Button {
@@ -10319,6 +10354,74 @@ private struct MapMoreFiltersPopover: View {
         }
     }
 
+    private func categoryRow(_ category: String) -> some View {
+        let title = AppCopy.capitalizingInitial(WanderPlaceCategory.broadCategory(for: category))
+        let isExpanded = expandedCategories.contains(category)
+        let selectedCount = selection.categoryOptions[category, default: []].count
+
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing1) {
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                        if !expandedCategories.insert(category).inserted {
+                            expandedCategories.remove(category)
+                        }
+                    }
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(appearance.secondaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(isExpanded ? "Collapse" : "Expand") \(title)")
+                .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+                .accessibilityIdentifier("map.more.category.\(category).expand")
+
+                MapMoreOptionChip(
+                    title: title,
+                    emoji: WanderPlaceCategory.broadEmoji(for: category),
+                    wrapsTitle: true,
+                    isSelected: selection.categories.contains(category)
+                ) {
+                    selection.toggleCategory(category)
+                }
+                .accessibilityIdentifier("map.more.category.\(category)")
+
+                if selectedCount > 0 {
+                    Text("\(selectedCount)")
+                        .font(AstirTypography.metadata)
+                        .foregroundStyle(appearance.accentText)
+                        .accessibilityLabel("\(selectedCount) selected options in \(title)")
+                }
+            }
+
+            if isExpanded {
+                Text(category == WanderPlaceCategory.restaurantsFood ? "Cuisines" : "Subcategories")
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(appearance.secondaryText)
+                    .padding(.leading, 44)
+
+                LazyVGrid(columns: columns, alignment: .leading, spacing: WanderTheme.spacing2) {
+                    ForEach(MapMoreFilterPolicy.options(for: category), id: \.self) { option in
+                        MapMoreOptionChip(
+                            title: WanderPlaceCategory.displayLabel(option),
+                            systemImage: selection.isCategoryOptionSelected(option, in: category)
+                                ? "checkmark.circle.fill" : "circle",
+                            wrapsTitle: true,
+                            isSelected: selection.isCategoryOptionSelected(option, in: category)
+                        ) {
+                            selection.toggleCategoryOption(option, in: category)
+                        }
+                        .accessibilityIdentifier("map.more.category.\(category).option.\(option)")
+                    }
+                }
+                .padding(.leading, 44)
+            }
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: WanderTheme.spacing2) {
             VStack(alignment: .leading, spacing: 2) {
@@ -10372,6 +10475,7 @@ private struct MapMoreOptionChip: View {
     let title: String
     var systemImage: String? = nil
     var emoji: String? = nil
+    var wrapsTitle = false
     let isSelected: Bool
     let action: () -> Void
     @Environment(\.astirBrandMode) private var astirBrandMode
@@ -10387,7 +10491,8 @@ private struct MapMoreOptionChip: View {
                 }
                 Text(title)
                     .font(AstirTypography.label)
-                    .lineLimit(1)
+                    .lineLimit(wrapsTitle ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: wrapsTitle)
                     .minimumScaleFactor(0.84)
                 Spacer(minLength: 0)
             }
