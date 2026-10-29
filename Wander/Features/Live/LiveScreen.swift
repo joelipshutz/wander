@@ -42,6 +42,7 @@ struct LiveScreen: View {
     @State private var mapSize: CGSize = .zero
     @State private var drawerMapOrigin: MKCoordinateRegion?
     @State private var cardMapOrigin: MKCoordinateRegion?
+    @State private var cardMapCameraOrigin: MapCamera?
     @State private var previewHeight: CGFloat = 400
     @State private var previewCameraAdjusted = false
     @State private var previewAnimationTrigger = 0
@@ -388,7 +389,7 @@ struct LiveScreen: View {
             draftArea = nil; drawPoints = []; drawCoordinates = []
             selection = LiveBrowseSelection(); draftSelection = selection; detent = 1
             viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
-            drawerMapOrigin = nil; cardMapOrigin = nil; departedAt = nil; feedIsScrolled = false
+            drawerMapOrigin = nil; cardMapOrigin = nil; cardMapCameraOrigin = nil; departedAt = nil; feedIsScrolled = false
             previewSaveContext = nil; previewSharePlace = nil; feedScrollResetRequest = UUID()
             introductionAudience = nil; introductionAcknowledged = false; showsIntroductionGuide = false
             updateIntroduction()
@@ -1144,6 +1145,7 @@ struct LiveScreen: View {
         clearNativePlaceSelection()
         selectedPlaceID = nil
         cardMapOrigin = nil
+        cardMapCameraOrigin = nil
         installCommittedQuery()
         if changedNearby, let center = selection.center {
             mapSearch.willMoveProgrammatically()
@@ -1339,7 +1341,7 @@ struct LiveScreen: View {
         guard departedAt != nil else { return }
         let retains = LiveReviewContinuity.keepsFeedPosition(scrolled: departedFeedWasScrolled, departedAt: departedAt)
         if !retains { feedScrollResetRequest = UUID(); feedIsScrolled = false }
-        let returningFromCard = hasPlacePreview || cardMapOrigin != nil
+        let returningFromCard = hasPlacePreview || cardMapOrigin != nil || cardMapCameraOrigin != nil
         let restoredOrigin = returningFromCard ? (cardMapOrigin ?? drawerMapOrigin) : nil
         if returningFromCard { dismissPlacePreview() }
         // MapKit publishes its new viewport asynchronously. Fit from the restored
@@ -1351,7 +1353,7 @@ struct LiveScreen: View {
     private func selectPin(_ pin: LivePlacePin) {
         launchLocation.userDidChooseCamera()
         clearNativePlaceSelection()
-        if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
+        rememberPreviewMapOrigin()
         previewCameraAdjusted = false
         for id in pin.identity.placeIDs.union([pin.id]) { viewedPins[id] = .now }
         LiveViewedPinHistory.save(viewedPins, userID: store.currentUser.id)
@@ -1382,6 +1384,15 @@ struct LiveScreen: View {
         }
     }
 
+    private func rememberPreviewMapOrigin() {
+        guard cardMapOrigin == nil, cardMapCameraOrigin == nil else { return }
+        cardMapOrigin = drawerMapOrigin ?? mapProxy.region ?? viewport
+        // A geographic bounding box loses rotation and pitch. For a preview
+        // opened from the collapsed map, restore the exact pose instead.
+        // Half-drawer previews still return to their stored full-map region.
+        if detent == 0, drawerMapOrigin == nil { cardMapCameraOrigin = mapProxy.camera }
+    }
+
     private func dismissPlacePreview() {
         let closedCoordinate = previewCoordinate
         clearNativePlaceSelection()
@@ -1395,16 +1406,17 @@ struct LiveScreen: View {
         }
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.3)) {
             selectedPlaceID = nil; detent = 0
-            if let restoredOrigin { setMapCamera(.region(restoredOrigin)) }
+            if let cardMapCameraOrigin { setMapCamera(.camera(cardMapCameraOrigin)) }
+            else if let restoredOrigin { setMapCamera(.region(restoredOrigin)) }
         }
-        cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
+        cardMapOrigin = nil; cardMapCameraOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
     }
 
     private func collapseForMapInteraction() {
         guard hasPlacePreview || nativeFeature != nil || detent != 0 else { return }
         clearNativePlaceSelection()
         // The finger now owns the camera. Never undo a pan by restoring an old pose.
-        cardMapOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
+        cardMapOrigin = nil; cardMapCameraOrigin = nil; drawerMapOrigin = nil; previewCameraAdjusted = false
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
             selectedPlaceID = nil; detent = 0
         }
@@ -1438,7 +1450,7 @@ struct LiveScreen: View {
         nativeFeatureTask?.cancel()
         let request = UUID(); nativeFeatureRequest = request
         let accountID = store.currentUser.id
-        if cardMapOrigin == nil { cardMapOrigin = drawerMapOrigin ?? viewport }
+        rememberPreviewMapOrigin()
         previewCameraAdjusted = false
         mapSearch.rebaseForPresentationChange()
         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) {

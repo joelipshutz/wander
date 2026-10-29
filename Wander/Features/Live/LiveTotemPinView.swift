@@ -109,7 +109,9 @@ struct LiveTotemPinView: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
         .accessibilityHidden(true) // The annotation Button supplies place + semantic state.
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isCompact)
+        // MapKit can cross the density boundary repeatedly during a gesture.
+        // Swap the tile and dot atomically so their status colors never fade out.
+        .animation(nil, value: isCompact)
         .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.82), value: selected)
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: isSoftened)
     }
