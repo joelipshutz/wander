@@ -148,6 +148,7 @@ import XCTest
         let snapshot = NotificationBadgeSnapshot(userID: "joe", plans: [], checkIns: [], follows: [follow, follow])
         XCTAssertEqual(badge.count(for: snapshot), 1)
         badge.open(snapshot)
+        for id in snapshot.notificationIDs { badge.acknowledge(id, userID: snapshot.userID) }
         XCTAssertEqual(badge.count(for: snapshot), 0)
         badge.close()
         let refollow = NotificationBadgeSnapshot(userID: "joe", plans: [], checkIns: [], follows: [follow, makeFollow()])

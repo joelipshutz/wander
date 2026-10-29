@@ -112,3 +112,43 @@ struct NotificationCountBadge: View {
         }
     }
 }
+
+/// Rows and the safe viewport use the same screen coordinates. A ScrollView's
+/// named space can include content insets beyond its actually visible region.
+struct NotificationRowFrames: PreferenceKey {
+    static var defaultValue: [String: CGRect] { [:] }
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, latest in latest })
+    }
+}
+
+struct NotificationUnreadRow: ViewModifier {
+    let id: String
+    let isUnseen: Bool
+    let onVisibilityChange: (Bool) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            row(content).onScrollVisibilityChange(threshold: 0.5, onVisibilityChange)
+        } else {
+            row(content).background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: NotificationRowFrames.self,
+                        value: [id: geometry.frame(in: .global)])
+                }
+            }
+        }
+    }
+
+    private func row(_ content: Content) -> some View {
+        HStack(spacing: WanderTheme.spacing2) {
+            Circle()
+                .fill(isUnseen ? Color(uiColor: .systemRed) : .clear)
+                .frame(width: 8, height: 8)
+                .accessibilityHidden(true)
+            content
+                .accessibilityValue(isUnseen ? "New notification" : "Seen")
+        }
+    }
+}

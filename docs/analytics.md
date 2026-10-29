@@ -373,3 +373,10 @@ social `notification_type`, `delivery_channel=in_app`, and the existing coarse
 tap emits the event; refresh, badge acknowledgement, and unavailable rows do not.
 Notification copy, identifiers and routing payloads are never analytics properties.
 These opens remain outside the remote push-delivery funnel.
+
+Followed Wanna rows in the in-app inbox use `notification_type=followed_place_wanna`,
+`delivery_channel=in_app`, and `route=activity_comments` on a routable tap. The
+allowlist is local to the inbox; this type is not a new push producer. A map-save
+receipt representing the same activity retains `place_saved_from_your_map` and
+emits one open event. No actor, place, note, activity ID, or notification ID is
+included. Exposure/scroll acknowledgement emits no analytics event.

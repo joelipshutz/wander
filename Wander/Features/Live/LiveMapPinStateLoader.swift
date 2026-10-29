@@ -17,6 +17,7 @@ final class LiveMapPinStateLoader: ObservableObject {
     private var requestToken = UUID()
     private var expiryTask: Task<Void, Never>?
     private var expiresAt: Date?
+    private var lastRequest: LiveMapPinStateRequest?
     private let duration: Duration
 
     init(duration: Duration = LiveFeedDisplayLease.duration) { self.duration = duration }
@@ -27,6 +28,7 @@ final class LiveMapPinStateLoader: ObservableObject {
         expiryTask = nil
         expiresAt = nil
         snapshot = nil
+        lastRequest = nil
         revision &+= 1
     }
 
@@ -38,9 +40,18 @@ final class LiveMapPinStateLoader: ObservableObject {
     }
 
     func load(request: LiveMapPinStateRequest?, repository: (any LiveMapPinStateRepository)?) async {
-        reset()
-        let token = requestToken
-        guard let request, !request.placeIDs.isEmpty, let repository else { return }
+        revalidate()
+        guard let request, !request.placeIDs.isEmpty, let repository else { reset(); return }
+        if let previous = lastRequest, previous.map == request.map,
+           previous.placeIDs == request.placeIDs, previous.storeRevision == request.storeRevision,
+           let fetchedAt = snapshot?.fetchedAt, Date.now.timeIntervalSince(fetchedAt) < 60 { return }
+        let retainsEvidence = lastRequest.map { $0.map.hasSameScope(as: request.map) } ?? false
+        if !retainsEvidence { reset() }
+        let token = UUID(); requestToken = token
+        // Retain valid evidence while an equivalent request is pending. Failure,
+        // partial data and scope changes still fail closed.
+        var accepted = false
+        defer { if !accepted, !Task.isCancelled, requestToken == token { reset() } }
         do {
             let result = try await repository.liveMapPinStates(placeIDs: request.placeIDs)
             guard !Task.isCancelled, token == requestToken, result.complete,
@@ -53,12 +64,16 @@ final class LiveMapPinStateLoader: ObservableObject {
             let remaining = min(duration, Duration.seconds(leaseSeconds - max(0, age)))
             let seconds = Double(remaining.components.seconds)
                 + Double(remaining.components.attoseconds) / 1e18
+            accepted = true
+            lastRequest = request
+            expiryTask?.cancel()
             expiresAt = Date.now.addingTimeInterval(seconds)
             snapshot = result
             revision &+= 1
+            let expiration = expiresAt
             expiryTask = Task { @MainActor [weak self] in
                 do { try await Task.sleep(for: remaining) } catch { return }
-                guard let self, self.requestToken == token else { return }
+                guard let self, self.expiresAt == expiration else { return }
                 self.reset()
             }
         } catch {

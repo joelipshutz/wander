@@ -145,6 +145,7 @@ import XCTest
         let badge = NotificationBadgeStore(defaults: defaults)
         XCTAssertEqual(badge.count(for: first), 1)
         badge.open(first)
+        badge.acknowledge(item.badgeID, userID: "first")
         badge.updateVisibleInbox(second)
         XCTAssertEqual(badge.count(for: second), 1)
         badge.close()
@@ -153,6 +154,80 @@ import XCTest
         XCTAssertEqual(restored.count(for: second), 1)
         let next = NotificationBadgeSnapshot(userID: "first", plans: [], checkIns: [], activity: [item, row()])
         XCTAssertEqual(restored.count(for: next), 1)
+    }
+
+    func testWannaAndMapSaveOverlapOnceWhileRepeatsRemainDistinct() throws {
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first { $0.userPlace.status == .wannaGo })
+        let actor = ProfileShell(id: "followed", handle: "friend", displayName: "Friend", avatarURL: nil, bio: nil, relationship: .follower)
+        let occurredAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let original = FeedActivity(id: UUID().uuidString, kind: .placeSaved, actor: actor, place: place, occurredAt: occurredAt)
+        let restored = FeedActivity(id: UUID().uuidString, kind: .placeSaved, actor: actor, place: place, occurredAt: occurredAt.addingTimeInterval(60))
+        let repeated = FeedActivity(id: UUID().uuidString, kind: .placeWannaGo, actor: actor, place: place, occurredAt: .now)
+        let receipt = row(type: "place_saved_from_your_map", actorID: actor.id, createdAt: occurredAt,
+                          data: ["user_place_id": .string(place.userPlace.id), "place_id": .string(place.place.id)])
+        let result = ActivityNotification.mergingWannas([original, repeated, repeated], with: [receipt], userID: "recipient")
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result[0].id, receipt.id)
+        XCTAssertEqual(result[0].badgeID, receipt.badgeID)
+        XCTAssertEqual(result[0].destination, .activityComments(id: original.id))
+        XCTAssertEqual(result[1].destination, .activityComments(id: repeated.id))
+        XCTAssertEqual(result[1].notificationType, "followed_place_wanna")
+        XCTAssertEqual(result[1].symbol, "bookmark")
+        XCTAssertEqual(ActivityNotification.mergingWannas([restored, original, repeated], with: [receipt], userID: "recipient").count, 3,
+                       "A restored save is a separate activity even with the same parent identity")
+        XCTAssertEqual(result[1].openedEvent?.properties, ["notification_type": "followed_place_wanna",
+            "delivery_channel": "in_app", "route": "activity_comments"])
+    }
+
+    func testCollapsingMapSaveAndWannaPreservesSeenStateInBothDirections() {
+        let suite = "WannaBadgeAliases.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let id = UUID()
+        let wanna = ActivityNotification(id: id, actorID: "actor", notificationType: "followed_place_wanna",
+            title: "Wanna", body: "Place", createdAt: .now, data: ["activity_id": .string(id.uuidString)])
+        let receipt = row(type: "place_saved_from_your_map", data: ["activity_id": .string(id.uuidString)])
+        let first = NotificationBadgeSnapshot(userID: "recipient", plans: [], checkIns: [], activity: [wanna])
+        let collapsed = NotificationBadgeSnapshot(userID: "recipient", plans: [], checkIns: [], activity: [receipt])
+        let badge = NotificationBadgeStore(defaults: defaults)
+        badge.open(first)
+        badge.acknowledge(wanna.badgeID, userID: "recipient")
+        badge.close()
+        XCTAssertEqual(badge.count(for: collapsed), 0)
+        defaults.removePersistentDomain(forName: suite)
+        let reverse = NotificationBadgeStore(defaults: defaults)
+        reverse.open(collapsed)
+        reverse.acknowledge(receipt.badgeID, userID: "recipient")
+        reverse.close()
+        XCTAssertEqual(reverse.count(for: first), 0)
+    }
+
+    func testOnlyExactWannaIdentityMergesWithAnExplicitMapSaveReceipt() throws {
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let actor = ProfileShell(id: "followed", handle: "friend", displayName: "Friend", avatarURL: nil, bio: nil, relationship: .follower)
+        let first = FeedActivity(id: UUID().uuidString, kind: .placeWannaGo, actor: actor, place: place, occurredAt: .now)
+        let next = FeedActivity(id: UUID().uuidString, kind: .placeWannaGo, actor: actor, place: place, occurredAt: .now)
+        let receipt = row(type: "place_saved_from_your_map", actorID: actor.id,
+                          data: ["activity_id": .string(first.id), "user_place_id": .string(place.userPlace.id)])
+        let result = ActivityNotification.mergingWannas([first, next], with: [receipt], userID: "recipient")
+        XCTAssertEqual(result.count, 2)
+        XCTAssertEqual(result.map(\.destination), [.activityComments(id: first.id), .activityComments(id: next.id)])
+    }
+
+    func testWannaProjectionDropsOwnUnsupportedAndMissingSourcesAndKeepsUnfollowedMapReceipts() throws {
+        let store = WanderStore(fixtures: .seed())
+        let place = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let actor = store.shell(for: store.currentUser)
+        let own = FeedActivity(id: UUID().uuidString, kind: .placeWannaGo, actor: actor, place: place, occurredAt: .now)
+        let friend = ProfileShell(id: "friend", handle: "friend", displayName: "Friend", avatarURL: nil, bio: nil, relationship: .follower)
+        let missing = FeedActivity(id: UUID().uuidString, kind: .placeWannaGo, actor: friend, occurredAt: .now)
+        let been = FeedActivity(id: UUID().uuidString, kind: .placeBeen, actor: friend, place: place, occurredAt: .now)
+        let invalid = FeedActivity(id: "invalid", kind: .placeWannaGo, actor: friend, place: place, occurredAt: .now)
+        let receipt = row(type: "place_saved_from_your_map", actorID: "not-followed", data: ["place_id": .string(place.place.id)])
+        XCTAssertEqual(ActivityNotification.mergingWannas([own, missing, been, invalid], with: [receipt], userID: actor.id), [receipt])
+        XCTAssertFalse(ActivityNotification.supportedTypes.contains("followed_place_wanna"), "In-app projection is not a push query type")
     }
 
     private func row(type: String = "activity_commented", actorID: String = "actor", createdAt: Date = .now,

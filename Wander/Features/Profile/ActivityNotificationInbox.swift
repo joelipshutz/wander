@@ -20,6 +20,14 @@ struct ActivityNotification: Identifiable, Decodable, Equatable {
         case actorID = "actor_user_id", notificationType = "notification_type", createdAt = "created_at"
     }
 
+    var badgeID: String { "\(notificationType == "followed_place_wanna" ? "wanna" : "activity"):\(id.uuidString)" }
+
+    var badgeAliases: Set<String> {
+        guard notificationType == "place_saved_from_your_map",
+              let activityID = string("activity_id"), let id = UUID(uuidString: activityID) else { return [] }
+        return ["wanna:\(id.uuidString)"]
+    }
+
     private func string(_ key: String) -> String? {
         guard case .string(let value) = data[key], !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return value
@@ -37,16 +45,16 @@ struct ActivityNotification: Identifiable, Decodable, Equatable {
         case "activity_liked": "heart"
         case "activity_commented": "bubble.left"
         case "followed_place_visit": "mappin.and.ellipse"
-        case "place_saved_from_your_map": "bookmark"
+        case "place_saved_from_your_map", "followed_place_wanna": "bookmark"
         case "list_collaborator_added", "list_place_added": "list.bullet"
         default: "bell"
         }
     }
 
     var destination: NotificationDestination? {
-        guard Self.supportedTypes.contains(notificationType) else { return nil }
+        guard Self.supportedTypes.contains(notificationType) || notificationType == "followed_place_wanna" else { return nil }
         if isGroupedImport { return .discover }
-        if ["activity_liked", "activity_commented", "followed_place_visit", "place_saved_from_your_map"].contains(notificationType),
+        if ["activity_liked", "activity_commented", "followed_place_visit", "place_saved_from_your_map", "followed_place_wanna"].contains(notificationType),
            let activityID = string("activity_id") { return .activityComments(id: activityID) }
         switch notificationType {
         case "followed_place_visit":
@@ -85,12 +93,13 @@ struct ActivityNotification: Identifiable, Decodable, Equatable {
 
 @MainActor struct SupabaseActivityNotificationRepository: ActivityNotificationRepository {
     let table: any RemoteTableCalling
+    var feed: (any FeedRepository)? = nil
 
     func receivedActivity(userID: String) async throws -> [ActivityNotification] {
         // Recipient filter is defense in depth; server RLS is authoritative.
         // APNs acceptance is not a prerequisite for reading an existing event.
         // Suppressed events stay suppressed, and delayed events wait until due.
-        try await table.select(table: "notification_events", queryItems: [
+        let receipts: [ActivityNotification] = try await table.select(table: "notification_events", queryItems: [
             URLQueryItem(name: "select", value: "id,actor_user_id,notification_type,title,body,created_at,data"),
             URLQueryItem(name: "recipient_user_id", value: "eq.\(userID)"),
             URLQueryItem(name: "notification_type", value: "in.(\(ActivityNotification.supportedTypes.joined(separator: ",")))"),
@@ -99,6 +108,58 @@ struct ActivityNotification: Identifiable, Decodable, Equatable {
             URLQueryItem(name: "order", value: "created_at.desc,id.desc"),
             URLQueryItem(name: "limit", value: "100")
         ])
+        guard let feed else { return receipts }
+        // Reuse the server's followed-person, block, private-profile and source
+        // visibility gates. Filtering Wannas happens BEFORE the server limit.
+        // This projection omits optional gallery hydration and never changes Live.
+        var saves: [FeedActivity] = []
+        var cursor: String?
+        for _ in 0..<2 {
+            try Task.checkCancellation()
+            let page = try await feed.liveMapActivity(audience: .everyone,
+                query: LiveFeedQuery(activityType: .wannas), before: cursor, limit: 50)
+            saves += page.activity
+            guard let next = page.nextCursor, next != cursor else { break }
+            cursor = next
+        }
+        return ActivityNotification.mergingWannas(saves, with: receipts, userID: userID)
+    }
+}
+
+extension ActivityNotification {
+    /// Receipt IDs stay stable when its followed-user representation arrives.
+    /// Never collapse by place: repeat Wannas are separate activity UUIDs.
+    @MainActor static func mergingWannas(_ saves: [FeedActivity], with receipts: [Self], userID: String) -> [Self] {
+        var result = receipts
+        var seen: Set<String> = []
+        for save in saves where save.actor.id != userID && save.resolvedTicketKind == .wanna {
+            guard let id = UUID(uuidString: save.id), let place = save.place,
+                  seen.insert(id.uuidString).inserted else { continue }
+            if let index = result.firstIndex(where: { receipt in
+                guard receipt.notificationType == "place_saved_from_your_map", receipt.actorID == save.actor.id else { return false }
+                if let activityID = receipt.string("activity_id") { return UUID(uuidString: activityID) == id }
+                // The legacy social-save trigger emits one initial place_saved
+                // event in the receipt's transaction (both use now()). Restores
+                // can emit another place_saved for the same parent later; retain it.
+                // Explicit repeat Wannas use place_want_to_go.
+                return save.kind == .placeSaved
+                    && receipt.string("user_place_id")?.lowercased() == place.userPlace.id.lowercased()
+                    && receipt.createdAt == save.occurredAt
+            }) {
+                let receipt = result[index]
+                var data = receipt.data
+                data["activity_id"] = .string(save.id)
+                result[index] = Self(id: receipt.id, actorID: receipt.actorID,
+                    notificationType: receipt.notificationType, title: receipt.title, body: receipt.body,
+                    createdAt: receipt.createdAt, data: data)
+            } else {
+                result.append(Self(id: id, actorID: save.actor.id, notificationType: "followed_place_wanna",
+                    title: "\(save.actor.displayName) saved a Wanna",
+                    body: place.place.canonicalName, createdAt: save.occurredAt,
+                    data: ["activity_id": .string(save.id)]))
+            }
+        }
+        return result
     }
 }
 
@@ -154,6 +215,14 @@ struct SimulatorActivityNotificationRepository: ActivityNotificationRepository {
 
     func receivedActivity(userID: String) async throws -> [ActivityNotification] {
         guard includesNotifications else { return [] }
+        if ProcessInfo.processInfo.arguments.contains("-WanderNotificationScrollUITest") {
+            return (1...16).map { index in
+                ActivityNotification(id: UUID(uuidString: String(format: "66800000-0000-0000-0000-%012d", index))!,
+                    actorID: "user_ryan", notificationType: "followed_place_wanna", title: "Ryan saved a Wanna",
+                    body: "Wanna place \(index)", createdAt: Date(timeIntervalSince1970: 1_790_000_000 - Double(index * 60)),
+                    data: ["activity_id": .string("fixture-feed-maya-been-bar-nido")])
+            }
+        }
         return [ActivityNotification(id: UUID(uuidString: "65300000-0000-0000-0000-000000000001")!,
             actorID: "user_ryan", notificationType: "activity_commented", title: "Ryan commented on your activity",
             body: "Open the conversation", createdAt: .now.addingTimeInterval(-60),
