@@ -5,6 +5,68 @@ import XCTest
 final class LiveTotemStateTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_750_000_000)
 
+    func testCountryAliasesProduceOneSavedPinBeforeDensityWithAuthoritativeState() throws {
+        for owner in ["me", "friend"] {
+            for status in [PlaceStatus.been, .wannaGo] {
+                let saved = row("66600000-0000-4000-8000-000000000001", ownerID: owner, status: status)
+                let featured = row("66600000-0000-4000-8000-000000000002", ownerID: FeaturedCommunityPlaceSignal.ownerID)
+                saved.place.sourceProviderPlaceID = "mapkit_shared-cafe_3405_-11824"
+                featured.place.sourceProviderPlaceID = "mapkit_shared_cafe_3405_-11824"
+                featured.place.country = "United States"
+                let event = activity("saved-event", status == .been ? .placeBeen : .placeWannaGo, saved)
+                let context = LiveTotemContext(currentUserID: "me", query: LiveFeedQuery(),
+                    currentSavedPlaces: [saved], currentListPlaces: [], authoritativeState: .init(states: [
+                        .init(placeID: saved.place.id, saves: [.init(ownerID: owner,
+                            hasBeen: status == .been, hasWanna: status == .wannaGo, isFriend: false)], hasListMembership: false),
+                        .init(placeID: featured.place.id, saves: [], hasListMembership: false)
+                    ], complete: true), allowsCachedAssociations: false)
+                let previous = LiveMapProjection.pins(activities: [], featured: [featured], totemContext: context)
+                for events in [[], [event]] {
+                    let pins = LiveMapProjection.pins(activities: events, featured: [featured, featured],
+                        totemContext: context, previousPins: previous)
+                    XCTAssertEqual(pins.count, 1, "A country spelling must not create a second full pin or dense dot.")
+                    let pin = try XCTUnwrap(pins.first)
+                    XCTAssertEqual(pin.identity.persistedPlaceIDs, [saved.place.id, featured.place.id])
+                    XCTAssertEqual(pin.id, previous.first?.id, "Late activity must preserve the selected identity.")
+                    XCTAssertTrue(pin.totemState.hasSavedStatus)
+                    XCTAssertFalse(pin.totemState.isFeatured)
+                    XCTAssertEqual(pin.totemState.rails, [.init(ownership: owner == "me" ? .currentUser : .social, status: status)])
+                    XCTAssertEqual(pin.activities.count, events.count)
+                    let points = pins.map { (id: $0.id, point: CGPoint(x: 100, y: 100)) }
+                    XCTAssertTrue(LivePinDensity.compactIDs(points: points, selectedID: nil).isEmpty)
+                    XCTAssertEqual(LivePinDensity.compactIDs(points: [("0-neighbor", .init(x: 101, y: 101))] + points,
+                        selectedID: nil), [pin.id], "A crowded place has exactly one compact representation.")
+                }
+            }
+        }
+    }
+
+    func testCountryCanonicalizationKeepsConflictingAndUnprovenVenuesSeparate() {
+        let first = row("first", ownerID: "me"), second = row("second", ownerID: "friend")
+        first.place.sourceProviderPlaceID = "first-provider-id"
+        second.place.sourceProviderPlaceID = "second-provider-id"
+        for country in ["US", "USA", "United States", " U.S. "] {
+            second.place.country = country
+            XCTAssertTrue(LivePlaceIdentity(places: [first.place]).matches(second.place), country)
+        }
+        for country in ["CA", "Canada", "Unknown country", "", nil] {
+            second.place.country = country
+            XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        }
+        second.place.country = "United States"
+        second.place.canonicalName = "Another Cafe"
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        second.place.canonicalName = first.place.canonicalName
+        second.place.address = "12 Main Street"
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        second.place.address = first.place.address
+        second.place.locality = nil
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+        second.place.locality = first.place.locality
+        second.place.latitude += 0.01
+        XCTAssertFalse(LivePlaceIdentity(places: [first.place]).matches(second.place))
+    }
+
     func testFeaturedRequiresNoAuthorizedSaveOrCurrentListMembership() {
         let featured = row("featured", ownerID: FeaturedCommunityPlaceSignal.ownerID)
         let own = row("own", ownerID: "me", status: .wannaGo)

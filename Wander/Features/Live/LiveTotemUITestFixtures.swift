@@ -28,10 +28,20 @@ enum LiveTotemUITestFixtures {
             ("featured", "Sunday Studio", "arts_culture", 34.071, -118.299),
             ("featured_list", "Silver Lake Garden", "park", 34.102, -118.265)
         ]
-        let places = definitions.map { id, name, category, latitude, longitude in
+        var places = definitions.map { id, name, category, latitude, longitude in
             LocalPlace(localID: "totem_\(id)", canonicalName: name, category: category,
                 locality: "Los Angeles", region: "CA", latitude: latitude, longitude: longitude,
                 sourceProvider: "mapkit", syncState: .synced)
+        }
+        // Legacy MapKit IDs and country code/name variants for the same venue.
+        // The current save and Featured candidate must still share one marker.
+        if let tacos = places.first(where: { $0.id == "totem_tacos" }) {
+            tacos.address = "10 Example Street"; tacos.country = "US"
+            tacos.sourceProviderPlaceID = "mapkit_mariposa-tacos"
+            places.append(LocalPlace(localID: "totem_tacos_featured_alias", canonicalName: tacos.canonicalName,
+                category: tacos.category, address: "10 Example St", locality: tacos.locality,
+                region: tacos.region, country: "United States", latitude: tacos.latitude, longitude: tacos.longitude,
+                sourceProvider: "mapkit", sourceProviderPlaceID: "mapkit_mariposa_tacos", syncState: .synced))
         }
         let saves: [(String, String, PlaceStatus, Double, String?)] = [
             ("coffee", owner.id, .been, 3, "The window seat, a flat white, and nowhere to rush."),
@@ -50,7 +60,7 @@ enum LiveTotemUITestFixtures {
         }
         for id in ["featured", "featured_list", "tacos"] {
             userPlaces.append(LocalUserPlace(localID: "totem_aggregate_\(id)", userID: community.id,
-                placeID: "totem_\(id)", status: .been, visibility: .followers,
+                placeID: id == "tacos" ? "totem_tacos_featured_alias" : "totem_\(id)", status: .been, visibility: .followers,
                 sourceType: "featured_community_aggregate", syncState: .synced))
         }
         let lists = [

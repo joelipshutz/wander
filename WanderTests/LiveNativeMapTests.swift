@@ -336,6 +336,45 @@ final class LiveNativeMapTests: XCTestCase {
         XCTAssertEqual(view.subviews.count, 1)
     }
 
+    func testCountryAliasArrivalRetainsExactlyOneNativeAnnotationAndHostedMarker() throws {
+        let saved = try fixturePin().place
+        saved.place.address = "10 Example Street"; saved.place.locality = "Sampleton"
+        saved.place.region = "CA"; saved.place.country = "US"
+        saved.place.sourceProviderPlaceID = "legacy-hyphen"
+        let aliasPlace = LocalPlace(localID: "country-alias", canonicalName: saved.place.canonicalName,
+            category: saved.place.category, address: "10 Example St", locality: "Sampleton", region: "CA",
+            country: "United States", latitude: saved.place.latitude, longitude: saved.place.longitude,
+            sourceProvider: "mapkit", sourceProviderPlaceID: "legacy_underscore")
+        let community = LocalProfile(localID: FeaturedCommunityPlaceSignal.ownerID, handle: "featured", displayName: "Featured")
+        let alias = VisiblePlace(id: "featured-alias", place: aliasPlace,
+            userPlace: LocalUserPlace(localID: "featured-alias", userID: community.id, placeID: aliasPlace.id,
+                status: .been, visibility: .followers, sourceType: "featured_community_aggregate"), owner: community)
+        let context = LiveTotemContext(currentUserID: saved.owner.id, query: LiveFeedQuery(),
+            currentSavedPlaces: [saved], currentListPlaces: [], currentStateIsComplete: true)
+        let initial = LiveMapProjection.pins(activities: [], featured: [alias], totemContext: context)
+        let map = RecordingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let parent = makeParent(pins: initial)
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        let original = try XCTUnwrap(map.annotations.filter { !($0 is MKUserLocation) }.first)
+        let refreshed = LiveMapProjection.pins(activities: [], featured: [saved, alias, alias],
+            totemContext: context, previousPins: initial)
+        coordinator.update(parent: makeParent(pins: refreshed), map: map, animated: false)
+        XCTAssertEqual(map.annotations.filter { !($0 is MKUserLocation) }.count, 1)
+        XCTAssertTrue(map.annotations.contains { $0 === original })
+        let pin = try XCTUnwrap(refreshed.first)
+        XCTAssertFalse(pin.totemState.isFeatured)
+        let view = LiveNativePinView(annotation: original, reuseIdentifier: LiveNativePinView.reuseIdentifier)
+        for compact in [false, true, false, true] {
+            view.configure(pin: pin, selected: false, viewed: false, compact: compact, brand: .editorialLight)
+            let hosts = view.subviews.compactMap { $0.next as? UIHostingController<LiveNativeHostedPin> }
+            XCTAssertEqual(hosts.count, 1, "Density changes replace the marker, never add another.")
+            XCTAssertEqual(hosts.first?.rootView.compact, compact)
+        }
+    }
+
     func testCameraCallbackUsesCenterDistanceAndActualUserProvenance() async throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let proxy = LiveNativeMapProxy()

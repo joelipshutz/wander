@@ -998,6 +998,14 @@ Upcoming events and inviting people to Astir use icon buttons on the left and ri
 
 ## REC-657 — Totem Live pins and current place state, 2026-10-28
 
+REC-666 clarifies that each canonical place has exactly one annotation: a full
+Totem or its compact dot. Equivalent country codes and names (such as US, USA,
+and United States) are normalized before the existing nearby name/address
+identity checks. Own/social saves continue to replace the green Featured
+treatment, including when a Featured alias is the only in-window result; no
+third green rail is added. Opaque provider IDs stay case-sensitive, and distinct
+co-located businesses, conflicting countries and different branches stay separate.
+
 Totem is the accepted Live pin family: a category pictogram tile, compact status
 rails, and an 11pt circular list badge at the upper-right corner of full pins only.
 Pictograms stay
