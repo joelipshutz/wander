@@ -743,7 +743,7 @@ struct LiveScreen: View {
                 commitSelection(next)
             }
                 .font(AstirTypography.bodySmall.weight(selection.scope == .featured ? .bold : .regular))
-                .foregroundStyle(LiveFilterTint.featured(brand: brand))
+                .foregroundStyle(selection.scope == .featured ? LiveFilterTint.featured(brand: brand) : brand.primaryText)
                 .frame(minHeight: 44)
                 .accessibilityAddTraits(selection.scope == .featured ? .isSelected : [])
                 .accessibilityIdentifier("live.scope.featured")

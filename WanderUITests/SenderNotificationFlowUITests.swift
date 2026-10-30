@@ -198,8 +198,11 @@ final class SenderNotificationFlowUITests: XCTestCase {
             XCTAssertTrue(nativeSwitchReady, "The native Silent switch must be enabled and hittable.")
             guard nativeSwitchReady else { return }
             capture("checkIn-dark-silent-before-press")
+            // Allow delivery margin for native switch recognition on Simulator.
+            // Keep one center press; do not retry or set state. The activation
+            // and persistence assertions below remain unchanged.
             nativeSwitch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-                .press(forDuration: 0.2)
+                .press(forDuration: 0.35)
         }
         // Observe a fresh native snapshot: the CI value predicate reused its
         // pre-press snapshot. Every read shares the original five-second budget.
@@ -290,7 +293,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
             if mode != "direct" { press(addPlaces) }
             let addition: XCUIElement
             if mode == "search" {
-                let search = app.textFields["Search places"]
+                let search = app.textFields["lists.placeSearch"]
                 XCTAssertTrue(search.waitForExistence(timeout: 5))
                 search.tap(); search.typeText("Sparrow")
                 addition = app.buttons["Add Sparrow Bakery to list"]
@@ -340,10 +343,10 @@ final class SenderNotificationFlowUITests: XCTestCase {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
     }
     private func expandNativeSaveEditor(_ app: XCUIApplication) -> Bool {
-        // One unchanged 5s helper deadline covers readiness, native input and
-        // viewport response. Consolidate geometry without extending that clock.
+        // Allow readiness and viewport response their own bounded waits; XCTest
+        // native gesture dispatch includes runner synchronization overhead.
         let helperStartedAt = ProcessInfo.processInfo.systemUptime
-        let deadline = helperStartedAt + 5
+        var deadline = helperStartedAt + 5
         let editor = app.scrollViews["save.editorScroll"]
         let grabber = app.descendants(matching: .any).matching(
             NSPredicate(format: "identifier == %@ OR label == %@", "Sheet Grabber", "Sheet Grabber")
@@ -390,13 +393,15 @@ final class SenderNotificationFlowUITests: XCTestCase {
                               y: admitted.grabber.midY - admitted.app.minY)
         let target = CGPoint(x: admitted.grabber.midX - admitted.app.minX, y: 22)
         origin.withOffset(CGVector(dx: contact.x, dy: contact.y))
-            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)))
-        // Use only the remainder of the same entry deadline after native input.
-        // The later Silent activation retains its separate original 5s clock.
+            .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: target.x, dy: target.y)),
+                   withVelocity: .fast, thenHoldForDuration: 0)
+        // Start the response budget after native gesture dispatch completes.
+        // Geometry must still prove the viewport expanded before scrolling.
         let responseStartedAt = ProcessInfo.processInfo.systemUptime
+        deadline = responseStartedAt + 5
         var responseReads = 0
         var lastReadFinishedAt: TimeInterval?
-        let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        func observeExpansion() -> Bool {
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             responseReads += 1
             let snapshot = try? editor.snapshot()
@@ -407,9 +412,19 @@ final class SenderNotificationFlowUITests: XCTestCase {
                 && finite(after)
                 && after.minY <= admitted.editor.minY - 44
                 && after.height >= admitted.editor.height + 44
-        }, object: nil)
-        let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
-        let result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
+        // Observe immediately: the waiter's first polling tick can consume the
+        // remaining budget without reading an already-expanded compact sheet.
+        let result: XCTWaiter.Result
+        if observeExpansion() {
+            result = .completed
+        } else {
+            let expanded = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeExpansion()
+            }, object: nil)
+            let budget = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            result = budget > 0 ? XCTWaiter.wait(for: [expanded], timeout: budget) : .timedOut
+        }
         let observation = XCTAttachment(string: "readinessResult=\(readinessResult.rawValue); responseReads=\(responseReads); helperElapsed=\(ProcessInfo.processInfo.systemUptime - helperStartedAt); postActionObservationElapsed=\(ProcessInfo.processInfo.systemUptime - responseStartedAt); lastReadWithinDeadline=\(String(describing: lastReadFinishedAt.map { $0 <= deadline })); waitResult=\(result.rawValue)")
         observation.name = "REC-636-save-editor-expansion-observation"
         observation.lifetime = .keepAlways

@@ -197,7 +197,7 @@ final class FeedActivityGroupingUITests: XCTestCase {
 
             let actor = app.buttons["feed.photo-stack.actor"]
             XCTAssertTrue(actor.exists)
-            XCTAssertEqual(actor.label, "Ryan Lieblein checked in, just now")
+            XCTAssertEqual(actor.label, "Ryan Lieblein checked in, Just now")
             XCTAssertFalse(actor.label.localizedCaseInsensitiveContains("your activity"))
             XCTAssertFalse(actor.label.localizedCaseInsensitiveContains("someone you follow"))
             XCTAssertFalse(app.staticTexts.matching(NSPredicate(

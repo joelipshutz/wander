@@ -482,43 +482,72 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let initialAppFrame = app.frame
         XCTAssertTrue(topLimit.isFinite && topLimit > initialAppFrame.minY && topLimit < initialAppFrame.midY)
         let forbiddenButtons = ["Upcoming events", "Close selected place", "live.draw"]
-        // Match the same identifier-or-label names and element types in one
-        // fresh query instead of four serial absence queries per evaluation.
-        let forbiddenChrome = app.descendants(matching: .any).matching(NSPredicate(
-            format: "(identifier == %@ OR label == %@) OR (elementType == %d AND (identifier IN %@ OR label IN %@))",
-            "live.drawerHandle", "live.drawerHandle", Int(XCUIElement.ElementType.button.rawValue),
-            forbiddenButtons, forbiddenButtons)).firstMatch
         var lastValues: [String: Bool] = [:]
         var lastBackFrame = CGRect.null
         var lastAppFrame = CGRect.null
         let startedAt = ProcessInfo.processInfo.systemUptime
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let deadline = startedAt + 5
+        func observeDestination() -> Bool {
             lastValues = [:]
             lastBackFrame = .null
             lastAppFrame = .null
-            let exists = back.exists
-            lastValues["backExists"] = exists
-            guard exists else { return false }
-            let hittable = back.isHittable
-            lastValues["backHittable"] = hittable
-            guard hittable else { return false }
-            let chromeExists = forbiddenChrome.exists
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            // Resolve the requested native element, then inspect its geometry,
+            // the app bounds and forbidden chrome in one fresh hierarchy.
+            // Serial absence/frame queries can consume the budget and return
+            // geometry from different snapshots after keyboard transitions.
+            guard let target = try? back.snapshot() else {
+                lastValues["backExists"] = false
+                return false
+            }
+            guard ProcessInfo.processInfo.systemUptime <= deadline,
+                  let snapshot = try? app.snapshot() else { return false }
+            var matches: [XCUIElementSnapshot] = []
+            var chromeExists = false
+            func visit(_ node: XCUIElementSnapshot) {
+                if node.elementType == target.elementType,
+                   node.identifier == target.identifier, node.label == target.label {
+                    matches.append(node)
+                }
+                if node.identifier == "live.drawerHandle" || node.label == "live.drawerHandle"
+                    || (node.elementType == .button
+                        && (forbiddenButtons.contains(node.identifier) || forbiddenButtons.contains(node.label))) {
+                    chromeExists = true
+                }
+                for child in node.children { visit(child) }
+            }
+            visit(snapshot)
+            lastValues["backExists"] = !matches.isEmpty
+            lastValues["backUnambiguous"] = matches.count == 1
             lastValues["forbiddenChromeExists"] = chromeExists
-            guard !chromeExists else { return false }
-            let frame = back.frame
+            guard matches.count == 1, !chromeExists else { return false }
+            let frame = matches[0].frame
             lastBackFrame = frame
             let validFrame = !frame.isNull && !frame.isInfinite && !frame.isEmpty
             lastValues["backFrameValid"] = validFrame
             guard validFrame else { return false }
-            let appFrame = app.frame
+            let appFrame = snapshot.frame
             lastAppFrame = appFrame
             let contained = appFrame.contains(frame)
             let atTop = frame.minY <= topLimit
             lastValues["backFrameContained"] = contained
             lastValues["backFrameAtTop"] = atTop
-            return contained && atTop
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+            guard contained && atTop,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            let hittable = back.isHittable
+            lastValues["backHittable"] = hittable
+            return hittable && ProcessInfo.processInfo.systemUptime <= deadline
+        }
+        let result: XCTWaiter.Result
+        if observeDestination() {
+            result = .completed
+        } else {
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeDestination()
+            }, object: nil)
+            let remaining = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+            result = remaining > 0 ? XCTWaiter.wait(for: [expectation], timeout: remaining) : .timedOut
+        }
         if result != .completed {
             let values = lastValues.keys.sorted().map { "\($0)=\(lastValues[$0]!)" }.joined(separator: "; ")
             let observation = XCTAttachment(string:
@@ -737,7 +766,10 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         captureCityPickerState("city-picker-before-tap", in: app, observations: [
             "cityExists=\(city.exists); cityFrame=\(city.frame); cityHittable=\(city.isHittable)"
         ])
-        city.tap()
+        // Use one deliberate native row-center press; destination observation
+        // below retains its five-second limit and exact selection assertions.
+        city.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.2)
         guard let cityTarget = revealNativeCityOption("Los Angeles", in: app) else { return }
         let losAngeles = cityTarget.element
         let contact = CGPoint(x: cityTarget.frame.midX, y: cityTarget.frame.midY)
@@ -906,7 +938,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         var snapshotAvailable = false
         var snapshotStartedAt: TimeInterval?
         var snapshotFinishedAt: TimeInterval?
-        let predicate = NSPredicate { _, _ in
+        func observeDrawer() -> Bool {
             guard ProcessInfo.processInfo.systemUptime <= observationDeadline else { return false }
             evaluations += 1
             matchingHandles = 0
@@ -929,8 +961,18 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             return matchingHandles == 1 && matchingValues == 1
                 && ProcessInfo.processInfo.systemUptime <= observationDeadline
         }
-        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        // Do not spend the first polling tick before observing a completed
+        // native transition. All reads still share the original five seconds.
+        let result: XCTWaiter.Result
+        if observeDrawer() {
+            result = .completed
+        } else {
+            let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+                observeDrawer()
+            }, object: nil)
+            let remaining = max(0, observationDeadline - ProcessInfo.processInfo.systemUptime)
+            result = remaining > 0 ? XCTWaiter.wait(for: [expectation], timeout: remaining) : .timedOut
+        }
         let snapshotElapsed = snapshotStartedAt.flatMap { start in snapshotFinishedAt.map { $0 - start } }
         let snapshotWithinDeadline = snapshotFinishedAt.map { $0 <= observationDeadline }
         let observation = XCTAttachment(string: "expectedState=\(state); expectedLoadedCount=\(loadedCount); evaluations=\(evaluations); snapshotAvailable=\(snapshotAvailable); matchingHandles=\(matchingHandles); matchingValues=\(matchingValues); querySnapshotElapsed=\(String(describing: snapshotElapsed)); snapshotWithinDeadline=\(String(describing: snapshotWithinDeadline)); elapsed=\(ProcessInfo.processInfo.systemUptime - observationStart); waitResult=\(result.rawValue)")
@@ -1399,19 +1441,24 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         }
         let rowFrame = toggle.frame
         let nativeFrame = nativeSwitch.frame
+        let nativeEnabled = nativeSwitch.isEnabled
+        let nativeHittable = nativeSwitch.isHittable
         let viewport = usableViewport(form, app: app)
-        // SwiftUI's native switch can extend beyond its row's accessibility
-        // frame. Its full control must remain inside the unobscured Form.
-        guard finite(rowFrame), finite(nativeFrame), finite(viewport),
-              rowFrame.intersects(nativeFrame), viewport.contains(nativeFrame),
-              nativeSwitch.isEnabled, nativeSwitch.isHittable else {
-            XCTFail("Expected the native filter switch fully inside the visible form")
-            return
-        }
-        let diagnostic = XCTAttachment(string: "rowID=\(toggle.identifier); rowFrame=\(rowFrame); nativeSwitchFrame=\(nativeFrame); viewport=\(viewport); rowValueBefore=\(String(describing: toggle.value))")
+        let nativeCenter = CGPoint(x: nativeFrame.midX, y: nativeFrame.midY)
+        let diagnostic = XCTAttachment(string: "rowID=\(toggle.identifier); rowFrame=\(rowFrame); nativeSwitchFrame=\(nativeFrame); nativeEnabled=\(nativeEnabled); nativeHittable=\(nativeHittable); rowValueBefore=\(String(describing: toggle.value))")
         diagnostic.name = "REC-636-filter-native-switch-target"
         diagnostic.lifetime = .keepAlways
         add(diagnostic)
+        // Native switch bounds can extend beyond SwiftUI's labeled row by a
+        // few points. Keep its center in this exact row and the entire native
+        // control in the visible form instead of comparing their outer edges.
+        guard finite(rowFrame), finite(nativeFrame), finite(viewport),
+              rowFrame.contains(nativeCenter), viewport.contains(nativeFrame),
+              nativeEnabled, nativeHittable else {
+            captureState("filter-native-switch-geometry", in: app)
+            XCTFail("Expected the native filter switch inside the visible row")
+            return
+        }
         nativeSwitch.tap()
         XCTAssertEqual(toggle.value as? String, "1")
     }
