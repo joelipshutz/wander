@@ -904,10 +904,27 @@ final class LiveExperienceUITests: XCTestCase {
     func testLiveManualLoadMoreContinuesAnEmptyAuthorizedPage() throws {
         executionTimeAllowance = 300
         let app = launch(extraArguments: ["-WanderFeedPaginationUITest", "-WanderLiveManualPaginationUITest"])
+        // All time deliberately skips the older stage. Select a bounded window
+        // through the real filter UI so this test exercises every expansion.
+        openCategoryFilters(in: app)
+        let timeFilter = app.buttons["live.filter.time"]
+        timeFilter.tap()
+        let day = app.collectionViews.cells.buttons.matching(
+            NSPredicate(format: "label == %@", "Past 24 hours")).firstMatch
+        XCTAssertTrue(day.waitForExistence(timeout: 5))
+        day.tap()
+        XCTAssertEqual(timeFilter.label, "When, Past 24 hours")
+        app.buttons["live.applyFilters"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForNonExistence(timeout: 5))
         setDrawer("expanded", in: app)
-        // Its only continuation is place-less: map remains empty while Feed pages.
+        // The independent map fixture stays empty while the authorized Feed pages.
         waitLiveCount(0, in: app)
         waitFeedCount(0, in: app)
+        XCTAssertFalse(app.staticTexts["Couldn’t load Feed"].exists,
+                       "The empty page must be authorized content, not a failed fixture request.")
+        XCTAssertFalse(app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "Feed couldn't load. Retry to reload updates.")
+        ).firstMatch.exists, "A combined accessibility error must not masquerade as an authorized empty page.")
         let feed = app.scrollViews["feed.places.scroll"]
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists,
                        "An empty authorized page must continue automatically without a manual control.")
@@ -920,10 +937,14 @@ final class LiveExperienceUITests: XCTestCase {
         // The fixture's older page overlaps the same event ID. Exhausting it
         // must retain one authorized card, rather than duplicate or drop it.
         let older = app.descendants(matching: .any)["feed.olderActivity"].firstMatch
+        revealFully(older, in: feed, app: app)
         XCTAssertTrue(older.waitForExistence(timeout: 15))
         let terminal = app.descendants(matching: .any)["feed.allActivity"].firstMatch
         revealFully(terminal, in: feed, app: app)
         XCTAssertTrue(terminal.waitForExistence(timeout: 15))
+        // The divider marks the expansion stage; its duplicate-only final page
+        // must finish before asserting that pagination is idle.
+        XCTAssertTrue(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.waitForNonExistence(timeout: 15))
         waitFeedCount(1, in: app)
         waitLiveCount(0, in: app)
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists)

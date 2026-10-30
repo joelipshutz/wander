@@ -1096,8 +1096,8 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
         guard audience == .everyone, query.isValid, before == nil, limit == 50 else {
             throw FixtureError.unexpectedRequest
         }
-        // This fixture has only a place-less list activity. Its independent map
-        // is empty and terminal; map reads must never prime/reset Feed cursors.
+        // Deliberately isolate Feed pagination from map enumeration. This
+        // empty terminal map must never prime/reset the Feed cursor or query.
         return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
     }
 
@@ -1106,7 +1106,7 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         guard audience == .everyone, limit == FeedPagination.pageSize, query.isValid,
-              query.activityType == .all, query.polygon == nil, query.center == nil,
+              query.activityType == .all, query.center == nil,
               query.categoryIDs.isEmpty, query.personIDs.isEmpty else {
             throw FixtureError.unexpectedRequest
         }
@@ -1121,8 +1121,27 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
                                      avatarURL: nil, bio: nil, relationship: .owner)
             let list = LocalPlaceList(localID: "fixture-live-manual-list", ownerUserID: actor.id,
                                       name: "Paging fixture", description: "", createdAt: occurredAt, updatedAt: occurredAt)
-            let activity = FeedActivity(id: Self.activityID, kind: .listCreated, actor: actor,
-                                        list: list, occurredAt: occurredAt)
+            let visiblePlace: VisiblePlace?
+            let kind: FeedActivityKind
+            if let vertex = query.polygon?.first {
+                // Normal Live requests include the committed viewport polygon.
+                // Its boundary is included by the real query policy, so use one
+                // fictional list addition there without bypassing that filter.
+                let place = LocalPlace(localID: "fixture-live-manual-place", canonicalName: "Paging fixture place",
+                    category: "cafe", latitude: vertex.latitude, longitude: vertex.longitude, syncState: .synced)
+                let owner = LocalProfile(localID: actor.id, handle: actor.handle,
+                    displayName: actor.displayName, syncState: .synced)
+                let save = LocalUserPlace(localID: "fixture-live-manual-save", userID: actor.id,
+                    placeID: place.id, status: .been, visibility: .followers,
+                    sourceType: "manual", syncState: .synced)
+                visiblePlace = VisiblePlace(id: save.id, place: place, userPlace: save, owner: owner, attributes: [])
+                kind = .listItemAdded
+            } else {
+                visiblePlace = nil
+                kind = .listCreated
+            }
+            let activity = FeedActivity(id: Self.activityID, kind: kind, actor: actor,
+                                        place: visiblePlace, list: list, occurredAt: occurredAt)
             guard query.includes(activity) else { throw FixtureError.unexpectedRequest }
             page = FollowedFeedPage(activity: [activity], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
         }

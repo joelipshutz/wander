@@ -11,13 +11,21 @@ native gate completed **3,438 tests: 3,413 unit + 25 UI, with 3,433 passes and
 five failures** (two unit source-contract failures and three UI failures).
 
 The two source-contract failures were corrected and passed in the handoff
-focused gate. All manual-pagination fixture regressions passed, and the corrected
+focused gate. All manual-pagination fixture regressions and the corrected
 drawer-stress test passed. That focused gate finished **165 passes and two
 pagination UI timeouts**. All three original UI failures also reproduced on
-unchanged baseline. The identical pagination-fixture corrections are now being
-compared on baseline; **the two pagination cases remain unresolved**, and no
-complete passing final gate is claimed. Latest Release, AstirClip, and compact-pin
-validation remain pending.
+unchanged baseline. Automatic pagination subsequently passed, and the final
+manual gate passed **all eight tests, zero failures or skips**. Its fixture now
+accepts the normal viewport polygon; the UI selects **Past 24 hours** to exercise
+the older stage that All time intentionally skips, reveals the older control,
+and awaits the final page within the existing 15-second bound. Original
+card/count/deduplication/error checks remain. **All five original failures have
+now passed focused checks**; this is not one fully green rerun of the complete
+native gate. Final-head CI remains pending.
+
+The final Release gate passed **all six benchmarks**, AstirClip passed **33 tests
+with zero failures**, and the compact iPhone SE (3rd generation) / iOS 26.5 UI gate
+passed **both checks** (collapsed drawer actions and native zoom color retention).
 
 Earlier checkpoints remain scoped evidence: v4 passed 3,370 unit tests; focused
 v5 passed 86 tests including actual SDK capture and privacy/OCR checks; matched
@@ -88,8 +96,8 @@ but installation has not been authorized and no physical-device metrics exist.
   cadence, masks, sampling, and screenshot resolution are retained. The focused
   v5 gate passed actual SDK capture/encoding and included image-level privacy/OCR
   validation; matched optimized Release capture also passed. The completed full
-  native gate and unresolved pagination cases are recorded above. Latest Release
-  and AstirClip validation remain pending. A newer SDK with changed capture resolution
+  native gate and subsequent focused closures are recorded above. Final Release
+  and AstirClip validation passed. A newer SDK with changed capture resolution
   was not substituted for an
   equivalent workload.
 
@@ -113,9 +121,12 @@ invalidation avoids redundant publications. Formatter configuration reuse is
 bounded and retains current calendar/locale/timezone inputs. Compact pins reuse
 the existing artwork while retaining native hit targets and hosted interaction
 transitions. Corrected rendering passed the v10 pixel/transition gate. Earlier
-v4/v5/Release timings do not measure these later changes. The full native gate
-completed with the five failures described above; two pagination UI cases remain
-unresolved after focused corrections. Latest compact-pin validation is pending.
+v4/v5 and earlier Release timings do not measure these later changes; the final
+Release results below include the updated production code. The full native gate
+completed with the five failures described above; automatic pagination and the
+small-screen UI gate subsequently passed. The final manual-pagination gate also
+passed all eight tests after correcting its geographic/time-range fixture and
+waiting for the final page without changing the assertions or timeout.
 
 ## Established v4 projections and component timings
 
@@ -332,30 +343,32 @@ in repeated aggregate work and long gaps, not a claim that every draw is faster.
 Encoding is asynchronous, so a frame may arrive in the following sample; each
 sample still requires native draws and encoded-image delivery. Frame counts
 are not rendering FPS. The full native gate and focused corrections are reported
-above; remaining validation is incomplete. The earlier matched optimized Release
+above; remaining validation is incomplete. The final matched optimized Release
 results follow.
 
 ## Matched optimized Release results
 
-All six selected benchmarks passed on both builds using standard **Release**
-with `ENABLE_TESTABILITY=YES`, with zero failures or skips. These optimized,
-matched results remain valid for the pre-rendering-change candidate and supplement
-the Debug evidence. Times are median milliseconds.
+All six selected benchmarks passed on baseline and the final production candidate
+using standard **Release** with `ENABLE_TESTABILITY=YES`, with zero failures or
+skips. The final candidate result supersedes the earlier pre-rendering candidate
+measurements; subsequent changes are confined to Debug fixtures and tests. These
+scoped optimized workloads supplement the Debug evidence and do not establish
+real Live acceptance. Times are median milliseconds.
 
 | Release workload | Baseline ms | Candidate ms | Reduction |
 | --- | ---: | ---: | ---: |
-| Actual autosave coordinator: 500 resolved Wanna rows with list | 44013.18 | 3928.22 | 91.1% |
-| File-backed 1,500-row snapshot, 18 uneven lookups: completion | 802.87 | 261.25 | 67.5% |
-| Same file-backed workload: first ready result | 217.00 | 39.68 | 81.7% |
-| Mounted place-profile host: 1,500 saves | 3604.69 | 538.70 | 85.1% |
-| Widget publisher: first publication, 1,500 visits | 145.16 | 42.36 | 70.8% |
-| Widget publisher: unchanged repeated publication | 115.25 | 14.39 | 87.5% |
-| Actual SDK: 20,000 layout callbacks, enqueue CPU only | 37.905 | 1.611 | 95.7% |
+| Actual autosave coordinator: 500 resolved Wanna rows with list | 44013.18 | 4019.10 | 90.9% |
+| File-backed 1,500-row snapshot, 18 uneven lookups: completion | 802.87 | 263.77 | 67.1% |
+| Same file-backed workload: first ready result | 217.00 | 39.86 | 81.6% |
+| Mounted place-profile host: 1,500 saves | 3604.69 | 529.23 | 85.3% |
+| Widget publisher: first publication, 1,500 visits | 145.16 | 42.90 | 70.4% |
+| Widget publisher: unchanged repeated publication | 115.25 | 14.61 | 87.3% |
+| Actual SDK: 20,000 layout callbacks, enqueue CPU only | 37.905 | 2.003 | 94.7% |
 
 The candidate file-backed workload preserved the full 1,217,042-byte snapshot
 across 20 rolling checkpoints, compared with seven baseline wave checkpoints.
-Persistence time was 62.95 / 55.94 / 51.98 ms; maximum main-actor heartbeat gaps
-were 77.60 / 26.15 / 24.83 ms. The 500-row coordinator still takes 3.93 seconds
+Final persistence time was 55.37 / 56.47 / 58.10 ms; maximum main-actor heartbeat
+gaps were 61.55 / 26.43 / 25.15 ms. The 500-row coordinator still takes 4.02 seconds
 of synchronous work. The final 1,500-row Debug coordinator measured 31.970 s
 with a list / 19.599 s without a list, without a completed matching-main baseline;
 those different configuration/workload results are not a Release speedup claim.
@@ -368,12 +381,12 @@ and encoded images in every sample, retaining the production one-second cadence:
 | SDK 3.61.0 / 1 | 13733.22 | 7448.00 | 196.438 | 13 / 13 |
 | SDK 3.61.0 / 2 | 25388.56 | 18488.47 | 318.746 | 24 / 24 |
 | SDK 3.61.0 / 3 | 45702.88 | 36127.10 | 983.386 | 42 / 41 |
-| SDK 3.68.3 / 1 | 3789.54 | 497.15 | 56.692 | 3 / 3 |
-| SDK 3.68.3 / 2 | 3833.20 | 506.44 | 53.809 | 4 / 4 |
-| SDK 3.68.3 / 3 | 3890.05 | 564.76 | 61.565 | 4 / 4 |
+| SDK 3.68.3 / 1 | 3665.62 | 503.56 | 56.937 | 3 / 3 |
+| SDK 3.68.3 / 2 | 3679.98 | 468.04 | 55.867 | 4 / 4 |
+| SDK 3.68.3 / 3 | 3692.07 | 500.75 | 59.470 | 4 / 4 |
 
-Median elapsed time fell 84.9%, from 25.389 s to 3.833 s; median layout time
-fell 97.3%, from 18.488 s to 0.506 s. Faster completion produces fewer captures
+Final median elapsed time fell 85.5%, from 25.389 s to 3.680 s; median layout
+time fell 97.3%, from 18.488 s to 0.501 s. Faster completion produces fewer captures
 at the unchanged cadence. Frame counts are not rendering FPS, and neither this
 fixture nor callback timing measures physical-device interaction latency.
 
@@ -400,22 +413,36 @@ failure or a successful performance run.
   failures. Two unit failures were stale source contracts; three were UI cases.
   The source contracts were corrected and passed in the handoff focused gate.
 - Handoff focused gate: 165 passes and two pagination UI timeouts. All manual
-  fixture regressions and the corrected drawer-stress test passed. All three
-  original UI failures reproduced on unchanged baseline. Identical corrected
-  pagination fixtures are now being compared on baseline; both pagination UI
-  cases remain unresolved. No complete passing final gate is claimed.
+  fixture regressions and corrected drawer stress passed; all three original
+  UI failures reproduced on unchanged baseline. Automatic pagination later
+  passed, followed by the final manual gate: eight passes, zero failures/skips.
+  The manual fixture accepts viewport polygons; real UI selection of Past
+  24 hours exercises older/all stages, and a final-page wait uses the existing
+  15-second bound. Original card/count/deduplication/error checks remain.
+  All five original failures have now passed focused checks. These closures
+  are not a single fully green rerun of the complete native gate.
+- Final-head CI remains pending; no green-CI claim is made. On initial commit
+  `385a6eacc0`, the [location workflow](https://github.com/joelipshutz/wander/actions/runs/41036783960)
+  passed five units but failed the large-phone foreground-location UI wait;
+  the same UI check passed on the smaller phone. The failure capture and final
+  accessibility tree show the Seattle location dot inside the exposed map, but
+  do not establish when it satisfied the 25-second wait. The cause remains
+  unresolved; no production change or timeout relaxation was made for it.
 - Earlier native checkpoints: v4 passed all 3,370 unit tests; focused v5 passed
   86 tests, zero failures/skips, including actual SDK capture and privacy/OCR.
   These checkpoints do not substitute for the remaining gates.
-- Optimized Release gate: six selected benchmarks passed on both baseline and
-  candidate, with zero failures or skips and the source-isolation scope above.
+- Final optimized Release gate: six selected benchmarks passed on both baseline
+  and final production candidate, zero failures/skips, with the scope above.
+- Final AstirClip gate: all 33 tests passed, zero failures/skips.
+- Compact UI gate: both checks passed on iPhone SE (3rd generation), iOS 26.5:
+  collapsed drawer actions and native zoom preserving full-pin/dense-dot colors.
 - Matched Live UI v4: all six tests passed on both builds, comprising three
   fixture unit tests and three Live UI tests. Pan, zoom, drawer, preview and
   profile behavior passed, but the measured improvements remain below target.
 - Render-v10: all 29 tests passed, zero failures/skips, including corrected
   native pixel/transition tests and mounted component benchmarks. Earlier failed
   intermediate rendering measurements are superseded by that passing gate.
-  Latest Release, AstirClip, and compact-pin validation remain pending.
+  Later small-screen UI checks also passed as recorded above.
 - Final paired mounted Feed class: both builds ran no replay then replay with
   identical sources/order, all 600 events, movement checks, and native/decoded
   frame gates retained. Neither workload reached the 50% target; the real Feed
@@ -437,10 +464,9 @@ failure or a successful performance run.
   metadata from native pin nodes. These prior attempts
   are invalid measurements or harness failures, not passing performance results.
   The corrected widget baseline is the canonical 1,500-visit workload above.
-- Remaining gate requires closing the two pagination UI timeouts with identical
-  baseline/candidate fixtures, latest Release/AstirClip/compact validation, and
-  complete native validation after any further changes, followed by a physical
-  device run on the reported iPhone/iOS combination or a documented comparable
+- Remaining gate requires final-head CI, complete native validation after further
+  changes as applicable, and a physical-device run on the reported iPhone/iOS
+  combination or a documented comparable
   device. Include cold launch/auth/bootstrap, large map/feed gestures, profile
   entry, and large import completion under real disk/network conditions before
   claiming the reported experience is fixed everywhere. The next acceptance
@@ -463,3 +489,7 @@ simulator destination with `-parallel-testing-enabled NO`, separate derived data
 per revision, and no competing builds. Preserve the warm-up/sample rules in each
 test. Result bundles, screenshots, and replay captures remain outside Git;
 this report retains aggregate measurements and explicit exclusions only.
+
+The isolated worktree project was opened in Xcode, and Branch Chooser was
+verified as `codex/rec-675-app-performance`. This local handoff does not change
+the unmet performance acceptance target or pending final-head CI.
