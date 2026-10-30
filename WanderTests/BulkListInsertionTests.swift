@@ -42,6 +42,49 @@ final class BulkListInsertionTests: XCTestCase {
         }
     }
 
+    func testObservedRawAliasEditsChangeDuplicateDecisionsExactlyLikeSequentialInsertion() {
+        func run(batched: Bool) -> ([ListPlaceAddResult.Outcome], [Membership], Int?, Int) {
+            let fixture = library(count: 2)
+            let first = fixture.store.places[0]
+            let second = fixture.store.places[1]
+            let originalProviderID = second.sourceProviderPlaceID
+            var outcomes: [ListPlaceAddResult.Outcome] = []
+            func operation(_ insert: (String) -> ListPlaceAddResult) {
+                outcomes.append(insert(fixture.ids[0]).outcome)
+                let revisionAfterFirstInsert = fixture.store.presentationRevision
+                second.sourceProviderPlaceID = first.sourceProviderPlaceID
+                outcomes.append(insert(fixture.ids[1]).outcome)
+                XCTAssertEqual(fixture.store.presentationRevision, revisionAfterFirstInsert,
+                    "The duplicate attempt must not hide raw-edit invalidation behind a publication")
+                second.sourceProviderPlaceID = originalProviderID
+                XCTAssertEqual(fixture.store.presentationRevision, revisionAfterFirstInsert)
+                outcomes.append(insert(fixture.ids[1]).outcome)
+            }
+            if batched {
+                fixture.store.withBatchedCurrentUserPlaceListInsertions(to: fixture.list,
+                    senderNotificationPolicy: .silent, operation)
+            } else {
+                fixture.store.performBatchedLocalMutations {
+                    operation { fixture.store.addCurrentUserPlace(userPlaceID: $0,
+                        to: fixture.list, senderNotificationPolicy: .silent) }
+                }
+            }
+            return (outcomes, memberships(fixture.store), fixture.store.placeLists.first?.cachedItemCount,
+                fixture.store.liveReadableListItems().count)
+        }
+        let sequential = run(batched: false)
+        let batched = run(batched: true)
+        XCTAssertEqual(batched.0, [.added, .alreadyInList, .added])
+        XCTAssertEqual(batched.0, sequential.0)
+        XCTAssertEqual(batched.1, sequential.1)
+        XCTAssertEqual(batched.2, sequential.2)
+        XCTAssertEqual(batched.2, 2)
+        XCTAssertEqual(batched.3, sequential.3)
+        XCTAssertEqual(batched.3, 2)
+        XCTAssertEqual(batched.2, batched.3)
+        XCTAssertEqual(sequential.2, sequential.3)
+    }
+
     /// Both paths insert the same already-owned saves, preserving row order and
     /// one deferred snapshot. Only the operation-scoped list projection differs.
     func testPerformanceSequentialAndBulkListInsertionWith500OwnedSaves() {

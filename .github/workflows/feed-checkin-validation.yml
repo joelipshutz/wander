@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'Wander/App/WanderRootView.swift'
       - 'Wander/Features/Feed/**'
       - 'Wander/Features/Activity/**'
       - 'Wander/Features/Profile/*Notification*.swift'
@@ -18,17 +19,28 @@ on:
       - 'Wander/Services/ActivityEngagementModels.swift'
       - 'Wander/Services/WanderLocalStore.swift'
       - 'WanderTests/Feed*Tests.swift'
+      - 'WanderTests/ActivityBookmarkProjectionTests.swift'
+      - 'WanderTests/ImportMountedFeedResponsivenessTests.swift'
+      - 'WanderTests/RetainedTabContentTests.swift'
       - 'WanderTests/ActivityEngagementTests.swift'
       - 'WanderTests/*Notification*Tests.swift'
       - 'WanderTests/RemoteRepositoryTests.swift'
       - 'WanderTests/CheckInQuestionPreferencesTests.swift'
       - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderTests/ReplayFixtureHostAdmission.swift'
+      - 'WanderTests/FeedScreenScrollingPerformanceTests.swift'
+      - 'WanderTests/PostHogReplayPerformanceTests.swift'
+      - 'scripts/test_replay_isolation_workflows.py'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/FeedConsolidationUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/test_import_performance_routing.py'
+      - 'WanderTests/ImportAutoSaveFileResponsivenessTests.swift'
+      - 'WanderTests/ImportAutoSavePerformanceTests.swift'
+      - 'WanderTests/ImportAutoSaveWithoutListPerformanceTests.swift'
       - 'scripts/record-replay-compiler-flags.py'
       - 'scripts/test_record_replay_compiler_flags.py'
       - 'scripts/replay-simulator-fixture.py'
@@ -140,7 +152,12 @@ jobs:
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
           -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
+          -skip-testing:WanderTests/ImportAutoSaveFileResponsivenessTests/testPerformanceFileAutoSaveWith1500ResolvedRowsAndList
+          -skip-testing:WanderTests/ImportAutoSavePerformanceTests/testPerformanceGoogleWannaAutoSaveWith1500ResolvedRows
+          -skip-testing:WanderTests/ImportAutoSaveWithoutListPerformanceTests/testPerformanceGoogleWannaAutoSaveWithoutListWith1500ResolvedRows
           -skip-testing:WanderTests/ReplayMaskingTests
+          -skip-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay
+          -skip-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/LiveDrawerActionsUITests
           -only-testing:WanderUITests/FeedAudienceUITests
@@ -170,6 +187,31 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      # Required three-sample stress workloads; ordinary test deadlines stay unchanged.
+      - name: Required 1500-row file import performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-file-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportFilePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-file-performance-selection.json"
+      - name: Required 1500-row automatic import performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSavePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-performance-selection.json"
+      - name: Required 1500-row automatic import without list performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-no-list-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSaveWithoutListPerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-no-list-performance-selection.json"
       - name: Prepare isolated Replay test products once
         id: replay-products
         if: ${{ (success() || failure()) && !inputs.compact_only }}
@@ -178,12 +220,15 @@ jobs:
           test ! -e "$RUNNER_TEMP/ReplayDerivedData"
           test ! -L "$RUNNER_TEMP/ReplayDerivedData"
           python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          python3 -B -m unittest discover -s scripts -p test_replay_isolation_workflows.py
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
             -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
             -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
             -only-testing:WanderTests/ReplayMaskingTests \
+            -only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay \
+            -only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
             GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
           python3 scripts/record-replay-compiler-flags.py \
@@ -196,7 +241,7 @@ jobs:
           python3 -B scripts/test_replay_simulator_fixture.py
           python3 -B scripts/replay-simulator-fixture.py prepare --source-device "$LARGE_DEVICE_ID"
       # Replay capture owns process-wide SDK state. Each scenario starts a fresh
-      # test host on one dedicated same-model/runtime simulator; both remain required.
+      # test host on one dedicated same-model/runtime simulator; all four remain required.
       - name: Verify private-message replay in an isolated process
         if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
         run: |
@@ -243,13 +288,63 @@ jobs:
               suite=suite, products=products, device_id=device, result_bundle=bundle,
               command=command, receipt=root / (suite + "-host.json")))
           PY
+      - name: Verify mounted Feed replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-feed"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+              "-maximum-test-execution-time-allowance", "900",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify masked scrolling replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-masked-scroll"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+              "-maximum-test-execution-time-allowance", "900",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Export Replay evidence before fixture cleanup
         id: replay-evidence
         if: ${{ always() && steps.replay-fixture.outcome == 'success' }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
           status=0
-          for device in replay-private replay-credentials; do
+          for device in replay-private replay-credentials replay-feed replay-masked-scroll; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" > "$RUNNER_TEMP/evidence/$device-summary.json" || status=1
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/evidence/$device" || status=1
@@ -297,6 +392,18 @@ jobs:
           name: feed-checkin-native-evidence
           path: |
             ${{ runner.temp }}/evidence
+            ${{ runner.temp }}/ImportFilePerformance.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.summary.json
+            ${{ runner.temp }}/ImportFilePerformance.tests.json
+            ${{ runner.temp }}/import-file-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSavePerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.tests.json
+            ${{ runner.temp }}/import-autosave-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.tests.json
+            ${{ runner.temp }}/import-autosave-no-list-performance-selection.json
             ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
             ${{ runner.temp }}/replay-private.xcresult
@@ -305,6 +412,12 @@ jobs:
             ${{ runner.temp }}/replay-private-host
             ${{ runner.temp }}/replay-credentials-host.json
             ${{ runner.temp }}/replay-credentials-host
+            ${{ runner.temp }}/replay-feed.xcresult
+            ${{ runner.temp }}/replay-feed-host.json
+            ${{ runner.temp }}/replay-feed-host
+            ${{ runner.temp }}/replay-masked-scroll.xcresult
+            ${{ runner.temp }}/replay-masked-scroll-host.json
+            ${{ runner.temp }}/replay-masked-scroll-host
             ${{ runner.temp }}/replay-simulator-fixture
           retention-days: 14
 

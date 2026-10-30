@@ -169,17 +169,74 @@ struct SmartFilter: Identifiable, Equatable {
     let query: String
 }
 
-/// Pure date conversion reuse for one synchronous import. The caller still
-/// reads every live source and recalculates the complete streak on each read.
+/// Pure day conversion and summary reuse for one import operation. Callers
+/// still gather every live source on each read; only identical calculator
+/// inputs share a result. No dates or summaries survive the import run.
 final class ImportSaveStreakDateProjection {
-    private var calendar: Calendar?
+    private struct CalendarConfiguration: Equatable {
+        let calendar: Calendar
+        // Autoupdating values can retain their identity when settings change.
+        let identifier: Calendar.Identifier
+        let localeIdentifier: String?
+        let timeZoneIdentifier: String
+        let firstWeekday: Int
+        let minimumDaysInFirstWeek: Int
+
+        init(_ calendar: Calendar) {
+            self.calendar = calendar
+            identifier = calendar.identifier
+            localeIdentifier = calendar.locale?.identifier
+            timeZoneIdentifier = calendar.timeZone.identifier
+            firstWeekday = calendar.firstWeekday
+            minimumDaysInFirstWeek = calendar.minimumDaysInFirstWeek
+        }
+    }
+
+    private struct SummaryKey: Equatable {
+        let calendar: CalendarConfiguration
+        let today: Date
+        let saveDays: Set<Date>
+        let recoveryDays: Set<Date>
+    }
+
+    private var calendarConfiguration: CalendarConfiguration?
     private var daysByDate: [Date: Date] = [:]
+    private var lastSummary: (key: SummaryKey, value: SaveStreakSummary)?
     private(set) var normalizationCount = 0
+    private(set) var summaryComputationCount = 0
 
     func uniqueDays(in dates: [Date], calendar: Calendar) -> [Date] {
-        if self.calendar != calendar {
-            self.calendar = calendar
+        Array(normalizedDays(in: dates, configuration: CalendarConfiguration(calendar)))
+    }
+
+    func summary(
+        saveDates: [Date],
+        recoveryDates: [Date] = [],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> SaveStreakSummary {
+        let configuration = CalendarConfiguration(calendar)
+        let saveDays = normalizedDays(in: saveDates, configuration: configuration)
+        let recoveryDays = normalizedDays(in: recoveryDates, configuration: configuration)
+        let key = SummaryKey(calendar: configuration, today: calendar.startOfDay(for: now),
+            saveDays: saveDays, recoveryDays: recoveryDays)
+        if let lastSummary, lastSummary.key == key {
+            return lastSummary.value
+        }
+        // All calculator outputs depend on whole days, including recovery
+        // entitlement. Keep the calculator as the single source of its rules.
+        let value = SaveStreakCalculator.summary(saveDates: Array(saveDays),
+            recoveryDates: Array(recoveryDays), now: now, calendar: calendar)
+        summaryComputationCount += 1
+        lastSummary = (key, value)
+        return value
+    }
+
+    private func normalizedDays(in dates: [Date], configuration: CalendarConfiguration) -> Set<Date> {
+        if calendarConfiguration != configuration {
+            calendarConfiguration = configuration
             daysByDate.removeAll(keepingCapacity: true)
+            lastSummary = nil
         }
         var days = Set<Date>()
         for date in dates {
@@ -187,13 +244,13 @@ final class ImportSaveStreakDateProjection {
             if let cached = daysByDate[date] {
                 day = cached
             } else {
-                day = calendar.startOfDay(for: date)
+                day = configuration.calendar.startOfDay(for: date)
                 daysByDate[date] = day
                 normalizationCount += 1
             }
             days.insert(day)
         }
-        return Array(days)
+        return days
     }
 }
 
@@ -210,6 +267,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var visitPhotos: [LocalVisitPhoto]
     @Published private(set) var sharedVisitInvitations: [SharedVisitInvitation]
     @Published private(set) var importNotificationCommits: [ImportNotificationCommit] = []
+    private(set) var automaticImportCheckpoints: [PlaceImportAutoSaveCheckpoint] = []
     @Published private(set) var pendingSharedVisitInvites: [PendingSharedVisitInvite]
     @Published private(set) var sharedVisitCompanionsByVisitID: [String: [SharedVisitCompanion]] = [:]
     private(set) var sharedVisitInboxUserID: String?
@@ -787,6 +845,7 @@ final class WanderStore: ObservableObject {
                 closed.locallyComplete = true
                 return closed
             }
+            self.automaticImportCheckpoints = restored.automaticImportCheckpoints
             self.placeWannaSaves = restored.placeWannaSaves
             self.placeVisits = restored.placeVisits
             self.visitPhotos = restored.visitPhotos
@@ -969,6 +1028,209 @@ final class WanderStore: ObservableObject {
         persistence?.flush()
     }
 
+    func automaticImportCheckpoint(ownerUserID: String, batchID: String) -> PlaceImportAutoSaveCheckpoint? {
+        guard currentUser.id == ownerUserID else { return nil }
+        return automaticImportCheckpoints.first {
+            $0.ownerUserID == ownerUserID && $0.batchID == batchID
+        }
+    }
+
+    /// Review can open while the library checkpoint is being written. Its
+    /// already-created destination is current library state even though the
+    /// separate import file has not acknowledged progress yet.
+    func existingImportDestinationList(for batch: PlaceImportBatch) -> LocalPlaceList? {
+        let listID: String?
+        if let explicitID = batch.destinationListID {
+            listID = explicitID
+        } else if let checkpoint = automaticImportCheckpoint(ownerUserID: currentUser.id, batchID: batch.id),
+                  checkpoint.belongs(to: batch, ownerUserID: currentUser.id) {
+            listID = checkpoint.destinationListID
+        } else {
+            listID = nil
+        }
+        guard let listID else { return nil }
+        return visiblePlaceLists.first {
+            $0.id == listID || $0.localID == listID || $0.serverID == listID
+        }
+    }
+
+    @discardableResult
+    func recordAutomaticImportCheckpoint(_ checkpoint: PlaceImportAutoSaveCheckpoint) -> Bool {
+        guard checkpoint.ownerUserID == currentUser.id else { return false }
+        if let index = automaticImportCheckpoints.firstIndex(where: {
+            $0.ownerUserID == checkpoint.ownerUserID && $0.batchID == checkpoint.batchID
+        }) {
+            automaticImportCheckpoints[index] = checkpoint
+        } else {
+            automaticImportCheckpoints.append(checkpoint)
+        }
+        persist()
+        return true
+    }
+
+    /// Call only after the final import-file receipt has been acknowledged.
+    /// A delayed or failed ordinary cleanup write merely retains redundant
+    /// recovery evidence; it cannot undo the already durable completion.
+    @discardableResult
+    func retireCompletedAutomaticImportCheckpoint(_ checkpoint: PlaceImportAutoSaveCheckpoint) -> Bool {
+        guard checkpoint.isComplete, currentUser.id == checkpoint.ownerUserID,
+              let index = automaticImportCheckpoints.firstIndex(where: {
+                  $0.isComplete && $0.id == checkpoint.id && $0.ownerUserID == checkpoint.ownerUserID
+                      && $0.batchID == checkpoint.batchID && $0.batchCreatedAt == checkpoint.batchCreatedAt
+                      && $0.notificationImportID == checkpoint.notificationImportID
+                      && $0.receiptID == checkpoint.receiptID
+              }) else { return false }
+        automaticImportCheckpoints.remove(at: index)
+        persist()
+        return true
+    }
+
+    /// Only an acknowledged atomic library write may advance the separate
+    /// import metadata file. An explicitly memory-only store has no disk state.
+    func commitAutomaticImportCheckpointDurably() throws {
+        guard persistenceDeferralDepth == 0 else {
+            throw AutomaticImportCheckpointError.nestedTransaction
+        }
+        reconcileCurrentUserCalendarLocalFingerprint()
+        guard let persistence else { return }
+        let interval = WanderDebugLog.beginPerformanceInterval("Import Library Checkpoint")
+        defer { WanderDebugLog.endPerformanceInterval("Import Library Checkpoint", id: interval) }
+        try persistence.checkpoint(WanderStoreSnapshot(store: self))
+    }
+
+    /// Capture only immutable records on the main actor, then let the ordered
+    /// writer acknowledge its atomic write without blocking UI event delivery.
+    /// Callers revalidate their run and account after this suspension.
+    func commitAutomaticImportCheckpointDurablyAsync(using context: AutomaticImportProjectionContext? = nil) async throws {
+        guard persistenceDeferralDepth == 0 else {
+            throw AutomaticImportCheckpointError.nestedTransaction
+        }
+        guard let persistence else {
+            reconcileCurrentUserCalendarLocalFingerprint()
+            return
+        }
+        let capture = WanderDebugLog.beginPerformanceInterval("Import Checkpoint Snapshot")
+        var snapshot = WanderStoreSnapshot(store: self, records: context?.snapshotRecords(for: self))
+        if reconcileCurrentUserCalendarLocalFingerprint(snapshot: snapshot) {
+            // Authority loss notifies synchronous observers. They may mutate
+            // raw models or change accounts, so preserve the original ordering
+            // by capturing their effects after that notification returns.
+            snapshot = WanderStoreSnapshot(store: self, records: context?.snapshotRecords(for: self))
+        }
+        WanderDebugLog.endPerformanceInterval("Import Checkpoint Snapshot", id: capture)
+        let write = WanderDebugLog.beginPerformanceInterval("Import Checkpoint Write")
+        defer { WanderDebugLog.endPerformanceInterval("Import Checkpoint Write", id: write) }
+        try await persistence.checkpointAsync(snapshot)
+    }
+
+    private enum AutomaticImportCheckpointError: Error {
+        case nestedTransaction
+        case invalidProjectionContext
+    }
+
+    /// Owned by one automatic import run, never installed across a suspension.
+    /// Each projection still checks live model inputs when the next chunk uses it.
+    @MainActor
+    final class AutomaticImportProjectionContext {
+        private weak var store: WanderStore?
+        private weak var profile: LocalProfile?
+        private let ownerUserID: String
+        private(set) var isFinished = false
+        fileprivate var lookup: ImportPlaceLookupProjection?
+        fileprivate var streak: ImportSaveStreakDateProjection?
+        fileprivate var list: ListInsertionProjection?
+        private var snapshots: AutomaticImportSnapshotRecords?
+
+        fileprivate init(store: WanderStore, ownerUserID: String) {
+            self.store = store
+            profile = store.currentUser
+            self.ownerUserID = ownerUserID
+        }
+
+        fileprivate func belongs(to store: WanderStore) -> Bool {
+            !isFinished && self.store === store && profile === store.currentUser
+                && store.currentUser.id == ownerUserID
+        }
+
+        // These diagnostics also verify that suspension and nested ordinary
+        // scopes do not inherit a run's ambient lookup or streak projection.
+        var isInstalled: Bool {
+            guard let store else { return false }
+            return (lookup != nil && store.importPlaceLookupProjection === lookup)
+                || (streak != nil && store.importSaveStreakDateProjection === streak)
+        }
+
+        var listFingerprintReadCount: Int { list?.fingerprintReadCount ?? 0 }
+        var snapshotPlaceBuildCount: Int { snapshots?.placeBuildCount ?? 0 }
+        var snapshotUserPlaceBuildCount: Int { snapshots?.userPlaceBuildCount ?? 0 }
+        var snapshotRetainedRecordCount: Int { snapshots?.retainedRecordCount ?? 0 }
+
+        fileprivate func snapshotRecords(for store: WanderStore) -> AutomaticImportSnapshotRecords? {
+            guard belongs(to: store) else {
+                snapshots?.finish()
+                snapshots = nil
+                return nil
+            }
+            if snapshots == nil { snapshots = AutomaticImportSnapshotRecords() }
+            return snapshots
+        }
+
+        func finish() {
+            guard !isFinished else { return }
+            isFinished = true
+            snapshots?.finish()
+            snapshots = nil
+            list?.finish()
+            list = nil
+            lookup = nil
+            streak = nil
+        }
+    }
+
+    func makeAutomaticImportProjectionContext(ownerUserID: String) -> AutomaticImportProjectionContext? {
+        guard currentUser.id == ownerUserID else { return nil }
+        return AutomaticImportProjectionContext(store: self, ownerUserID: ownerUserID)
+    }
+
+    /// The save rows and their receipt journal share one exact snapshot. End
+    /// every synchronous deferral before checkpointing or yielding to the UI.
+    /// A failed write retains live mutations/journal for a durable retry, while
+    /// the caller must leave its import metadata unadvanced.
+    func performCheckpointedImportMutations<Result>(_ operation: () -> Result) throws -> Result {
+        guard persistenceDeferralDepth == 0 else {
+            throw AutomaticImportCheckpointError.nestedTransaction
+        }
+        persistenceDeferralDepth += 1
+        let result = performBatchedImportMutations(operation)
+        persistenceDeferralDepth -= 1
+        persistenceRequestedWhileDeferred = false
+        try commitAutomaticImportCheckpointDurably()
+        return result
+    }
+
+    func performCheckpointedImportMutationsAsync<Result>(
+        using context: AutomaticImportProjectionContext? = nil,
+        _ operation: () -> Result
+    ) async throws -> Result {
+        guard persistenceDeferralDepth == 0 else {
+            throw AutomaticImportCheckpointError.nestedTransaction
+        }
+        if let context, !context.belongs(to: self) {
+            throw AutomaticImportCheckpointError.invalidProjectionContext
+        }
+        persistenceDeferralDepth += 1
+        let result: Result
+        if let context {
+            result = performBatchedImportMutations(using: context, operation)
+        } else {
+            result = performBatchedImportMutations(operation)
+        }
+        persistenceDeferralDepth -= 1
+        persistenceRequestedWhileDeferred = false
+        try await commitAutomaticImportCheckpointDurablyAsync(using: context)
+        return result
+    }
+
     private func makeCurrentUserCalendarLocalFingerprint() -> CurrentUserCalendarLocalFingerprint {
         #if DEBUG
         currentUserCalendarFingerprintBuildCount += 1
@@ -999,20 +1261,48 @@ final class WanderStore: ObservableObject {
         )
     }
 
-    private func reconcileCurrentUserCalendarLocalFingerprint() {
-        guard currentUserCalendarFingerprintNeedsReconciliation else { return }
+    private func makeCurrentUserCalendarLocalFingerprint(
+        from snapshot: WanderStoreSnapshot
+    ) -> CurrentUserCalendarLocalFingerprint {
+        #if DEBUG
+        currentUserCalendarFingerprintBuildCount += 1
+        #endif
+        let ownerID = snapshot.currentUser.serverID ?? snapshot.currentUser.localID
+        let ownedUserPlaces = snapshot.userPlaces.filter { $0.userID == ownerID }
+            .sorted { $0.localID < $1.localID }
+        let references = ownedUserPlaces.reduce(into: Set<String>()) { result, record in
+            result.insert(record.localID)
+            if let serverID = record.serverID { result.insert(serverID) }
+        }
+        return CurrentUserCalendarLocalFingerprint(
+            userPlaces: ownedUserPlaces,
+            attributes: snapshot.placeAttributes.filter {
+                !$0.localID.hasPrefix("remote_attr_") && references.contains($0.userPlaceID)
+            }.sorted { $0.localID < $1.localID },
+            visits: (snapshot.placeVisits ?? []).filter {
+                (!$0.localID.hasPrefix("remote_profile_visit_") || $0.syncStateRaw != SyncState.synced.rawValue)
+                    && references.contains($0.userPlaceID)
+            }.sorted { $0.localID < $1.localID }
+        )
+    }
+
+    /// Returns true only when synchronous authority-loss observers ran.
+    @discardableResult
+    private func reconcileCurrentUserCalendarLocalFingerprint(snapshot: WanderStoreSnapshot? = nil) -> Bool {
+        guard currentUserCalendarFingerprintNeedsReconciliation else { return false }
         // Clear before publishing an authority change: a synchronous observer
         // can read the calendar again while that notification is delivered.
         currentUserCalendarFingerprintNeedsReconciliation = false
-        let fingerprint = makeCurrentUserCalendarLocalFingerprint()
+        let fingerprint = snapshot.map { makeCurrentUserCalendarLocalFingerprint(from: $0) }
+            ?? makeCurrentUserCalendarLocalFingerprint()
         guard let previousFingerprint = currentUserCalendarLocalFingerprint else {
             currentUserCalendarLocalFingerprint = fingerprint
-            return
+            return false
         }
-        guard fingerprint != previousFingerprint else { return }
+        guard fingerprint != previousFingerprint else { return false }
 
         currentUserCalendarLocalFingerprint = fingerprint
-        guard !isApplyingAcceptedCurrentUserCalendarHydration else { return }
+        guard !isApplyingAcceptedCurrentUserCalendarHydration else { return false }
 
         currentUserCalendarLocalMutationRevision &+= 1
         let wasAuthoritative = authoritativeCalendarUserID == currentUser.id
@@ -1020,6 +1310,7 @@ final class WanderStore: ObservableObject {
         if wasAuthoritative {
             objectWillChange.send()
         }
+        return wasAuthoritative
     }
 
     private func withAcceptedCurrentUserCalendarHydration<Result>(
@@ -1477,6 +1768,26 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    private func performBatchedImportMutations<Result>(
+        using context: AutomaticImportProjectionContext,
+        _ operation: () -> Result
+    ) -> Result {
+        if context.lookup == nil {
+            context.lookup = ImportPlaceLookupProjection(
+                places: places, collectionRevision: importPlaceCollectionRevision)
+        }
+        if context.streak == nil { context.streak = ImportSaveStreakDateProjection() }
+        let previousLookup = importPlaceLookupProjection
+        let previousStreak = importSaveStreakDateProjection
+        importPlaceLookupProjection = context.lookup
+        importSaveStreakDateProjection = context.streak
+        defer {
+            importPlaceLookupProjection = previousLookup
+            importSaveStreakDateProjection = previousStreak
+        }
+        return performBatchedLocalMutations(operation)
+    }
+
     func apply(authState: AuthState) {
         switch authState {
         case .signedIn(let session), .offline(let session, _):
@@ -1607,14 +1918,8 @@ final class WanderStore: ObservableObject {
             let saveDates = currentUserSaveStreakDates
             let recoveryDates = saveStreakRecoveryDatesByUserID[currentUser.id, default: []]
             let calendar = Calendar.current
-            // The calculator already uses Set(startOfDay(input)). Reusing only
-            // that pure conversion keeps every mutation, account and day change
-            // visible, without repeating it for the growing import ledger.
-            return SaveStreakCalculator.summary(
-                saveDates: importSaveStreakDateProjection.uniqueDays(in: saveDates, calendar: calendar),
-                recoveryDates: importSaveStreakDateProjection.uniqueDays(in: recoveryDates, calendar: calendar),
-                calendar: calendar
-            )
+            return importSaveStreakDateProjection.summary(
+                saveDates: saveDates, recoveryDates: recoveryDates, calendar: calendar)
         }
         return SaveStreakCalculator.summary(
             saveDates: currentUserSaveStreakDates,
@@ -1638,13 +1943,14 @@ final class WanderStore: ObservableObject {
     }
 
     private var currentUserSaveStreakDates: [Date] {
+        let userID = currentUser.id
         let localDates = userPlaces
-            .filter { $0.userID == currentUser.id }
+            .filter { $0.userID == userID }
             .map(\.savedAt)
         let remoteDates = remoteVisiblePlaceCache
-            .filter { $0.owner.id == currentUser.id }
+            .filter { $0.owner.id == userID }
             .map(\.userPlace.savedAt)
-        return saveStreakDatesByUserID[currentUser.id, default: []] + localDates + remoteDates
+        return saveStreakDatesByUserID[userID, default: []] + localDates + remoteDates
     }
 
     private func recordNewSaveForStreak(
@@ -1867,6 +2173,7 @@ final class WanderStore: ObservableObject {
         placeWannaSaves = []
         placeVisits = []
         importNotificationCommits = []
+        automaticImportCheckpoints = []
         visitPhotos = []
         follows = []
         blocks = []
@@ -1930,6 +2237,31 @@ final class WanderStore: ObservableObject {
 
     var currentUserVisiblePlaces: [VisiblePlace] {
         visiblePlaces(filters: PlaceFilters(ownerScopes: ["you"]))
+    }
+
+    /// Fresh duplicate-matching inputs with the same authorization and first-ID
+    /// merge order as currentUserVisiblePlaces. Visit and attribute enrichment
+    /// changes none of these fields, so it need not run for import bookkeeping.
+    var currentUserImportExistingPlaces: [PlaceImportExistingPlace] {
+        let filters = PlaceFilters(ownerScopes: ["you"])
+        return mergeVisiblePlaces(
+            localVisiblePlaces(filters: filters, includingAttributes: false).places
+                + remoteVisiblePlaces(filters: filters)
+        ).map { visiblePlace in
+            PlaceImportExistingPlace(
+                userPlaceID: visiblePlace.userPlace.id,
+                name: visiblePlace.place.canonicalName,
+                latitude: visiblePlace.place.latitude,
+                longitude: visiblePlace.place.longitude,
+                sourceProvider: visiblePlace.place.sourceProvider,
+                sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID
+            )
+        }
+    }
+
+    func reconcilePlaceImportDuplicates(in importStore: PlaceImportStore) {
+        guard importStore.hasDuplicateReconciliationCandidates else { return }
+        importStore.reconcileDuplicates(with: currentUserImportExistingPlaces)
     }
 
     var currentUserCalendarProjection: CurrentUserCalendarProjection {
@@ -2421,8 +2753,13 @@ final class WanderStore: ObservableObject {
 
     /// Presentation guard for the independently paged map. Server queries remain authoritative.
     func canDisplayLiveMapActivity(_ activity: FeedActivity) -> Bool {
-        canDisplayActivity(activity) && feedAudience.includes(actorID: activity.actor.id,
-            currentUserID: currentUser.id, relationship: relationship(to: activity.actor.id))
+        guard canDisplayActivity(activity) else { return false }
+        switch feedAudience {
+        case .everyone: return true
+        case .onlyMe: return activity.actor.id == currentUser.id
+        case .onlyFriends:
+            return activity.actor.id != currentUser.id && relationship(to: activity.actor.id) == .mutual
+        }
     }
 
     /// Place history uses authorization guards, without a discovery audience filter.
@@ -3059,7 +3396,16 @@ final class WanderStore: ObservableObject {
 
         activityBookmarkIndexBuildCount += 1
         var states: [String: ActivityBookmarkState] = [:]
-        for visiblePlace in currentUserVisiblePlaces {
+        let filters = PlaceFilters(ownerScopes: ["you"])
+        // Bookmark state consumes only authorized place identity and status.
+        // Reuse an existing full projection, but do not build attributes and
+        // visit observations solely to discard them for every import revision.
+        let ownedPlaces = visiblePlacesCache.first(where: { $0.filters == filters })?.places
+            ?? mergeVisiblePlaces(
+                localVisiblePlaces(filters: filters, includingAttributes: false).places
+                    + remoteVisiblePlaces(filters: filters)
+            )
+        for visiblePlace in ownedPlaces {
             let state: ActivityBookmarkState = visiblePlace.userPlace.status == .wannaGo
                 ? .wanna
                 : .checkedIn
@@ -4051,47 +4397,15 @@ final class WanderStore: ObservableObject {
         return result
     }
 
-    /// A synchronous insertion operation retains value fingerprints, never a
-    /// store-global cache. Saves may append places between insertions; edits,
-    /// reordered places, and changed list memberships rebuild the affected data.
-    private struct ListInsertionPlaceFingerprint: Equatable {
-        let identity: ObjectIdentifier
-        let localID: String
-        let serverID: String?
-        let name: String
-        let provider: String
-        let providerID: String?
-        let address: String?
-        let locality: String?
-        let region: String?
-        let country: String?
-        let latitude: UInt64
-        let longitude: UInt64
-
-        init(_ place: LocalPlace) {
-            identity = ObjectIdentifier(place)
-            localID = place.localID
-            serverID = place.serverID
-            name = place.canonicalName
-            provider = place.sourceProvider
-            providerID = place.sourceProviderPlaceID
-            address = place.address
-            locality = place.locality
-            region = place.region
-            country = place.country
-            latitude = place.latitude.bitPattern
-            longitude = place.longitude.bitPattern
-        }
-    }
-
+    /// Saves may append places between insertions. Direct model edits, changed
+    /// identity order and changed list memberships rebuild the affected data.
     @MainActor
-    private final class ListInsertionProjection {
+    fileprivate final class ListInsertionProjection {
         private enum Group: Hashable {
             case resolved(Int)
             case unresolved(String)
         }
-        private var fingerprints: [ListInsertionPlaceFingerprint] = []
-        private var localeID = Locale.current.identifier
+        private let observedPlaces = ListInsertionPlaceObservation()
         private var parents: [Int] = []
         private var nodeByAlias: [String: Int] = [:]
         private var nodeByReference: [String: Int] = [:]
@@ -4104,12 +4418,11 @@ final class WanderStore: ObservableObject {
         private var visibleMembers: [LocalPlaceListItem]?
 
         func prepare(store: WanderStore, list: LocalPlaceList) {
-            let next = store.places.map(ListInsertionPlaceFingerprint.init)
-            let currentLocaleID = Locale.current.identifier
-            let canAppend = currentLocaleID == localeID && next.count >= fingerprints.count
-                && zip(fingerprints, next).allSatisfy { $0.0 == $0.1 }
+            let previousCount = observedPlaces.count
+            let previousRevision = observedPlaces.resetRevision
+            let next = observedPlaces.read(store.places)
+            let canAppend = observedPlaces.resetRevision == previousRevision
             if !canAppend {
-                fingerprints.removeAll(keepingCapacity: true)
                 parents.removeAll(keepingCapacity: true)
                 nodeByAlias.removeAll(keepingCapacity: true)
                 nodeByReference.removeAll(keepingCapacity: true)
@@ -4118,12 +4431,11 @@ final class WanderStore: ObservableObject {
                 supportsProjection = true
                 visibleMembers = nil
             }
-            localeID = currentLocaleID
-            if next.count != fingerprints.count {
-                for place in store.places.dropFirst(fingerprints.count) { append(place) }
+            let firstNewIndex = canAppend ? previousCount : 0
+            if next.count != firstNewIndex {
+                for place in store.places.dropFirst(firstNewIndex) { append(place) }
                 visibleMembers = nil
             }
-            fingerprints = next
 
             let currentAliases = store.listReferenceIDs(for: list)
             let currentMembers = store.placeListItems.filter { currentAliases.contains($0.listID) }
@@ -4134,6 +4446,10 @@ final class WanderStore: ObservableObject {
                 visibleMembers = nil
             }
         }
+
+        var fingerprintReadCount: Int { observedPlaces.fingerprintReadCount }
+
+        func finish() { observedPlaces.finish() }
 
         private func root(_ node: Int) -> Int {
             var result = node
@@ -4206,18 +4522,27 @@ final class WanderStore: ObservableObject {
         }
     }
 
-    /// The closure cannot suspend, so its projection never spans an account
-    /// handoff or unrelated asynchronous work. Each insertion still validates
-    /// permissions and publishes the same membership mutation as the row API.
+    /// Only this synchronous closure uses the projection. An explicit import
+    /// context can retain it between chunks; every insertion still validates
+    /// its owner, permissions and live inputs before publishing the row mutation.
     func withBatchedCurrentUserPlaceListInsertions<Result>(
         to list: LocalPlaceList?,
         senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        using context: AutomaticImportProjectionContext? = nil,
         _ operation: (_ insert: (String) -> ListPlaceAddResult) throws -> Result
     ) rethrows -> Result {
-        let projection = ListInsertionProjection()
+        let projection: ListInsertionProjection
+        if let context, context.belongs(to: self) {
+            let retained = context.list ?? ListInsertionProjection()
+            context.list = retained
+            projection = retained
+        } else {
+            projection = ListInsertionProjection()
+        }
+        defer { if context == nil || context?.list !== projection { projection.finish() } }
         return try withDeferredPersistence {
             try operation { userPlaceID in
-                guard let list else {
+                guard let list, context == nil || context?.belongs(to: self) == true else {
                     return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
                 }
                 return addCurrentUserPlace(userPlaceID: userPlaceID, to: list,
@@ -4239,6 +4564,7 @@ final class WanderStore: ObservableObject {
         guard canAddPlaces(to: list), let userPlace = currentUserPlace(matching: userPlaceID) else {
             return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
         }
+        let targetSaveID = userPlace.id
         projection.prepare(store: self, list: list)
         guard projection.supportsProjection else {
             return addCurrentUserPlace(userPlaceID: userPlaceID, to: list,
@@ -4254,18 +4580,18 @@ final class WanderStore: ObservableObject {
                 let matches = projection.firstPlaceByReference[item.placeID].map {
                     !(projection.aliasesByPlace[ObjectIdentifier($0)] ?? []).isDisjoint(with: targetAliases)
                 } ?? targetReferences.contains(item.placeID)
-                return matches || item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
+                return matches || item.ownerUserPlaceID == targetSaveID || item.sourceUserPlaceID == targetSaveID
             }
         } else {
             alreadyPresent = members.contains {
-                $0.placeID == userPlace.placeID || $0.ownerUserPlaceID == userPlace.id || $0.sourceUserPlaceID == userPlace.id
+                $0.placeID == userPlace.placeID || $0.ownerUserPlaceID == targetSaveID || $0.sourceUserPlaceID == targetSaveID
             }
         }
         guard !alreadyPresent else { return ListPlaceAddResult(outcome: .alreadyInList, companionSave: .none) }
         let item = LocalPlaceListItem(
             localID: "local_list_item_\(slug(list.id))_\(slug(userPlace.placeID))_\(placeListItems.count + 1)",
-            listID: list.id, placeID: userPlace.placeID, ownerUserPlaceID: userPlace.id,
-            sourceUserPlaceID: userPlace.id, addedByUserID: currentUser.id,
+            listID: list.id, placeID: userPlace.placeID, ownerUserPlaceID: targetSaveID,
+            sourceUserPlaceID: targetSaveID, addedByUserID: currentUser.id,
             syncState: .pendingCreate, senderNotificationPolicy: senderNotificationPolicy)
         placeListItems.append(item)
         projection.didAppend(item, store: self)
@@ -4309,6 +4635,10 @@ final class WanderStore: ObservableObject {
                 firstPlaceByReferenceID[referenceID] = place
             }
         }
+        // A prior duplicate attempt can populate this revision-scoped cache
+        // without publishing a mutation. Refresh it for this operation so raw
+        // place alias edits also reach the post-append collapsed item count.
+        placeGroupingKeyByReferenceIDCache = nil
         let currentItems = listItems(for: list)
         let userPlaceAlreadyInList = firstPlaceByReferenceID[userPlace.placeID].map { resolvedPlace in
             let targetAliases = VisiblePlaceGrouping.groupingAliases(for: resolvedPlace)
@@ -5997,8 +6327,16 @@ final class WanderStore: ObservableObject {
         return groups
     }
 
-    private func localVisiblePlaces(filters: PlaceFilters = PlaceFilters()) -> LocalVisiblePlaceProjection {
-        let attributesByUserPlaceID = Dictionary(grouping: placeAttributes, by: \.userPlaceID)
+    private func localVisiblePlaces(
+        filters: PlaceFilters = PlaceFilters(),
+        includingAttributes: Bool = true
+    ) -> LocalVisiblePlaceProjection {
+        let normalizedCategories = filters.normalizedCategories
+        // Category predicates can consume attribute-derived presentation. The
+        // identity/status-only bookmark path has no category predicate.
+        let needsAttributes = includingAttributes || !normalizedCategories.isEmpty
+        let attributesByUserPlaceID: [String: [LocalPlaceAttribute]] = needsAttributes
+            ? Dictionary(grouping: placeAttributes, by: \.userPlaceID) : [:]
         let placesByID = places.reduce(into: [String: LocalPlace]()) { result, place in
             if result[place.id] == nil {
                 result[place.id] = place
@@ -6009,29 +6347,41 @@ final class WanderStore: ObservableObject {
                 result[profile.id] = profile
             }
         }
-        let normalizedCategories = filters.normalizedCategories
+        let buildsListLookup = filters == PlaceFilters()
+        let isOwnerOnly = filters.ownerScopes == ["you"]
         var visiblePlaces: [VisiblePlace] = []
         visiblePlaces.reserveCapacity(userPlaces.count)
         var listLookup = VisiblePlaceListLookup(
             byUserPlaceID: [:],
             byPlaceID: [:],
-            knownPlaceIDs: Set(
+            knownPlaceIDs: buildsListLookup ? Set(
                 places.flatMap { place in
                     [place.id, place.localID] + [place.serverID].compactMap { $0 }
                 }
-            )
+            ) : []
         )
-        listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
-        listLookup.byPlaceID.reserveCapacity(places.count)
+        if buildsListLookup {
+            listLookup.byUserPlaceID.reserveCapacity(userPlaces.count)
+            listLookup.byPlaceID.reserveCapacity(places.count)
+        }
         let viewerID = currentUser.id
         var accessByOwnerID: [String: (relationship: ViewerRelationship, blocked: Bool)] = [:]
 
         for userPlace in userPlaces {
+            let ownerOnlyProfile: LocalProfile?
+            if isOwnerOnly {
+                // Resolve the same first profile before observing unrelated
+                // foreign save identity, deletion, or place-reference fields.
+                guard let owner = profilesByID[userPlace.userID], owner.id == viewerID else { continue }
+                ownerOnlyProfile = owner
+            } else {
+                ownerOnlyProfile = nil
+            }
             let userPlaceID = userPlace.id
             let placeID = userPlace.placeID
             guard userPlace.deletedAt == nil,
                   let place = placesByID[placeID],
-                  let owner = profilesByID[userPlace.userID]
+                  let owner = ownerOnlyProfile ?? profilesByID[userPlace.userID]
             else { continue }
 
             // Several memories share an owner. Evaluate the follow/block graph
@@ -6054,10 +6404,15 @@ final class WanderStore: ObservableObject {
                 isBlocked: blocked
             ) else { continue }
 
-            let userPlaceIDs = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
-            let visibleAttributes = userPlaceIDs
-                .flatMap { attributesByUserPlaceID[$0] ?? [] }
-                .sorted { $0.questionKey < $1.questionKey }
+            let visibleAttributes: [LocalPlaceAttribute]
+            if needsAttributes {
+                let userPlaceIDs = Set([userPlace.id, userPlace.localID, userPlace.serverID].compactMap { $0 })
+                visibleAttributes = userPlaceIDs
+                    .flatMap { attributesByUserPlaceID[$0] ?? [] }
+                    .sorted { $0.questionKey < $1.questionKey }
+            } else {
+                visibleAttributes = []
+            }
             let visiblePlace = VisiblePlace(
                 id: userPlaceID,
                 place: place,
@@ -6082,7 +6437,9 @@ final class WanderStore: ObservableObject {
 
             let index = visiblePlaces.count
             visiblePlaces.append(visiblePlace)
-            indexVisiblePlace(visiblePlace, userPlaceID: userPlaceID, placeID: placeID, at: index, in: &listLookup)
+            if buildsListLookup {
+                indexVisiblePlace(visiblePlace, userPlaceID: userPlaceID, placeID: placeID, at: index, in: &listLookup)
+            }
         }
 
         return LocalVisiblePlaceProjection(places: visiblePlaces, listLookup: listLookup)
@@ -8024,9 +8381,32 @@ final class WanderStore: ObservableObject {
         isPrivateListCompanion: Bool = false,
         senderNotificationPolicy: SenderNotificationPolicy = .standard
     ) -> SaveResult {
+        saveCandidate(candidate, status: status, visibility: visibility, note: note,
+            sourceType: sourceType, ratingScore: ratingScore, visitedAt: visitedAt,
+            plannedDate: plannedDate, attributes: attributes,
+            requestsProductUpsell: requestsProductUpsell, isPrivateListCompanion: isPrivateListCompanion,
+            senderNotificationPolicy: senderNotificationPolicy, placeLookup: .unresolved)
+    }
+
+    @discardableResult
+    private func saveCandidate(
+        _ candidate: PlaceCandidate,
+        status: PlaceStatus,
+        visibility: PlaceVisibility,
+        note: String?,
+        sourceType: AddSourceType,
+        ratingScore: Double? = nil,
+        visitedAt: Date = .now,
+        plannedDate: Date? = nil,
+        attributes: [PlaceAttributeDraft]? = nil,
+        requestsProductUpsell: Bool = true,
+        isPrivateListCompanion: Bool = false,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        placeLookup: PlaceSaveLookup
+    ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
         if status == .wannaGo,
-           let existingPlace = place(matching: candidate),
+           let existingPlace = place(matching: candidate, using: placeLookup),
            let existingUserPlace = currentUserPlace(for: existingPlace),
            existingUserPlace.status == .been {
             return SaveResult(
@@ -8035,7 +8415,7 @@ final class WanderStore: ObservableObject {
             )
         }
 
-        let place = upsertPlace(from: candidate, sourceType: sourceType)
+        let place = upsertPlace(from: candidate, sourceType: sourceType, placeLookup: placeLookup)
         let savedRatingScore = PlaceRating.scoreForSave(status: status, score: ratingScore)
         let categoryOverride = categoryOverrideAssignment(from: candidate)
         let viewerSnapshot = viewerTaxonomySnapshotAssignment(from: candidate)
@@ -8659,7 +9039,8 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil,
         senderNotificationPolicy: SenderNotificationPolicy = .silent
     ) -> SaveResult {
-        if let existingPlace = place(matching: candidate),
+        let matchedPlace = place(matching: candidate)
+        if let existingPlace = matchedPlace,
            let existingUserPlace = currentUserPlace(for: existingPlace) {
             if existingUserPlace.status == .been || status == .wannaGo {
                 return SaveResult(
@@ -8679,7 +9060,8 @@ final class WanderStore: ObservableObject {
                 plannedDate: plannedDate,
                 attributes: attributes,
                 requestsProductUpsell: false,
-                senderNotificationPolicy: senderNotificationPolicy
+                senderNotificationPolicy: senderNotificationPolicy,
+                placeLookup: .resolved(matchedPlace)
             )
         }
 
@@ -8694,7 +9076,8 @@ final class WanderStore: ObservableObject {
             plannedDate: plannedDate,
             attributes: attributes,
             requestsProductUpsell: false,
-            senderNotificationPolicy: senderNotificationPolicy
+            senderNotificationPolicy: senderNotificationPolicy,
+            placeLookup: .resolved(matchedPlace)
         )
     }
 
@@ -8708,6 +9091,45 @@ final class WanderStore: ObservableObject {
             syncState: userPlace.syncState,
             placeID: place.serverID
         )
+    }
+
+    /// Compare a pending row with an earlier owned save using the same first
+    /// strict match as saving. Deleted parents remain identity evidence so an
+    /// automatic duplicate cannot undo a manual removal between checkpoints.
+    func importCandidate(_ candidate: PlaceCandidate, matchesUserPlaceID userPlaceID: String) -> Bool {
+        guard let resolved = place(matching: candidate) else { return false }
+        let ownerID = currentUser.id
+        let remote = remoteCurrentUserVisiblePlace(matching: userPlaceID)
+        let saveAliases = remote.map { Self.referenceIDs(for: $0.userPlace) }
+            ?? Set([userPlaceID])
+        let parent = userPlaces.first {
+            $0.userID == ownerID && !Self.referenceIDs(for: $0).isDisjoint(with: saveAliases)
+        } ?? remote?.userPlace
+        guard let parent else { return false }
+        return parent.placeID == resolved.id || parent.placeID == resolved.localID
+            || parent.placeID == resolved.serverID
+    }
+
+    /// Re-read an owned reconciliation fallback after an import yields. A stale
+    /// cached receipt must not authorize another account or revive a tombstone.
+    func existingImportSave(userPlaceID: String) -> ExistingImportSave? {
+        let ownerID = currentUser.id
+        if let visible = visiblePlaceForCurrentUser(userPlaceID: userPlaceID),
+           canDisplayRemotePlace(visible) {
+            return ExistingImportSave(userPlaceID: visible.userPlace.id,
+                status: visible.userPlace.status, syncState: visible.userPlace.syncState,
+                placeID: visible.place.serverID)
+        }
+        guard let visible = remoteCurrentUserVisiblePlace(matching: userPlaceID),
+              canDisplayRemotePlace(visible) else { return nil }
+        let references = Self.referenceIDs(for: visible.userPlace).union([userPlaceID])
+        guard !userPlaces.contains(where: {
+            $0.userID == ownerID && $0.deletedAt != nil
+                && !Self.referenceIDs(for: $0).isDisjoint(with: references)
+        }) else { return nil }
+        return ExistingImportSave(userPlaceID: visible.userPlace.id,
+            status: visible.userPlace.status, syncState: visible.userPlace.syncState,
+            placeID: visible.place.serverID)
     }
 
     /// Changes the status of a save created by an import without rebuilding it
@@ -11804,8 +12226,9 @@ final class WanderStore: ObservableObject {
     }
 
     private func currentUserPlace(matching userPlaceID: String) -> LocalUserPlace? {
-        userPlaces.first { userPlace in
-            userPlace.userID == currentUser.id
+        let userID = currentUser.id
+        return userPlaces.first { userPlace in
+            userPlace.userID == userID
                 && userPlace.deletedAt == nil
                 && (userPlace.id == userPlaceID
                     || userPlace.localID == userPlaceID
@@ -11814,12 +12237,16 @@ final class WanderStore: ObservableObject {
     }
 
     private func currentUserPlace(for place: LocalPlace) -> LocalUserPlace? {
-        userPlaces.first { userPlace in
-            userPlace.userID == currentUser.id
+        let userID = currentUser.id
+        let placeID = place.id
+        let localID = place.localID
+        let serverID = place.serverID
+        return userPlaces.first { userPlace in
+            userPlace.userID == userID
                 && userPlace.deletedAt == nil
-                && (userPlace.placeID == place.id
-                    || userPlace.placeID == place.localID
-                    || userPlace.placeID == place.serverID)
+                && (userPlace.placeID == placeID
+                    || userPlace.placeID == localID
+                    || userPlace.placeID == serverID)
         }
     }
 
@@ -13453,11 +13880,30 @@ final class WanderStore: ObservableObject {
         value ? "true" : "false"
     }
 
-    private func upsertPlace(from candidate: PlaceCandidate, sourceType: AddSourceType) -> LocalPlace {
+    /// Reuse is limited to the synchronous save entry's lookup before its first
+    /// mutation. A resolved nil is a real miss, not a request to look up again.
+    /// This value never lives on the store or crosses a save/analytics boundary.
+    private enum PlaceSaveLookup {
+        case unresolved
+        case resolved(LocalPlace?)
+    }
+
+    private func place(matching candidate: PlaceCandidate, using lookup: PlaceSaveLookup) -> LocalPlace? {
+        switch lookup {
+        case .unresolved: return place(matching: candidate)
+        case .resolved(let place): return place
+        }
+    }
+
+    private func upsertPlace(
+        from candidate: PlaceCandidate,
+        sourceType: AddSourceType,
+        placeLookup: PlaceSaveLookup = .unresolved
+    ) -> LocalPlace {
         let providerPlaceID = candidate.sourceProviderPlaceID ?? candidate.id
         let localIdentityHash = stableHash("\(candidate.sourceProvider)|\(providerPlaceID)")
         let sharedAssignment = sharedPlaceAssignment(from: candidate)
-        if let existing = place(matching: candidate) {
+        if let existing = place(matching: candidate, using: placeLookup) {
             mergeBusinessMetadata(from: candidate, sharedAssignment: sharedAssignment, into: existing)
             return existing
         }

@@ -661,6 +661,12 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
     var receipt: PlaceImportReceipt?
     var automaticSaveRequested: Bool?
     var automaticSaveCompletedAt: Date?
+    /// Explicit receipt changes own these items, including removal of every
+    /// entry. An older library journal must not restore their previous cards.
+    var automaticSaveReceiptOverrideItemIDs: [String]?
+    /// An explicit review destination must survive an older pending library
+    /// checkpoint. Optional preserves snapshots written before chunked saves.
+    var automaticSaveDestinationOverrideID: String?
     var requestedStatusRaw: String?
     var requestedRatingScore: Double?
     /// Opening History alone is not a review. Optional for older snapshots.
@@ -683,6 +689,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         receipt: PlaceImportReceipt? = nil,
         automaticSaveRequested: Bool? = nil,
         automaticSaveCompletedAt: Date? = nil,
+        automaticSaveReceiptOverrideItemIDs: [String]? = nil,
+        automaticSaveDestinationOverrideID: String? = nil,
         requestedStatus: PlaceStatus? = nil,
         requestedRatingScore: Double? = nil,
         reviewOpenedAt: Date? = nil
@@ -701,6 +709,8 @@ struct PlaceImportBatch: Codable, Equatable, Identifiable {
         self.receipt = receipt
         self.automaticSaveRequested = automaticSaveRequested
         self.automaticSaveCompletedAt = automaticSaveCompletedAt
+        self.automaticSaveReceiptOverrideItemIDs = automaticSaveReceiptOverrideItemIDs
+        self.automaticSaveDestinationOverrideID = automaticSaveDestinationOverrideID
         requestedStatusRaw = requestedStatus?.rawValue
         self.requestedRatingScore = requestedStatus == .been ? requestedRatingScore : nil
         self.reviewOpenedAt = reviewOpenedAt

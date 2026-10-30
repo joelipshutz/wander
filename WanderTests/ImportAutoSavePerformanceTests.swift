@@ -92,8 +92,12 @@ final class ImportAutoSavePerformanceTests: XCTestCase {
             XCTAssertTrue(notificationCommit.locallyComplete)
             XCTAssertEqual(notificationCommit.selectedItemIDs, Set(expectedItemIDs))
 
-            XCTAssertEqual(storePersistence.saveCount, 1)
-            XCTAssertEqual(importPersistence.saveCount, 1)
+            XCTAssertGreaterThanOrEqual(storePersistence.checkpointCount, (rowCount + 7) / 8)
+            XCTAssertLessThanOrEqual(storePersistence.checkpointCount, rowCount)
+            XCTAssertEqual(storePersistence.saveCount, storePersistence.checkpointCount + 1,
+                "One ordinary cleanup snapshot retires the completed recovery plan")
+            XCTAssertEqual(importPersistence.saveCount, storePersistence.checkpointCount + 1,
+                "Duplicate preflight plus one import acknowledgement per durable library chunk")
             let persistedStore = try XCTUnwrap(storePersistence.snapshot)
             XCTAssertEqual(persistedStore.userPlaces.count, existingCount + rowCount - overlappingCount)
             XCTAssertEqual(persistedStore.placeListItems?.count, rowCount)
@@ -164,13 +168,18 @@ final class ImportAutoSavePerformanceTests: XCTestCase {
 private final class AutoSavePerformanceStorePersistence {
     private(set) var snapshot: WanderStoreSnapshot?
     private(set) var saveCount = 0
+    private(set) var checkpointCount = 0
     var persistence: WanderStorePersistence {
         WanderStorePersistence(load: { nil }, save: { [self] snapshot in
             self.snapshot = snapshot
             saveCount += 1
+        }, checkpointAsync: { [self] snapshot in
+            self.snapshot = snapshot
+            saveCount += 1
+            checkpointCount += 1
         })
     }
-    func reset() { snapshot = nil; saveCount = 0 }
+    func reset() { snapshot = nil; saveCount = 0; checkpointCount = 0 }
 }
 
 private final class AutoSavePerformanceImportPersistence: PlaceImportPersisting {

@@ -309,6 +309,29 @@ private struct WanderRootTabContent<Content: View>: View {
     }
 }
 
+/// TabView evaluates inactive tab bodies while preparing its first frame.
+/// Avoid constructing an unvisited destination, then keep its normal identity
+/// and observers for the rest of this root's lifetime.
+struct WanderRetainedTabContent<Content: View>: View {
+    let isSelected: Bool
+    @ViewBuilder let content: () -> Content
+    @State private var hasBeenSelected = false
+
+    var body: some View {
+        Group {
+            if isSelected || hasBeenSelected {
+                content()
+            } else {
+                // Keep a concrete tab root so its native item remains present.
+                Color.clear
+            }
+        }
+        .onChange(of: isSelected, initial: true) { _, selected in
+            if selected && !hasBeenSelected { hasBeenSelected = true }
+        }
+    }
+}
+
 @MainActor
 struct WanderRootView: View {
     @State private var needsContactRecommendationsRefresh = false
@@ -368,6 +391,7 @@ struct WanderRootView: View {
     @State private var sharedPlaceImportNotice: SharedPlaceImportDrainNotice?
     @State private var importAutoSaveTask: Task<Void, Never>?
     @State private var automaticImportOwnerUserID: String?
+    @State private var automaticImportRunID: UUID?
     @State private var queuedAutomaticImportBatchIDs: Set<String> = []
     @State private var completedAutomaticImportBatchIDs: Set<String> = []
     @State private var interactiveImportResolutionTask: Task<Void, Never>?
@@ -490,6 +514,7 @@ struct WanderRootView: View {
         )
         _walkthroughs = StateObject(
             wrappedValue: FirstVisitWalkthroughCoordinator(
+                userID: initialSession?.userID ?? "local-user",
                 isEnabled: FirstVisitWalkthroughFeatureFlag.isEnabled(
                     isEligible: firstVisitWalkthroughEligibilityContext.applies(
                         to: initialSession?.userID
@@ -603,22 +628,26 @@ struct WanderRootView: View {
 
                 }
 
-                ListsScreen(presentationResetRequest: presentationResetRequest)
+                WanderRetainedTabContent(isSelected: selectedTab == .lists) {
+                    ListsScreen(presentationResetRequest: presentationResetRequest)
+                }
                     .tabItem { tabItemLabel(for: .lists) }
                     .tag(WanderTab.lists)
 
-                ProfileScreen(
-                    visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
-                    presentationResetRequest: presentationResetRequest,
-                    calendarLaunchRequest: profileCalendarLaunchRequest,
-                    onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
-                    onSettingsPresentation: handleDeepLinkPresentation,
-                    onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
-                    onSettingsDidDismiss: {
-                        handleDeepLinkPresentationDismissal(of: .profileSettings)
+                WanderRetainedTabContent(isSelected: selectedTab == .profile) {
+                    ProfileScreen(
+                        visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
+                        presentationResetRequest: presentationResetRequest,
+                        calendarLaunchRequest: profileCalendarLaunchRequest,
+                        onCalendarLaunchRequestHandled: consumeProfileCalendarLaunchRequest,
+                        onSettingsPresentation: handleDeepLinkPresentation,
+                        onSettingsWillDismiss: handleDeepLinkPresentationWillDismiss,
+                        onSettingsDidDismiss: {
+                            handleDeepLinkPresentationDismissal(of: .profileSettings)
+                        }
+                    ) {
+                        selectedTab = .discover
                     }
-                ) {
-                    selectedTab = .discover
                 }
                     .tabItem { tabItemLabel(for: .profile) }
                     .tag(WanderTab.profile)
@@ -1035,11 +1064,13 @@ struct WanderRootView: View {
             }
             // A tapped notification must not wait for permission, calendar or
             // background-maintenance network work on a cold authenticated launch.
+            let authApplyInterval = WanderDebugLog.beginPerformanceInterval("Authenticated Startup Auth Apply")
             applyAuthStateIfNeeded(auth.state)
             if needsContactRecommendationsRefresh {
                 needsContactRecommendationsRefresh = false
                 Task { await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true) }
             }
+            WanderDebugLog.endPerformanceInterval("Authenticated Startup Auth Apply", id: authApplyInterval)
             #if DEBUG
             if fixtureMode != .empty, !seededNotificationFixture,
                ProcessInfo.processInfo.arguments.contains("-WanderNotificationPostUITest") {
@@ -1054,6 +1085,7 @@ struct WanderRootView: View {
                 ])
             }
             #endif
+            let startupInterval = WanderDebugLog.beginPerformanceInterval("Authenticated Startup Preparation")
             drainPendingNotificationResponses()
             routeOrdinaryForegroundEntryIfReady()
             if let userID = auth.state.session?.userID {
@@ -1069,6 +1101,7 @@ struct WanderRootView: View {
             reconcilePlaceImports()
             publishWidgetSnapshot()
             refreshNearbyWidgetSnapshot()
+            WanderDebugLog.endPerformanceInterval("Authenticated Startup Preparation", id: startupInterval)
             await pushNotifications.refreshAuthorizationStatus()
             guard !Task.isCancelled, isSessionValidated else { return }
             applyAuthStateIfNeeded(auth.state)
@@ -1882,19 +1915,7 @@ struct WanderRootView: View {
     }
 
     private func reconcilePlaceImports() {
-        guard importStore.hasDuplicateReconciliationCandidates else { return }
-        importStore.reconcileDuplicates(
-            with: store.currentUserVisiblePlaces.map { visiblePlace in
-                PlaceImportExistingPlace(
-                    userPlaceID: visiblePlace.userPlace.id,
-                    name: visiblePlace.place.canonicalName,
-                    latitude: visiblePlace.place.latitude,
-                    longitude: visiblePlace.place.longitude,
-                    sourceProvider: visiblePlace.place.sourceProvider,
-                    sourceProviderPlaceID: visiblePlace.place.sourceProviderPlaceID
-                )
-            }
-        )
+        store.reconcilePlaceImportDuplicates(in: importStore)
     }
 
     private func drainSharedPlaceImports() {
@@ -2117,11 +2138,14 @@ struct WanderRootView: View {
         queuedAutomaticImportBatchIDs.formUnion(batchIDs)
         guard importAutoSaveTask == nil else { return }
         automaticImportOwnerUserID = expectedUserID
+        let runID = UUID()
+        automaticImportRunID = runID
         let backgroundTaskID = UIApplication.shared.beginBackgroundTask(
             withName: "rec.me place import",
             expirationHandler: {
                 Task { @MainActor in
-                    guard automaticImportOwnerUserID == expectedUserID else { return }
+                    guard automaticImportOwnerUserID == expectedUserID,
+                          automaticImportRunID == runID else { return }
                     importStore.pauseProcessing(
                         batchIDs: importStore.batches
                             .filter(\.shouldSaveAutomatically)
@@ -2137,14 +2161,16 @@ struct WanderRootView: View {
                 if backgroundTaskID != .invalid {
                     UIApplication.shared.endBackgroundTask(backgroundTaskID)
                 }
-                if automaticImportOwnerUserID == expectedUserID {
+                if automaticImportOwnerUserID == expectedUserID, automaticImportRunID == runID {
                     importAutoSaveTask = nil
                     automaticImportOwnerUserID = nil
+                    automaticImportRunID = nil
                 }
             }
             while !Task.isCancelled, !queuedAutomaticImportBatchIDs.isEmpty {
                 guard auth.state.session?.userID == expectedUserID,
-                      store.currentUser.id == expectedUserID
+                      store.currentUser.id == expectedUserID,
+                      automaticImportRunID == runID
                 else { return }
                 let nextBatchIDs = queuedAutomaticImportBatchIDs.sorted()
                 queuedAutomaticImportBatchIDs.subtract(nextBatchIDs)
@@ -2154,13 +2180,15 @@ struct WanderRootView: View {
                     store: store,
                     expectedUserID: expectedUserID,
                     isAuthorized: {
-                        auth.state.session?.userID == expectedUserID
+                        auth.state.session?.userID == expectedUserID && automaticImportRunID == runID
                     }
                 )
                 guard !Task.isCancelled,
                       auth.state.session?.userID == expectedUserID,
-                      store.currentUser.id == expectedUserID
+                      store.currentUser.id == expectedUserID,
+                      automaticImportRunID == runID
                 else { return }
+                queuedAutomaticImportBatchIDs.formUnion(result.retryBatchIDs)
                 if result.hasResult {
                     completedAutomaticImportBatchIDs.formUnion(result.batchIDs)
                     if scenePhase == .active {
@@ -2174,8 +2202,9 @@ struct WanderRootView: View {
                             sourceRetryCount: result.sourceRetryCount,
                             backend: backend
                         )
-                        guard auth.state.session?.userID == expectedUserID,
-                              store.currentUser.id == expectedUserID else { return }
+                        guard !Task.isCancelled, auth.state.session?.userID == expectedUserID,
+                              store.currentUser.id == expectedUserID,
+                              automaticImportRunID == runID else { return }
                         if didSchedule {
                             completedAutomaticImportBatchIDs.subtract(result.batchIDs)
                         } else {
@@ -2191,6 +2220,8 @@ struct WanderRootView: View {
         importAutoSaveTask?.cancel()
         importAutoSaveTask = nil
         automaticImportOwnerUserID = nil
+        automaticImportRunID = nil
+        importStore.invalidateAutomaticSaveLeases(batchIDs: importStore.batches.map(\.id))
         queuedAutomaticImportBatchIDs.removeAll()
         if clearVerificationQueue {
             completedAutomaticImportBatchIDs.removeAll()

@@ -1,495 +1,304 @@
-# REC-675: App-wide performance pass
+# REC-675: Performance review
 
 Issue: [REC-675](https://linear.app/recme/issue/REC-675/reduce-app-wide-interaction-latency-by-at-least-50percent-without).
 Baseline: `2bb08f8e47`. Branch: `codex/rec-675-app-performance`.
 
-## Status and acceptance
+## Acceptance and current validation
 
-**The real Live ≥50% performance target remains unmet; this change remains a
-draft pending physical-device profiling and remaining validation.** The full
-native gate completed **3,438 tests: 3,413 unit + 25 UI, with 3,433 passes and
-five failures** (two unit source-contract failures and three UI failures).
+**Draft: the real Live ≥50% latency target remains unmet.** Component gains and
+responsive import checkpoints do not establish a 50% improvement in complete
+launch, Feed, or map gestures. The reported device is iPhone 15 Pro / iOS 26.5 /
+TestFlight 185. Physical installation and profiling are newly authorized. The
+paired phone has Developer Mode enabled, but the native connection is currently
+unavailable. Physical comparison is pending a usable connection; no app has been
+installed and no physical measurements have been collected.
 
-The two source-contract failures were corrected and passed in the handoff
-focused gate. All manual-pagination fixture regressions and the corrected
-drawer-stress test passed. That focused gate finished **165 passes and two
-pagination UI timeouts**. All three original UI failures also reproduced on
-unchanged baseline. Automatic pagination subsequently passed, and the final
-manual gate passed **all eight tests, zero failures or skips**. Its fixture now
-accepts the normal viewport polygon; the UI selects **Past 24 hours** to exercise
-the older stage that All time intentionally skips, reveals the older control,
-and awaits the final page within the existing 15-second bound. Original
-card/count/deduplication/error checks remain. **All five original failures have
-now passed focused checks**; this is not one fully green rerun of the complete
-native gate. Final-head CI remains pending.
+Current validation status:
 
-The final Release gate passed **all six benchmarks**, AstirClip passed **33 tests
-with zero failures**, and the compact iPhone SE (3rd generation) / iOS 26.5 UI gate
-passed **both checks** (collapsed drawer actions and native zoom color retention).
+- Final native unit gate: **3,542/3,542 passed**, zero failures or skips. This
+  includes all three 1,500-row stress cases, deferred-tab hosting, owner/manual
+  recovery, both snapshot memo field matrices and the mounted scrolling/import
+  workload. The four process-global SDK cases are required separate runs.
+- Final optimized Release gate: **11/11 passed**, zero failures or skips.
+- Focused route/tab/launch UI: six journeys passed. Compact unprimed manual-edit
+  and filter-edge gate: **3/3 passed**. Earlier compact drawer/zoom checks passed
+  **2/2**; those checks are distinct from the full unit run.
+- Final-source fresh-host replay validation: **4/4 passed**, retaining exact
+  host admission, compiler receipts, capture and privacy assertions.
+- CI routing/receipt tooling: **67 tests passed**. Required SDK isolation and
+  separate long 1,500-row stress dispatches retain exact test/device/result checks.
+  Stress dispatches use the existing 600-second default / 900-second maximum
+  performance allowances; ordinary unit deadlines and assertions are unchanged.
+- The matched original-build mounted Feed/import comparison completed: its one
+  test failed six responsiveness assertions; content and durable-file parity
+  checks passed. The candidate passed the same workload. Details below.
+- Review-storage and diff whitespace checks pass. Final-head CI remains pending.
 
-Earlier checkpoints remain scoped evidence: v4 passed 3,370 unit tests; focused
-v5 passed 86 tests including actual SDK capture and privacy/OCR checks; matched
-optimized Release gates passed all six selected benchmarks on both builds.
-Render-v10 passed all 29 tests, including compact-pin pixel/transition coverage
-and the paired Feed benchmarks. Matched Live launch improved about 30%, while
-complete Feed/map gestures did not establish the requested gain. Results below
-identify their revision/configuration instead of treating earlier checkpoints
-as measurements of later changes.
+At the previous pushed head, actual Feed replay drew native frames but did not
+deliver a new decoded frame within its existing drain deadline in two broad CI
+runs. A compact Filters first press also timed out once locally; the same harness
+passed on baseline, and subsequent candidate combined-filter and edge checks
+passed. Neither intermittent cause is established. The four final isolated local
+passes do not explain the earlier broad-run failures; final-head CI remains open.
 
-The target is at least 50% less latency on dominant reported slow paths without
-losing content, ordering, authorization, durability, or interaction behavior.
-The reported device is iPhone 15 Pro / iOS 26.5 / TestFlight 185; the fixes target
-shared behavior across devices. Simulator improvements do not establish a
-physical-device launch, frame-rate, or across-the-board interaction improvement.
-Remaining long imports and the below-target paired UI results prevent claiming
-that the complete acceptance target has been met. A matching physical device is connected,
-but installation has not been authorized and no physical-device metrics exist.
+Historical validation at `434456ea51`, before the async import implementation:
+3,438 total tests (3,413 unit + 25 UI), 3,433 passes / five failures. All five
+subsequently passed focused checks: two source-contract corrections, drawer
+stress, and both pagination paths. The intermediate focused gate had 165 passes /
+two pagination timeouts; final manual pagination passed 8/8. Its fixture accepts
+viewport polygons, selects Past 24 hours to exercise older/all stages, scrolls to
+pagination controls, and awaits the final page within the existing 15-second
+bound. This history is not a single green full-suite rerun. That revision also
+passed six selected Release benchmarks, 33 AstirClip tests, two compact-phone
+UI checks, and the 29-test pixel/transition rendering gate.
 
-## Implementation and preserved behavior
+## Durable imports and startup
 
-- Live identity matching probes the smaller membership collection against the
-  other's existing alias index. One immutable display projection supplies pin,
-  activity, and RPC-seed indices. Native annotations skip unchanged preparation;
-  density work still responds to content, selection, geometry, and mounted-view
-  changes, and visible views refresh viewed expiry and relative timestamps.
-  Unchanged native interaction, POI-selection, and user-location settings are
-  no longer rewritten. A setter-tracking regression covers both transition
-  directions and camera/interaction provenance; this does not independently
-  establish a fix for the map gesture issues encountered by the UI harness.
-- Feed sections reuse grouping only after reevaluating leases and mutable
-  filters. Ordered activity/place/ticket-kind/stage inputs protect model edits;
-  account, audience, query, page, and limits invalidate reuse. Exact lease expiry
-  remains authoritative, and future events retain time-dependent rebuilding.
-- Remote visibility, omitted-calendar-row reconciliation, reminders, and legacy
-  snapshot attributes use temporary indices that preserve the original alias,
-  first-match, ownership, and ordering rules. Live, Feed, Discover, saved-place,
-  and import-review views use bulk attributes and one history projection per
-  render. Single-save APIs retain their existing behavior.
-- Widget publication selects and deduplicates calendar parents/visits once for
-  three months, avoiding unused profile map/category/city work. It preserves
-  independent month interval endpoints, timezone rules, and mutable input reads.
-  Snapshot format, freshness policy, atomic writes, and reload requests remain.
-- Import completion updates rows in one pass. Strict candidate and list
-  insertion projections exist only inside synchronous transactions; value
-  checks preserve direct model edits, first matches, alias bridges, tombstones,
-  membership order, and account isolation. Saves and list insertions remain in
-  their original sequence. Receipts, silent notifications, per-save analytics,
-  and durable transaction snapshots are retained.
-- Import streak work memoizes only `Date` to calendar-day conversion inside the
-  synchronous import scope, resetting for calendar changes. Every read still
-  gathers live dates and runs the complete streak calculator. Ledger/recovery
-  appends, celebrations, and events are unchanged. Wanna/deleted visit summaries
-  skip a read-only history scan that their existing early return never uses.
-- Google resolution refills available slots within the existing six-request
-  limit; small and social imports remain serial. Source expansion commits in
-  source order. Run/claim identities fence retries, cancellation, callbacks, and
-  cleanup. File persistence reuses encodings only for unchanged row values and
-  exact text/numeric representations; every write remains a complete synchronous
-  atomic snapshot, with cache commit only after success. Row encoding retention
-  is capped at 4,096 rows / 8 MiB of encoded bytes. Oversized histories revert to
-  the original durable resolver waves rather than multiplying full-document
-  writes for each finished sibling.
-- PostHog is pinned to official
-  [3.68.3](https://github.com/PostHog/posthog-ios/releases/tag/3.68.3), containing
-  the [replay scheduling and SwiftUI mask fix](https://github.com/PostHog/posthog-ios/commit/910b82c).
-  The prior linked benchmark SDK is 3.61.0. App configuration, one-second capture
-  cadence, masks, sampling, and screenshot resolution are retained. The focused
-  v5 gate passed actual SDK capture/encoding and included image-level privacy/OCR
-  validation; matched optimized Release capture also passed. The completed full
-  native gate and subsequent focused closures are recorded above. Final Release
-  and AstirClip validation passed. A newer SDK with changed capture resolution
-  was not substituted for an
-  equivalent workload.
+Times below are medians on the same iOS 26.5 Simulator. Final Debug imports use
+three samples collected during the full unit gate; the original baseline used the
+same portable fixture in a focused run. Startup includes deferred tabs. Fixture setup and final decoding assertions are outside timing.
+Import timing includes the real coordinator, library/import file writers, and
+final durability drain. The heartbeat runs on the main actor and samples every
+1 ms; a reported gap is the median of each sample's maximum observed gap.
 
-No backend schema, feature removal, or new production content limit is
-introduced. The 300-place / 600-event Live UI fixture is opt-in, Debug Simulator
-only, and leaves stored place coordinates unchanged. Synthetic SDK fixtures use
-fictional views and offline collectors, with no production replay upload.
-The same four-flag, compile-time Debug + Simulator policy selects both the large
-Live feed and its matching fake auth user; ordinary simulator sessions and
-production hydration/authorization checks retain their behavior.
-Only under that policy, pin accessibility metadata exposes the actual native
-camera distance for the UI zoom assertion. It preserves ordinary pin values,
-uses a weak map reference, clears that reference on reuse, and is absent from
-Release/device builds. This is measurement instrumentation, not a camera command.
+| Workload | Matched baseline | Candidate | Interpretation |
+| --- | ---: | ---: | --- |
+| 500 resolved Wanna rows + list, complete durable import | 49,928.479 ms | 7,488.458 ms | 85.0% less elapsed time |
+| Same import, maximum main-actor heartbeat gap | 50,048.525 ms | 35.068 ms | Long single-transaction stall removed in this fixture |
+| 1,500 resolved Wanna rows + list, complete durable import | No matching run | 95,955.223 ms | Absolute result only; throughput remains slow |
+| Same 1,500-row import, maximum heartbeat gap | No matching run | 96.403 ms | Residual main-thread tails remain |
+| Native launch / first frame | 6.183081 s | 2.858669 s | 53.8% faster |
+| Launch to Live-ready accessibility state | 16,802.678 ms | 9,521.709 ms | 43.3% faster; below target |
 
-Additional rendering work follows the paired UI shortfall: Feed paging history
-no longer publishes decision-only state for each scroll sample; a render shares
-one freshly authorized section projection; photo lookups construct the same
-request without unrelated place-sheet fields; empty shared-discussion
-invalidation avoids redundant publications. Formatter configuration reuse is
-bounded and retains current calendar/locale/timezone inputs. Compact pins reuse
-the existing artwork while retaining native hit targets and hosted interaction
-transitions. Corrected rendering passed the v10 pixel/transition gate. Earlier
-v4/v5 and earlier Release timings do not measure these later changes; the final
-Release results below include the updated production code. The full native gate
-completed with the five failures described above; automatic pagination and the
-small-screen UI gate subsequently passed. The final manual-pagination gate also
-passed all eight tests after correcting its geographic/time-range fixture and
-waiting for the final page without changing the assertions or timeout.
+The full AX readiness timer includes synchronous XCTest launch/idle handling and
+subsequent accessibility queries. Existing activity timestamps show launch-call
+medians of approximately 12.794 to 5.457 seconds, followed by approximately 4.028
+and 4.065 seconds of readiness probing. Each launch passed its first pin-count
+and snapshot attempt. This explains the metric boundaries; it does not redefine
+the 43.3% AX result or attribute the remaining time entirely to test overhead.
+Simulator startup uses a fictional signed-in fixture; it does not validate normal
+configured-account authentication, backend bootstrap, or physical-device startup.
 
-## Established v4 projections and component timings
+Import fixtures start with 100 existing saves and 20 overlaps, and verify all
+500/1,500 source-ordered receipt entries, Added/Existing outcomes, saves, list
+memberships, silent notification policies, and both decoded final files. The
+500-row result has 580 saves and 500 memberships. The 1,500-row measurement has
+no completed identical baseline, so no paired speedup is claimed. Its final disk-backed
+96.0 seconds must not be compared as an improvement over older in-memory tests.
 
-Xcode 26.6, Debug arm64, iOS 26.5 Simulator, dedicated iPhone 17 Pro simulator.
-Baseline and candidate run sequentially with identical fixtures and destination.
-Times are medians in milliseconds, three samples unless stated. Setup and
-reference-oracle assertions are outside timing. These are bounded component
-workloads, not substitutes for launch or gesture measurements.
+Earlier synchronous Debug coordinator diagnostics were 31.970 seconds with a
+list and 19.599 seconds without a list at 1,500 rows. Those excluded disk work and
+predate chunking; they are historical attribution evidence, not current latency.
 
-| Workload | Baseline ms | v4 ms | Reduction |
+A separate integrated diagnostic mounts the real 600-event Feed on a 1,620-save
+library while importing 200 new places into actual files and scrolling natively.
+Before narrowing bookmark projection it measured 39.744 seconds, maximum display
+delivery gap 477.254 ms, and heartbeat gap 253.143 ms. The later single sample was
+28.157 seconds, 307.034 ms, and 209.605 ms respectively. Both retained all events,
+receipts, memberships and decoded files, and rendered partial progress. These are
+single Debug diagnostics, not a matched baseline acceptance claim; substantial
+pauses remain. The later harness verifies its private Release-compatible Feed
+and photo fixtures against the original Debug helpers outside measurement;
+photo byte parity runs afterward so it does not prewarm the measured workload.
+
+The same mounted fixture in Release measured 25.631 seconds, maximum display gap
+264.610 ms, and heartbeat gap 155.399 ms. This confirms residual pauses in optimized
+code; it is still one diagnostic sample. Three-sample Release actual-file medians
+were 6,928.020 ms / 30.894 ms maximum heartbeat for 500 rows, and 92,387.284 ms /
+78.063 ms for 1,500 rows. There is no matching Release actual-file baseline.
+
+A separate 25-second Release profile attributed 39.0% of sampled main-thread work
+to snapshot capture, 18.1% to SwiftUI Observation dependency replacement, and 7.5%
+to bookmarks. These are sampled CPU shares, not elapsed-time percentages. A
+run-owned snapshot-record memo reduced the earlier Feed-only Release diagnostic
+from 25.631 to 19.743 seconds and the maximum display gap from 264.610 to 211.988 ms;
+the 500-row actual-file median fell from 6,928.020 to 5,465.537 ms. Twelve native
+regressions passed for all 67 Place/UserPlace DTO fields, managed model changes,
+exact representation, cancellation/account/lifetime boundaries and failed writes.
+
+The stronger fixture now includes both production Root import reconciliation
+callbacks, using the same fresh authorized six-field duplicate projection as the
+app. Four cold/oracle regressions passed; the complete focused gate passed 30/30.
+This changes the workload and must not be compared directly with older Feed-only
+timings. Its default Release diagnostic took 29.217 seconds, with display gaps
+of 110.884 ms p50, 163.149 ms p95 and 293.853 ms maximum. It observed 200 library
+acknowledgements, 201 revision callbacks and 400 item callbacks. The latter reflect
+ready-to-duplicate classification while the library write is pending, followed by
+saved after acknowledgement; those visible transitions are preserved.
+
+Diagnostic 1 ms and 10 ms post-acknowledgement suspensions did not materially
+improve those display gaps. Neither pacing change is included. A separate profile
+found attribute/visit snapshot construction at 1,487 of 13,745 sampled main-thread
+samples (10.8%); a final extension reuses those records through the same observed
+cache. The final optimized run passed 11/11. The stronger mounted workload measured
+25.943 seconds with display gaps of 87.613 ms p50, 148.496 ms p95 and 243.353 ms
+maximum. These remain visible pauses under simultaneous scrolling/import load.
+Final actual-file Release medians were 5,264.291 ms (500 rows) and 67,261.120 ms
+(1,500 rows), with median maximum heartbeat gaps of 28.439 and 76.364 ms. All eight new regressions for the 30 added fields passed in the final 3,542-test
+native gate. The full memo covers 97 persisted fields across four record types.
+
+The original build and final candidate also ran the **same stronger Release
+mounted workload once each**: 200 imports, 600 Feed events, 1,620 initial saves,
+real file writers, native scrolling and both original Root reconciliation triggers.
+Only unavailable candidate APIs were adapted in the baseline test; its Root
+callback uses the original full authorized projection. No pacing was added, and
+no shared functional or responsiveness assertion was relaxed.
+
+| Mounted Feed + import, one sample per build | Original baseline | Final candidate | Change |
+| --- | ---: | ---: | --- |
+| Complete import elapsed | 27,892.132 ms | 25,943 ms | Approximately 7.0% lower |
+| Maximum display-link delivery gap | 27,975.592 ms | 243.353 ms | 99.13% lower |
+
+Baseline's six failures were zero during-import display ticks, scroll movement,
+partial renders, revision callbacks, item callbacks and offset span. Its maximum
+heartbeat gap was 27,963.480 ms. Subsequent checks passed for all 600 Feed event
+identities and order, 200 receipts in source order with matching saves and
+memberships, silent notifications, unchanged visits, and both decoded files;
+200 receipts were durable. Its
+single display-gap observation arrived after completion, so its identical p50/p95
+values do not describe a smoothness distribution. The candidate retained these
+checks and showed live progress. This is evidence of removing the monolithic
+freeze, **not** a 50% throughput gain or an FPS claim; candidate 243 ms tails remain.
+
+## Implementation and preserved contracts
+
+- Lists and Profile defer first construction until selected, then retain their
+  normal identity and navigation state. Selection constructs content in the same
+  render. Existing pending notification/calendar consumers are unchanged; six
+  actual route/tab/launch journeys and four hosting regressions passed.
+- Bookmark state uses the existing authorized local/remote merge with only the
+  required owner, identity, and status fields. Foreign content, attributes, visit
+  enrichment, and unused filtered list indices are not prepared for this icon.
+  Five cold-path oracle/Observation tests retain first-match, alias, Been/Wanna,
+  tombstone, account, permission, and relevant-mutation behavior.
+- Automatic saving now performs bounded synchronous chunks, then closes every
+  persistence/projection scope before awaiting an ordered atomic library write.
+  The default row-work budget is eight rows / 10 ms. Snapshot capture and import
+  JSON publication remain synchronous and are outside that budget: **10 ms is
+  not a hard maximum hitch bound**, as the measured tails demonstrate.
+- Each library checkpoint contains its saves and an immutable recovery journal.
+  Only a successful acknowledgement permits the separate import file to advance
+  saved rows, receipt outcomes, or completion. Failed writes preserve retry
+  evidence. Recovery reuses original save IDs and Added/Existing outcomes instead
+  of saving again. Completed journals retire only after final import-file success;
+  a delayed cleanup write can leave redundant evidence without replaying a
+  completed batch. No timer debounce weakens checkpoint durability.
+- Run UUID, owner, batch identity, and lease checks fence cancellation, account
+  changes, replacement tasks, and callbacks after awaits. Frozen input plans keep
+  later user edits for review. Manual receipt removals/status/list changes and
+  explicit destination choices survive recovery; local/server aliases preserve
+  pending destinations through sync. Same-batch strict duplicates cannot undo a
+  manual choice. Unrelated provider identities and separate batches remain independent.
+- One run-owned context retains strict lookup, streak, and list projections.
+  Snapshot records reuse the existing complete DTO initializers under Observation
+  for places, saves, attributes and visits. Every capture walks current arrays in
+  order, preserves duplicate object/ID behavior, rebuilds dirty records, and prunes
+  removals. Ownership loss uses fresh records; finishing releases registrations.
+  The memo records values, never write-success state.
+  It installs ambient projections only inside synchronous scopes, restores them
+  before suspension, and finishes observations at run exit. Fresh model identity,
+  owner, permission, membership, locale, and observed grouping inputs invalidate
+  reuse. Streak source inputs remain fresh; only identical calculator inputs
+  reuse results. Async checkpoints reuse immutable snapshot records for calendar
+  fingerprints and recapture after synchronous authority-loss observers mutate data.
+- Google resolution refills the existing six-request limit; social work remains
+  serial and source expansions preserve ordering. Exact per-item JSON encoding
+  reuse retains synchronous full atomic import snapshots, including Unicode and
+  signed-zero fidelity. Cache retention is bounded to 4,096 rows / 8 MiB; oversized
+  histories use durable resolver waves to avoid per-completion write amplification.
+- Live/Feed/profile/widget changes reuse authorized projections and bulk indices,
+  avoid unchanged native setter/publication work, and retain ordering, alias
+  precedence, mutable-model invalidation, calendar/timezone boundaries, and viewed
+  expiry. Compact pins reuse existing artwork while preserving hosted interaction
+  transitions and native hit targets. Date formatter configurations are bounded;
+  rendered date strings remain uncached.
+- Official PostHog [3.68.3](https://github.com/PostHog/posthog-ios/releases/tag/3.68.3)
+  contains the [replay scheduling/mask fix](https://github.com/PostHog/posthog-ios/commit/910b82c).
+  The paired baseline used 3.61.0. Production one-second replay cadence, masks,
+  resolution, sampling, and app settings are unchanged. No backend schema,
+  feature removal, production content limit, or product analytics event change is introduced.
+
+## Historical matched performance evidence
+
+Debug component/rendering rows are earlier staged checkpoints. The Release table
+below uses the final implementation, including durable import chunks and observed
+snapshot-record reuse, against the original portable baseline workloads. These are
+scoped improvements, not complete Live acceptance. Medians are milliseconds unless noted.
+
+| Historical Debug component | Baseline | Candidate | Reduction |
 | --- | ---: | ---: | ---: |
-| Live projection: 300 events, 1,000 own + 1,000 list histories, disjoint | 3316.38 | 151.91 | 95.4% |
+| Live projection, 300 events / 1,000 own + 1,000 list histories, disjoint | 3316.38 | 151.91 | 95.4% |
 | Same projection, overlapping identities | 2577.42 | 166.41 | 93.5% |
-| Feed sections: 600 events, 20 reads | 104.58 | 38.16 | 63.5% |
-| Remote visible places: 1,620 rows | 123.72 | 10.68 | 91.4% |
-| Calendar reconciliation: 1,500 omitted rows | 829.24 | 34.82 | 95.8% |
-| Mounted place-profile host: 1,500 saves | 4011.62 | 676.66 | 83.1% |
-| Planned reminders: 1,500 saves, three reads | 6357.02 | 39.85 | 99.4% |
-| Widget publisher: first publication, 1,500 visits | 230.56 | 59.12 | 74.4% |
-| Widget publisher: unchanged repeated publication | 171.95 | 18.11 | 89.5% |
-| Import completion: 1,500 individual row updates in a transaction | 11029.48 | 2289.83 | 79.2% |
-| Legacy snapshot JSON decode + restore: 1,620 saves, five samples | 890.02 | 294.87 | 66.9% |
-| Current snapshot JSON decode + restore, five samples | 222.24 | 219.45 | No material improvement established |
-| Candidate matching: 600 calls, five alternatives each | 1547.14 | 1451.12 | 6.2%; below target |
-| Original individual attributes-plus-visits API workload | 3927.68 | 3976.04 | No improvement |
+| Feed sections, 600 events / 20 reads | 104.58 | 38.16 | 63.5% |
+| Remote visibility, 1,620 rows | 123.72 | 10.68 | 91.4% |
+| Calendar reconciliation, 1,500 omitted rows | 829.24 | 34.82 | 95.8% |
+| Planned reminders, 1,500 saves / three reads | 6357.02 | 39.85 | 99.4% |
+| Legacy JSON decode + restore, 1,620 saves | 890.02 | 294.87 | 66.9% |
+| Candidate matching, 600 calls | 1547.14 | 1451.12 | 6.2%; below target |
+| Mounted 300-pin initial mount | 311.195 | 108.049 | 65.3% |
+| Mounted pins, six density redraws | 969.305 | 441.906 | 54.4% |
+| Mounted pins, process CPU | 369.704 | 312.092 | 15.6%; below target |
+| Older timestamps, 1,200 calls | 82.851 | 1.709 | 97.9% |
 
-The mounted-profile measurement includes real SwiftUI/UIKit view hosting and
-layout, not network fetches or an end-to-end user tap. Widget timing includes
-the store projection, disk snapshot save/load, and reload request, not widget
-extension rendering. All 1,500 canonical visits are asserted: 500 in each month.
-Restore timing includes JSON decoding and model reconstruction, not disk read,
-authentication, the splash screen, or complete cold launch.
-
-Native-map coordinator preparation for 30 unchanged updates with 1,000 pins
-fell from 216.07 ms to 0.10654 ms (five samples, 99.95%). This verifies stable
-annotation identity but does not mount annotation views or measure frame rate.
-The same-process bulk-attribute comparison measured 1978.58 ms for individual
-reads versus 9.49 ms for the bulk API (99.5%); this is evidence for migrated
-consumers, not a speedup of unchanged selectors. Bulk completion itself measured
-2.23 ms for 1,500 rows; it excludes the save/list/receipt work below.
-
-## Actual import coordinator and durable scheduling
-
-The coordinator benchmark exercises duplicate detection, real local saves,
-optional list memberships, receipts, notification policy, and immutable store
-snapshots. It starts with 100 existing saves and 20 overlaps, and checks final
-counts, order, memberships, silent policies, and one coalesced save per store.
-Fixture creation, network resolution, JSON encoding, and disk I/O are excluded
-from this coordinator benchmark; file-backed scheduling is measured separately.
-
-| Workload | Baseline | v4 | Status |
-| --- | ---: | ---: | --- |
-| Actual autosave coordinator, 500 resolved Wanna rows with list | 49.07 s | 5.54 s | 88.7% faster; still a visible synchronous pause |
-| Actual autosave coordinator, 1,500 rows with list | No completed matching-main baseline | 39.64 s | Historical v4 diagnostic; final Debug result below |
-| Actual autosave coordinator, 1,500 rows without list | Diagnostic | 27.26 s | Historical v4 diagnostic; final Debug result below |
-| 18 uneven Google lookups, completion | 573.67 ms | 224.66 ms | 60.8% faster |
-| Same lookup workload, first ready result | 192.68 ms | 15.30 ms | 92.1% faster |
-| File-backed 1,500-row snapshot, 18 uneven lookups | 831.31 ms | 601.32 ms | 27.7%; superseded by focused v5 below |
-
-The final candidate Debug coordinator measured **31.970 seconds for 1,500 rows
-with a destination list** and **19.599 seconds without a list**. There is no
-completed matching-main baseline for these final large-import workloads, so no
-paired improvement percentage is claimed. These remain substantial synchronous
-main-actor pauses and are not comparable to the 500-row optimized Release result.
-
-The scheduler uses deterministic 10/180 ms resolver latency. The file-backed
-test includes production JSON encoding and atomic checkpoints, records write
-count and main-actor heartbeat gaps, and reloads the resulting file. Its result
-cannot be inferred from the faster in-memory scheduler. Oversized fallback
-tests verify persisted wave state, source naming/order, pause/delete/retry
-fencing, threshold transitions, and recovery to rolling scheduling.
-
-## Focused v5 Debug results
-
-These measurements include the v5 production changes and PostHog 3.68.3, before
-the subsequent rendering work.
-The focused gate passed 86 tests with no failures or skips, before the subsequent
-fixture-only auth alignment. This does not replace the final unit and UI gates.
-
-| Workload | Debug baseline | Focused v5 | Reduction |
+| Final Release workload | Baseline | Candidate | Reduction |
 | --- | ---: | ---: | ---: |
-| Actual autosave coordinator: 500 resolved Wanna rows with list | 49.07 s | 4.704 s | 90.4% |
-| File-backed 1,500-row snapshot, 18 uneven lookups: completion | 831.31 ms | 363.13 ms | 56.3% |
-| Actual SDK: 20,000 layout callbacks, enqueue CPU only | 38.155 ms | 6.411 ms | 83.2% |
+| 500-row autosave + list, excluding disk I/O | 44013.18 | 2783.46 | 93.7% |
+| File-backed 1,500-row snapshot / 18 uneven resolver requests | 802.87 | 262.03 | 67.4% |
+| Same resolver workload, first ready | 217.00 | 39.31 | 81.9% |
+| Mounted profile, 1,500 saves | 3604.69 | 561.37 | 84.4% |
+| Widget publication, 1,500 visits | 145.16 | 39.03 | 73.1% |
+| Unchanged repeated widget publication | 115.25 | 15.41 | 86.6% |
+| SDK callbacks, 20,000 enqueues only | 37.905 | 1.334 | 96.5% |
 
-The file-backed shortfall observed in v4 is resolved for this workload. First
-ready was 48.05 ms; the complete 1,217,042-byte snapshot was preserved across
-20 writes. Persistence time was 221.44 ms; maximum main-actor heartbeat gaps
-were 65.47 / 32.45 / 33.02 ms across the three samples. These still measure real
-atomic file writes, not an ephemeral persistence substitute.
+Release used standard optimization with `ENABLE_TESTABILITY=YES` and a unit-only
+benchmark scheme: six selected cases on baseline and eleven on the final candidate,
+including the common workloads plus candidate durability/stress diagnostics. It was
+not a full Release test suite. Both revisions ran arm64 on the same destination.
+The profile includes mounted UIKit/SwiftUI layout; widget timing includes
+publication/disk/reload requests, not extension rendering. Current 1,500-row
+coordinator medians excluding actual file I/O were 24.991 seconds with a list and
+18.899 seconds without; there is no matching baseline for those sizes.
 
-The same-process exact-text check measured 65.703 ms for the reference byte
-comparison versus 1.963 ms for the optimized comparison over 15,000 calls
-(97.0%). Row encoding for 1,500 items measured 28.866 ms cold and 8.519 ms warm.
-Those component timings do not replace the complete file-scheduler result.
-The 500-row coordinator still blocks for seconds, and the 1,500-row coordinator
-and no-list diagnostic have not yet been remeasured after the streak change.
+Historical complete Live gestures remained below target: Feed CPU 3.251→3.258 s
+and map pan/zoom CPU 9.148→9.133 s showed no material improvement. The matched real
+600-event Feed performs 180 native scroll frames: no-replay layout 567.716→401.689 ms
+(29.2% less), replay layout 155.988→84.736 ms (45.7% less), with elapsed time near
+three seconds on both builds. That frame floor is not a 50% interaction gain.
 
-## Actual UI and SDK replay evidence
+The separate synthetic 200-masked-row SDK fixture exposed growing baseline work.
+Final Release elapsed median fell 25.389→3.798 s (85.0%) and layout
+18.488→0.477 s (97.4%). Actual native draws and decoded fixture images were required.
+**The real Feed did not reproduce that pathology.** One historical Feed sample
+needed 4.864 seconds of encoder drain after timed scrolling. Callback enqueue
+measurements exclude worker drain; encoded-frame counts are not FPS. The current
+four fresh-host replay proofs passed with capture/privacy assertions retained.
 
-Matched Live UI v4 passed all six tests per build: three fixture unit tests and
-three actual Live UI tests, using 300 map places and 600 feed events. These
-values supersede the earlier provisional UI measurements:
+## Reproduction and remaining gate
 
-| Actual Live UI workload | Baseline | Candidate v4 | Result |
-| --- | ---: | ---: | --- |
-| Launch to Live ready | 16,802.68 ms | 11,980.25 ms | 28.7% faster; below target |
-| XCTest native application launch | 6.183 s | 4.136 s | 33.1% faster; below target |
-| Drawer expansion | 4589.11 ms | 4472.47 ms | 2.5% faster; below target |
-| Feed swipes: CPU / wall time | 3.251 s / 12.690 s | 3.258 s / 12.702 s | No material improvement |
-| Native pan and zoom: CPU / wall time | 9.148 s / 13.648 s | 9.133 s / 13.316 s | CPU unchanged; wall 2.4% faster |
+Use identical portable benchmark sources, fixture/auth identities, sample order,
+and simulator destination for baseline and candidate. Xcode 26.6 / iOS 26.5
+Simulator supplied these measurements. Run serially with no competing builds,
+separate derived data per revision, and `-parallel-testing-enabled NO`.
+After XcodeGen generation, focused import selection is
+`-only-testing:WanderTests/ImportAutoSaveFileResponsivenessTests` on scheme `Wander`.
+Keep candidate-only checkpoint/context tests separate from the baseline checkout.
 
-In the baseline, pan moved the measured anchors 30 points; zoom reduced actual camera distance
-from 33,683.956 m to 21,454.972 m. The drawer remained collapsed, and exact
-preview activity plus profile/back assertions passed. The paired harness aligns
-fixture/auth identities and reads live camera metadata from native pin nodes.
-Both builds retained the functional journey. **The 50% actual Live latency
-target has not been reached.** Simulator hitch metrics were unavailable; no FPS
-or hitch-rate improvement is claimed. UI wall time includes event injection,
-idle waits and accessibility queries; the application CPU figures also showed
-no material gesture improvement. Earlier incomplete map runs remain excluded.
+Required fresh-process replay suites are `replay-private`, `replay-credentials`,
+`replay-feed`, and `replay-masked-scroll` through `scripts/run-parent-regression.py`.
+Explicit fixture-host requests must pass admission before constructing fictional
+views; offline transport, production capture settings, decoded-frame proof, and
+privacy/OCR checks remain. Diagnostic image capture is opt-in and excluded from
+comparable timings. No assertions, masking, sampling, or capture fidelity were relaxed.
 
-To separate rendering work from those harness costs, a portable benchmark
-mounts the real embedded FeedScreen in a 393×852 host with all 600 events and
-ordinary cards/photos. Each sample performs 180 native UIScrollView offset steps
-on CADisplayLink frames, with no AX or store sampling inside the timed callback.
-Both builds retain 179 moving frames, the −62 to 5,698-point range, and every
-event/group identity in its original order.
+Before acceptance: verify final-head CI and obtain a usable native connection for
+the approved physical comparison across launch/auth/bootstrap, large Feed/map
+journeys, profile entry, and imports. No physical timing is available yet.
+Attribute any remaining critical path before
+claiming the requested ≥50% real Live improvement. Atomic-write tests do not
+simulate power loss beyond the platform's atomic file-write contract.
 
-The final matched class runs **no replay, then real replay** in the same order
-on both builds, with three samples per workload. These medians supersede the
-initial separate no-replay and replay-only measurements:
-
-| Mounted real Feed workload | Baseline ms | Candidate v10 ms | Result |
-| --- | ---: | ---: | --- |
-| No replay: elapsed | 3019.665 | 3023.292 | No improvement |
-| No replay: synchronous layout | 567.716 | 401.689 | 29.2% less work; below target |
-| Actual replay: elapsed | 3061.437 | 3106.743 | No improvement |
-| Actual replay: synchronous layout | 155.988 | 84.736 | 45.7% less work; below target |
-
-At 60 Hz, 180 scheduled frames impose an approximately three-second elapsed
-floor. Layout measures synchronous offset/layout work; elapsed and tick gaps
-also include work between callbacks. Reaching that floor does not establish a
-50% gesture improvement. The matched Feed measurements remain below target.
-
-The v8 actual UI measurements also remain below target:
-
-| Live UI workload | Candidate v8 | Interpretation versus matched baseline |
-| --- | ---: | --- |
-| Launch to Live ready | 11,819.75 ms | 29.7% faster |
-| Native application launch | 4.099 s | 33.7% faster |
-| Drawer expansion | 4534.90 ms | 1.2% faster |
-| Feed swipes: CPU / wall | 3.079 s / 12.960 s | No 50% improvement |
-| Native pan/zoom: CPU / wall | 9.873 s / 13.874 s | No improvement |
-
-The 1,200-call older activity timestamp component measured 1.709 ms versus
-82.851 ms (97.9% less work), without establishing the required Live improvement.
-After the pixel/transition fixes, the v10 mounted-pin benchmark is accepted:
-
-| Mounted 300-pin workload | Baseline ms | Candidate v10 ms | Reduction |
-| --- | ---: | ---: | ---: |
-| Initial mount | 311.195 | 108.049 | 65.3% |
-| Six density redraws | 969.305 | 441.906 | 54.4% |
-| Process CPU | 369.704 | 312.092 | 15.6% |
-
-These measure mounted component work, not an equivalent reduction in complete
-map-gesture CPU or physical-device frame rate. Failed intermediate compact-pin
-results are superseded by the passing v10 gate and are not acceptance evidence.
-
-The paired Feed replay variant uses the actual SDK (baseline 3.61.0, candidate
-3.68.3), production one-second capture cadence, and an entirely offline collector.
-Successful native draws and decoded fixture-window images are required in every
-sample; raw events/frames are never retained or transmitted. Baseline samples
-recorded 3 / 3 / 4 native draws and candidate samples 3 / 3 / 3, with one decoded
-image delivered per sample on each build. Candidate sample 1 needed **4.864 s
-of encoder drain after the timed scroll**; this is an explicit additional wait,
-not included in the elapsed/layout medians or hidden as a performance win.
-
-**The real 600-event Feed did not reproduce the pathological growth of the
-synthetic 200 masked-row SDK fixture below.** That fixture proves the SDK defect
-and its improvement under those inputs; it does not establish that replay caused
-the reported Live lag or that the SDK update yields the same Live speedup.
-Cross-workload layout differences do not establish that enabling replay makes
-Feed faster. The original overall 50% Live acceptance remains unmet.
-
-The actual PostHog 3.61.0 throttle benchmark measured 38.155 ms median for 20,000
-layout callbacks (five samples). This is callback enqueue CPU only, not replay
-capture or encoding. The separate valid masked-scroll baseline mounts 200
-SwiftUI rows and drives 180 native scroll steps per sample at the production
-one-second capture cadence:
-
-| Baseline replay sample | Elapsed s | Layout s | Maximum tick gap ms | Encoded native frames |
-| --- | ---: | ---: | ---: | ---: |
-| 1 | 21.765 | 7.552 | 296 | 20 |
-| 2 | 34.280 | 18.773 | 403 | 32 |
-| 3 | 57.998 | 36.549 | 1332 | 50 |
-
-These sequential samples expose growing work; reporting only a favorable
-callback microbenchmark would miss it. Real successful native draws and decoded
-SDK images are required for every sample. Image-encoding drain is checked after
-freezing scroll timings. The focused v5 SDK 3.68.3 results are:
-
-| Focused v5 replay sample | Elapsed ms | Layout ms | Maximum tick gap ms | Native / encoded frames |
-| --- | ---: | ---: | ---: | ---: |
-| 1 | 3707.90 | 379.72 | 55.485 | 4 / 3 |
-| 2 | 3618.08 | 324.28 | 53.735 | 3 / 4 |
-| 3 | 3644.47 | 338.49 | 54.662 | 4 / 3 |
-
-Median elapsed time fell from 34.280 s to 3.644 s (89.4%); median layout time
-fell from 18.773 s to 0.338 s (98.2%). The included privacy/OCR screenshot gate
-passed. Capture cadence and resolution remain unchanged. Individual native
-draws were approximately 27–49 ms versus 23–28 ms before, so this is a reduction
-in repeated aggregate work and long gaps, not a claim that every draw is faster.
-Encoding is asynchronous, so a frame may arrive in the following sample; each
-sample still requires native draws and encoded-image delivery. Frame counts
-are not rendering FPS. The full native gate and focused corrections are reported
-above; remaining validation is incomplete. The final matched optimized Release
-results follow.
-
-## Matched optimized Release results
-
-All six selected benchmarks passed on baseline and the final production candidate
-using standard **Release** with `ENABLE_TESTABILITY=YES`, with zero failures or
-skips. The final candidate result supersedes the earlier pre-rendering candidate
-measurements; subsequent changes are confined to Debug fixtures and tests. These
-scoped optimized workloads supplement the Debug evidence and do not establish
-real Live acceptance. Times are median milliseconds.
-
-| Release workload | Baseline ms | Candidate ms | Reduction |
-| --- | ---: | ---: | ---: |
-| Actual autosave coordinator: 500 resolved Wanna rows with list | 44013.18 | 4019.10 | 90.9% |
-| File-backed 1,500-row snapshot, 18 uneven lookups: completion | 802.87 | 263.77 | 67.1% |
-| Same file-backed workload: first ready result | 217.00 | 39.86 | 81.6% |
-| Mounted place-profile host: 1,500 saves | 3604.69 | 529.23 | 85.3% |
-| Widget publisher: first publication, 1,500 visits | 145.16 | 42.90 | 70.4% |
-| Widget publisher: unchanged repeated publication | 115.25 | 14.61 | 87.3% |
-| Actual SDK: 20,000 layout callbacks, enqueue CPU only | 37.905 | 2.003 | 94.7% |
-
-The candidate file-backed workload preserved the full 1,217,042-byte snapshot
-across 20 rolling checkpoints, compared with seven baseline wave checkpoints.
-Final persistence time was 55.37 / 56.47 / 58.10 ms; maximum main-actor heartbeat
-gaps were 61.55 / 26.43 / 25.15 ms. The 500-row coordinator still takes 4.02 seconds
-of synchronous work. The final 1,500-row Debug coordinator measured 31.970 s
-with a list / 19.599 s without a list, without a completed matching-main baseline;
-those different configuration/workload results are not a Release speedup claim.
-
-The actual SDK masked-scroll benchmark passed with successful native captures
-and encoded images in every sample, retaining the production one-second cadence:
-
-| Release replay build / sample | Elapsed ms | Layout ms | Maximum tick gap ms | Native / encoded frames |
-| --- | ---: | ---: | ---: | ---: |
-| SDK 3.61.0 / 1 | 13733.22 | 7448.00 | 196.438 | 13 / 13 |
-| SDK 3.61.0 / 2 | 25388.56 | 18488.47 | 318.746 | 24 / 24 |
-| SDK 3.61.0 / 3 | 45702.88 | 36127.10 | 983.386 | 42 / 41 |
-| SDK 3.68.3 / 1 | 3665.62 | 503.56 | 56.937 | 3 / 3 |
-| SDK 3.68.3 / 2 | 3679.98 | 468.04 | 55.867 | 4 / 4 |
-| SDK 3.68.3 / 3 | 3692.07 | 500.75 | 59.470 | 4 / 4 |
-
-Final median elapsed time fell 85.5%, from 25.389 s to 3.680 s; median layout
-time fell 97.3%, from 18.488 s to 0.501 s. Faster completion produces fewer captures
-at the unchanged cadence. Frame counts are not rendering FPS, and neither this
-fixture nor callback timing measures physical-device interaction latency.
-
-This was a temporary unit-only scheme compiling the self-contained benchmark
-test sources. Unselected unit-test sources were excluded because some existing
-tests require Debug-only helpers; production app sources retained the standard
-Release configuration. This is a six-benchmark gate, not a full Release unit
-suite. The full Debug unit target remains a separate gate alongside the
-enumerated relevant UI checks.
-The baseline built universal simulator architectures; the paired candidate
-adds `ONLY_ACTIVE_ARCH=YES`. Both run the arm64 simulator binary on the same
-destination, with identical selected benchmark sources.
-
-Earlier setup failures are excluded: globally forcing `SWIFT_OPTIMIZATION_LEVEL=-O`
-into Debug hit a Swift 6.3.3 IRGen compiler crash in existing IssueReporting
-`_recordIssue`; the first ordinary Release attempt failed UI-test concurrency
-compilation, and an all-unit Release attempt encountered Debug-only helpers.
-None reached the selected benchmarks, and none is recorded as an app test
-failure or a successful performance run.
-
-## Validation, exclusions, and remaining gate
-
-- Full native gate: 3,438 tests (3,413 unit + 25 UI), 3,433 passes and five
-  failures. Two unit failures were stale source contracts; three were UI cases.
-  The source contracts were corrected and passed in the handoff focused gate.
-- Handoff focused gate: 165 passes and two pagination UI timeouts. All manual
-  fixture regressions and corrected drawer stress passed; all three original
-  UI failures reproduced on unchanged baseline. Automatic pagination later
-  passed, followed by the final manual gate: eight passes, zero failures/skips.
-  The manual fixture accepts viewport polygons; real UI selection of Past
-  24 hours exercises older/all stages, and a final-page wait uses the existing
-  15-second bound. Original card/count/deduplication/error checks remain.
-  All five original failures have now passed focused checks. These closures
-  are not a single fully green rerun of the complete native gate.
-- Final-head CI remains pending; no green-CI claim is made. On initial commit
-  `385a6eacc0`, the [location workflow](https://github.com/joelipshutz/wander/actions/runs/41036783960)
-  passed five units but failed the large-phone foreground-location UI wait;
-  the same UI check passed on the smaller phone. The failure capture and final
-  accessibility tree show the Seattle location dot inside the exposed map, but
-  do not establish when it satisfied the 25-second wait. The cause remains
-  unresolved; no production change or timeout relaxation was made for it.
-- Earlier native checkpoints: v4 passed all 3,370 unit tests; focused v5 passed
-  86 tests, zero failures/skips, including actual SDK capture and privacy/OCR.
-  These checkpoints do not substitute for the remaining gates.
-- Final optimized Release gate: six selected benchmarks passed on both baseline
-  and final production candidate, zero failures/skips, with the scope above.
-- Final AstirClip gate: all 33 tests passed, zero failures/skips.
-- Compact UI gate: both checks passed on iPhone SE (3rd generation), iOS 26.5:
-  collapsed drawer actions and native zoom preserving full-pin/dense-dot colors.
-- Matched Live UI v4: all six tests passed on both builds, comprising three
-  fixture unit tests and three Live UI tests. Pan, zoom, drawer, preview and
-  profile behavior passed, but the measured improvements remain below target.
-- Render-v10: all 29 tests passed, zero failures/skips, including corrected
-  native pixel/transition tests and mounted component benchmarks. Earlier failed
-  intermediate rendering measurements are superseded by that passing gate.
-  Later small-screen UI checks also passed as recorded above.
-- Final paired mounted Feed class: both builds ran no replay then replay with
-  identical sources/order, all 600 events, movement checks, and native/decoded
-  frame gates retained. Neither workload reached the 50% target; the real Feed
-  did not reproduce the separate synthetic masked-row slowdown.
-- Analytics checks passed using the bundled Node runtime: dashboard `--check`
-  plus 12 tests. `npm` was unavailable; an `npm` invocation is not reported as a
-  pass. There are no new product event names or properties in this change.
-- Regression coverage includes alias collisions, first/last winner ordering,
-  direct mutable-model changes, account/block boundaries, exact lease expiry,
-  future event/timezone/month edges, tombstones, list alias bridges, recovery
-  ledgers/events, full persistence schema, Unicode/signed-zero fidelity, atomic
-  write failure and retry, and cancellation/replacement-run ownership.
-- Excluded attempts: an unmounted profile harness; a later profile host missing
-  an environment object; the widget fixture that produced only 250 visits per
-  month despite intending 500; unsettled map gesture/selection runs; the map v11
-  preview failure from mismatched fixture/auth identities; and the later
-  five-pass/one-fail baseline UI run where the map container did not export its
-  camera accessibility value. The passing paired harness now reads camera
-  metadata from native pin nodes. These prior attempts
-  are invalid measurements or harness failures, not passing performance results.
-  The corrected widget baseline is the canonical 1,500-visit workload above.
-- Remaining gate requires final-head CI, complete native validation after further
-  changes as applicable, and a physical-device run on the reported iPhone/iOS
-  combination or a documented comparable
-  device. Include cold launch/auth/bootstrap, large map/feed gestures, profile
-  entry, and large import completion under real disk/network conditions before
-  claiming the reported experience is fixed everywhere. The next acceptance
-  step is profiling the matching physical device and representative user data
-  to identify the remaining launch/feed/map critical path. Further isolated
-  micro-optimizations without that attribution cannot establish the missing
-  50% Live improvement.
-
-## Reproduction and evidence storage
-
-Checked-in tests create fictional data and assert identities, ordering, counts,
-and durability alongside timing. Run identical baseline-compatible performance
-sources on `2bb08f8e47`; keep candidate-only API tests separate. The Live fixture
-helper/UI tests and offline SDK fixtures must be identical in paired builds.
-SDK comparisons must verify the linked version and preserve capture cadence,
-resolution, masking, and sampling.
-
-Regenerate with XcodeGen, then run native builds/tests serially on the same
-simulator destination with `-parallel-testing-enabled NO`, separate derived data
-per revision, and no competing builds. Preserve the warm-up/sample rules in each
-test. Result bundles, screenshots, and replay captures remain outside Git;
-this report retains aggregate measurements and explicit exclusions only.
-
-The isolated worktree project was opened in Xcode, and Branch Chooser was
-verified as `codex/rec-675-app-performance`. This local handoff does not change
-the unmet performance acceptance target or pending final-head CI.
+Raw traces, result bundles, screenshots, and replay captures stay outside Git in
+the issue evidence directory. This report keeps aggregate results and exclusions:
+unmounted/misconfigured profile fixtures, incomplete widget counts, and unsettled
+map/identity harness attempts are not accepted measurements. The worktree project
+was opened in Xcode and its branch verified; this does not change draft status.

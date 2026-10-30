@@ -54,6 +54,9 @@ final class PostHogReplayPerformanceTests: XCTestCase {
 
     @MainActor
     func testPerformanceActualReplayMaskedScroll() async throws {
+        #if DEBUG && targetEnvironment(simulator)
+        guard await admitReplayFixtureHostIfRequested() else { return }
+        #endif
         var foregroundScene: UIWindowScene?
         for _ in 0..<100 {
             foregroundScene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }

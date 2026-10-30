@@ -1056,8 +1056,7 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private func destinationList(for batch: PlaceImportBatch) -> LocalPlaceList? {
         guard batch.source == .googleMaps, let sourceListName = batch.sourceListName else { return nil }
-        if let listID = batch.destinationListID,
-           let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
+        if let existing = store.existingImportDestinationList(for: batch) {
             return existing
         }
         let existingNames = Set(

@@ -6,6 +6,7 @@ struct PlaceImportAutoSaveResult: Equatable {
     let existingCount: Int
     let needsReviewCount: Int
     let sourceRetryCount: Int
+    var retryBatchIDs: [String] = []
 
     var savedCount: Int { addedCount + existingCount }
     var hasResult: Bool { savedCount > 0 || needsReviewCount > 0 || sourceRetryCount > 0 }
@@ -119,14 +120,16 @@ enum PlaceImportAutoSaveCoordinator {
         importStore: PlaceImportStore,
         store: WanderStore,
         expectedUserID: String,
+        chunkPolicy: PlaceImportAutoSaveChunkPolicy = .init(),
+        afterLibraryCheckpoint: (@MainActor () throws -> Void)? = nil,
+        betweenChunks: (@MainActor () async -> Void)? = nil,
         isAuthorized: @MainActor () -> Bool
     ) async -> PlaceImportAutoSaveResult {
         let orderedIDs = Array(Set(batchIDs)).sorted { lhs, rhs in
             let lhsDate = importStore.batches.first(where: { $0.id == lhs })?.createdAt ?? .distantPast
             let rhsDate = importStore.batches.first(where: { $0.id == rhs })?.createdAt ?? .distantPast
-            return lhsDate < rhsDate
+            return lhsDate == rhsDate ? lhs < rhs : lhsDate < rhsDate
         }
-
         for batchID in orderedIDs {
             guard canContinue(expectedUserID: expectedUserID, store: store, isAuthorized: isAuthorized) else {
                 return emptyResult
@@ -136,163 +139,250 @@ enum PlaceImportAutoSaveCoordinator {
         guard canContinue(expectedUserID: expectedUserID, store: store, isAuthorized: isAuthorized) else {
             return emptyResult
         }
+        guard let projectionContext = store.makeAutomaticImportProjectionContext(ownerUserID: expectedUserID) else {
+            return emptyResult
+        }
+        defer { projectionContext.finish() }
 
-        return store.performBatchedImportMutations {
-            importStore.performBatchedMutations {
-                let visiblePlaces = store.currentUserVisiblePlaces
-                let visiblePlacesByUserPlaceID = visiblePlaces.reduce(
-                    into: [String: VisiblePlace]()
-                ) { result, visiblePlace in
-                    result[visiblePlace.userPlace.id] = visiblePlace
+        var leases: [String: PlaceImportAutoSaveLease] = [:]
+        for batchID in orderedIDs {
+            leases[batchID] = importStore.beginAutomaticSaveLease(batchID: batchID, ownerUserID: expectedUserID)
+        }
+        defer { for lease in leases.values { importStore.endAutomaticSaveLease(lease) } }
+        func owns(_ lease: PlaceImportAutoSaveLease) -> Bool {
+            canContinue(expectedUserID: expectedUserID, store: store, isAuthorized: isAuthorized)
+                && importStore.ownsAutomaticSaveLease(lease)
+        }
+        var completedBatchIDs: [String] = []
+        func result() -> PlaceImportAutoSaveResult {
+            let receipts = completedBatchIDs.compactMap { id in
+                importStore.batches.first { $0.id == id }?.receipt
+            }
+            let retryIDs = canContinue(expectedUserID: expectedUserID, store: store, isAuthorized: isAuthorized)
+                ? orderedIDs.filter { id in
+                    leases[id].map { importStore.canRetryAutomaticSave(after: $0) } == true
+                } : []
+            return PlaceImportAutoSaveResult(batchIDs: completedBatchIDs,
+                addedCount: receipts.reduce(0) { $0 + $1.addedCount },
+                existingCount: receipts.reduce(0) { $0 + $1.existingCount },
+                needsReviewCount: receipts.reduce(0) { $0 + $1.needsReviewCount },
+                sourceRetryCount: receipts.reduce(0) { $0 + $1.sourceRetryCount },
+                retryBatchIDs: retryIDs)
+        }
+
+        // A previous library write may have succeeded while its import-file
+        // projection failed. Confirm the exact library snapshot before replay.
+        let recoveries = orderedIDs.compactMap { batchID -> PlaceImportAutoSaveCheckpoint? in
+            guard let lease = leases[batchID], owns(lease),
+                  let batch = importStore.batches.first(where: { $0.id == batchID }),
+                  let checkpoint = store.automaticImportCheckpoint(ownerUserID: expectedUserID, batchID: batchID),
+                  checkpoint.belongs(to: batch, ownerUserID: expectedUserID) else { return nil }
+            return checkpoint
+        }
+        if !recoveries.isEmpty {
+            do { try await store.commitAutomaticImportCheckpointDurablyAsync() }
+            catch {
+                if recoveries.contains(where: { checkpoint in
+                    leases[checkpoint.batchID].map(owns) == true
+                }) {
+                    importStore.reportAutomaticSaveCheckpointFailure()
                 }
-                importStore.reconcileDuplicates(
-                    with: existingPlaces(from: visiblePlaces)
-                )
-                let batchItems = orderedIDs.compactMap { batchID -> (batch: PlaceImportBatch, items: [PlaceImportItem])? in
-                    guard let batch = importStore.batches.first(where: { $0.id == batchID }) else {
-                        return nil
-                    }
-                    return (batch, importStore.items(for: batchID))
+                return result()
+            }
+            for checkpoint in recoveries {
+                guard let lease = leases[checkpoint.batchID], owns(lease) else { continue }
+                guard importStore.applyAutomaticSaveCheckpoint(checkpoint, lease: lease) else { return result() }
+                if checkpoint.isComplete {
+                    store.retireCompletedAutomaticImportCheckpoint(checkpoint)
+                    completedBatchIDs.append(checkpoint.batchID)
                 }
-                let allCommittableIDs = PlaceImportAutoSavePolicy.committableItemIDs(
-                    batchItems: batchItems
-                )
-
-                var completedBatchIDs: [String] = []
-                var addedCount = 0
-                var existingCount = 0
-                var needsReviewCount = 0
-                var sourceRetryCount = 0
-                var committedUserPlaceIDs = Set<String>()
-
-                for batchID in orderedIDs {
-                    guard let batch = importStore.batches.first(where: { $0.id == batchID }),
-                          batch.shouldSaveAutomatically,
-                          batch.state != .cancelled
-                    else { continue }
-
-                    let items = importStore.items(for: batchID)
-                    let placeItems = items.filter { !$0.isSourceRetry }
-                    let batchSourceRetryCount = items.filter {
-                        $0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
-                    }.count
-                    sourceRetryCount += batchSourceRetryCount
-                    let committableIDs = allCommittableIDs.intersection(Set(placeItems.map(\.id)))
-                    let destination = committableIDs.isEmpty
-                        ? nil
-                        : destinationList(
-                            for: batch,
-                            importStore: importStore,
-                            store: store
-                        )
-                    var entries: [PlaceImportReceiptEntry] = []
-                    var savedUserPlaceIDsByItemID: [String: String] = [:]
-                    if !committableIDs.isEmpty {
-                        // Persist consumption with the save transaction so a
-                        // lost receipt cannot reopen an automatic silent import.
-                        let policy = store.beginImportNotificationCommit(batch, silent: true,
-                            selectedItemIDs: committableIDs)
-                        store.completeImportNotificationCommit(policy)
-                    }
-
-                    store.withBatchedCurrentUserPlaceListInsertions(to: destination, senderNotificationPolicy: .silent) { insertInDestination in
-                        for item in items where committableIDs.contains(item.id) {
-                            guard let candidate = item.selectedCandidate else { continue }
-                            let reconciledExistingSave = item.duplicateUserPlaceID.flatMap {
-                                visiblePlacesByUserPlaceID[$0]
-                            }.map {
-                                ExistingImportSave(
-                                    userPlaceID: $0.userPlace.id,
-                                    status: $0.userPlace.status,
-                                    syncState: $0.userPlace.syncState,
-                                    placeID: $0.place.serverID
-                                )
-                            }
-                            // Use the exact same identity matcher as the save path.
-                            // Reconciliation is UI-oriented and intentionally looser;
-                            // it must never decide whether a prior memory can be deleted.
-                            let existingSave = store.existingImportSave(matching: candidate)
-                                ?? reconciledExistingSave
-                            let upgradesExistingWanna = existingSave?.status == .wannaGo
-                                && batch.requestedStatus == .been
-                            let result: SaveResult
-                            if let existingSave, !upgradesExistingWanna {
-                                // An import never rewrites a pre-existing personal memory.
-                                // It can still add the place to the imported Google list.
-                                result = SaveResult(
-                                    userPlaceID: existingSave.userPlaceID,
-                                    syncState: existingSave.syncState,
-                                    placeID: existingSave.placeID
-                                )
-                            } else {
-                                result = store.saveImportedCandidate(
-                                    candidate,
-                                    status: batch.requestedStatus,
-                                    visibility: .selfOnly,
-                                    note: item.stagedNote,
-                                    sourceType: item.source.addSourceType,
-                                    ratingScore: batch.requestedStatus == .been
-                                        ? (item.stagedRatingScore ?? batch.requestedRatingScore)
-                                        : nil,
-                                    visitedAt: item.stagedVisitedAt ?? .now
-                                )
-                            }
-                            if destination != nil {
-                                _ = insertInDestination(result.userPlaceID)
-                            }
-                            savedUserPlaceIDsByItemID[item.id] = result.userPlaceID
-                            let wasAddedByThisItem = existingSave == nil
-                                && committedUserPlaceIDs.insert(result.userPlaceID).inserted
-                            let outcome: PlaceImportReceiptOutcome = wasAddedByThisItem ? .added : .existing
-                            if outcome == .added { addedCount += 1 } else { existingCount += 1 }
-                            entries.append(
-                                PlaceImportReceiptEntry(
-                                    itemID: item.id,
-                                    displayName: item.displayName,
-                                    displayArea: item.displayArea,
-                                    status: upgradesExistingWanna
-                                        ? .been
-                                        : (existingSave?.status ?? batch.requestedStatus),
-                                    outcome: outcome,
-                                    userPlaceID: result.userPlaceID
-                                )
-                            )
-                        }
-                    }
-                    importStore.markSavedItems(savedUserPlaceIDsByItemID)
-                    let pending = importStore.items(for: batchID).filter {
-                        !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
-                    }
-                    needsReviewCount += pending.count
-                    entries.append(contentsOf: pending.map { item in
-                        PlaceImportReceiptEntry(
-                            itemID: item.id,
-                            displayName: item.displayName,
-                            displayArea: item.displayArea,
-                            status: item.state == .ready ? item.stagedStatus : nil,
-                            outcome: .needsReview,
-                            userPlaceID: item.duplicateUserPlaceID
-                        )
-                    })
-
-                    importStore.recordReceipt(
-                        batchID: batchID,
-                        entries: entries,
-                        destinationListID: destination?.id
-                    )
-                    importStore.markAutomaticSaveCompleted(batchID: batchID)
-                    completedBatchIDs.append(batchID)
-                }
-
-                return PlaceImportAutoSaveResult(
-                    batchIDs: completedBatchIDs,
-                    addedCount: addedCount,
-                    existingCount: existingCount,
-                    needsReviewCount: needsReviewCount,
-                    sourceRetryCount: sourceRetryCount
-                )
             }
         }
+        guard leases.values.contains(where: owns) else { return result() }
+
+        importStore.reconcileDuplicates(with: existingPlaces(from: store.currentUserVisiblePlaces))
+        let batchItems = orderedIDs.compactMap { id -> (batch: PlaceImportBatch, items: [PlaceImportItem])? in
+            guard let lease = leases[id], owns(lease), let batch = importStore.batches.first(where: { $0.id == id }) else { return nil }
+            return (batch, importStore.items(for: id))
+        }
+        let eligibleIDs = PlaceImportAutoSavePolicy.committableItemIDs(batchItems: batchItems)
+        var newPlans: [PlaceImportAutoSaveCheckpoint] = []
+        for pair in batchItems where store.automaticImportCheckpoint(ownerUserID: expectedUserID, batchID: pair.batch.id) == nil {
+            newPlans.append(PlaceImportAutoSaveCheckpoint(ownerUserID: expectedUserID, batch: pair.batch,
+                eligibleItemIDs: pair.items.filter { eligibleIDs.contains($0.id) }.map(\.id), items: pair.items))
+        }
+
+        var committedUserPlaceIDs = Set(recoveries.flatMap(\.completedItems)
+            .filter { $0.entry.outcome == .added }.compactMap(\.entry.userPlaceID))
+        var recordedNewPlans = false
+        for batchID in orderedIDs where !completedBatchIDs.contains(batchID) {
+            guard let lease = leases[batchID], owns(lease),
+                  let initialBatch = importStore.batches.first(where: { $0.id == batchID }),
+                  var checkpoint = store.automaticImportCheckpoint(ownerUserID: expectedUserID, batchID: batchID)
+                    ?? newPlans.first(where: { $0.batchID == batchID }),
+                  checkpoint.belongs(to: initialBatch, ownerUserID: expectedUserID) else { continue }
+            let plannedInputs = Dictionary(checkpoint.plannedItems.map { ($0.itemID, $0) },
+                uniquingKeysWith: { first, _ in first })
+            while owns(lease) {
+                guard let batch = importStore.batches.first(where: { $0.id == batchID }) else { break }
+                let completedIDs = Set(checkpoint.completedItems.map(\.itemID))
+                let overriddenIDs = Set(batch.automaticSaveReceiptOverrideItemIDs ?? [])
+                let plannedIDs = Set(checkpoint.eligibleItemIDs).subtracting(completedIDs).subtracting(overriddenIDs)
+                let manualOverrides = manualSaveOverrides(in: batch, checkpoint: checkpoint)
+                // Inspect only enough matching rows for this chunk plus one
+                // lookahead. Revalidating every remaining seed each time makes
+                // a large import needlessly repeat the same comparisons.
+                let rowLimit = min(chunkPolicy.maximumRows, Int.max - 1) + 1
+                let plannedRows = Array(importStore.items(for: batchID).lazy.filter { item in
+                    plannedIDs.contains(item.id) && isCommittable(item) && plannedInputs[item.id]?.matches(item) == true
+                        && !manualOverrides.contains { adjustment in
+                            adjustment.selection.status != checkpoint.requestedStatus
+                                && matches(adjustment, candidate: item.selectedCandidate, store: store)
+                        }
+                }.prefix(rowLimit))
+                // A changed batch intent must not replace completed outcomes or
+                // silently apply the old intent to the remaining rows.
+                let changedIntent = checkpoint.requestedStatus != batch.requestedStatus
+                    || checkpoint.requestedRatingScore != batch.requestedRatingScore
+                let changedDestination = batch.automaticSaveDestinationOverrideID.map { selectedID in
+                    guard let plannedID = checkpoint.destinationListID else { return true }
+                    return selectedID != plannedID && !store.visiblePlaceLists.contains { list in
+                        let aliases = [list.id, list.localID, list.serverID]
+                        return aliases.contains(selectedID) && aliases.contains(plannedID)
+                    }
+                } ?? false
+                let lostDestination = checkpoint.destinationListID != nil && !checkpoint.completedItems.isEmpty
+                    && !store.visiblePlaceLists.contains {
+                        [$0.id, $0.localID, $0.serverID].contains(checkpoint.destinationListID)
+                            && store.canAddPlaces(to: $0)
+                    }
+                do {
+                    try await store.performCheckpointedImportMutationsAsync(using: projectionContext) {
+                        // Freeze every capture's original eligibility together
+                        // with the first chunk, including ineligible Been rows.
+                        if !recordedNewPlans {
+                            for plan in newPlans {
+                                if store.automaticImportCheckpoint(ownerUserID: expectedUserID, batchID: plan.batchID) == nil {
+                                    store.recordAutomaticImportCheckpoint(plan)
+                                }
+                            }
+                            recordedNewPlans = true
+                        }
+                        if !changedIntent && !changedDestination && !lostDestination && !plannedRows.isEmpty {
+                            let destination = destinationList(for: batch, checkpoint: checkpoint, store: store)
+                            checkpoint.destinationListID = destination?.id
+                            if checkpoint.completedItems.isEmpty {
+                                let policy = store.beginImportNotificationCommit(batch, silent: true,
+                                    selectedItemIDs: Set(checkpoint.eligibleItemIDs))
+                                store.completeImportNotificationCommit(policy)
+                            }
+                            let started = ProcessInfo.processInfo.systemUptime
+                            var processedRows = 0
+                            store.withBatchedCurrentUserPlaceListInsertions(to: destination,
+                                senderNotificationPolicy: .silent, using: projectionContext) { insert in
+                                for planned in plannedRows {
+                                    guard owns(lease), let item = importStore.item(id: planned.id),
+                                          isCommittable(item), plannedInputs[item.id]?.matches(item) == true,
+                                          let candidate = item.selectedCandidate else { break }
+                                    let matchingOverrides = manualOverrides.filter {
+                                        matches($0, candidate: candidate, store: store)
+                                    }
+                                    guard !matchingOverrides.contains(where: {
+                                        $0.selection.status != checkpoint.requestedStatus
+                                    }) else { continue }
+                                    let existing = store.existingImportSave(matching: candidate)
+                                        ?? item.duplicateUserPlaceID.flatMap { store.existingImportSave(userPlaceID: $0) }
+                                    let upgrades = existing?.status == .wannaGo && batch.requestedStatus == .been
+                                    let saved: SaveResult
+                                    if let existing, !upgrades {
+                                        saved = SaveResult(userPlaceID: existing.userPlaceID,
+                                            syncState: existing.syncState, placeID: existing.placeID)
+                                    } else {
+                                        saved = store.saveImportedCandidate(candidate, status: batch.requestedStatus,
+                                            visibility: .selfOnly, note: item.stagedNote, sourceType: item.source.addSourceType,
+                                            ratingScore: batch.requestedStatus == .been
+                                                ? (item.stagedRatingScore ?? batch.requestedRatingScore) : nil,
+                                            visitedAt: item.stagedVisitedAt ?? .now)
+                                    }
+                                    if let destination, !matchingOverrides.contains(where: {
+                                        $0.selection.listIDs.isDisjoint(with:
+                                            [destination.id, destination.localID, destination.serverID].compactMap { $0 })
+                                    }) { _ = insert(saved.userPlaceID) }
+                                    let wasAdded = existing == nil && committedUserPlaceIDs.insert(saved.userPlaceID).inserted
+                                    let outcome: PlaceImportReceiptOutcome = wasAdded ? .added : .existing
+                                    let entry = PlaceImportReceiptEntry(itemID: item.id, displayName: item.displayName,
+                                        displayArea: item.displayArea,
+                                        status: upgrades ? .been : (existing?.status ?? batch.requestedStatus),
+                                        outcome: outcome, userPlaceID: saved.userPlaceID)
+                                    checkpoint.completedItems.append(PlaceImportAutoSaveCompletedItem(
+                                        item: item, candidate: candidate, entry: entry))
+                                    processedRows += 1
+                                    if processedRows >= chunkPolicy.maximumRows
+                                        || ProcessInfo.processInfo.systemUptime - started >= chunkPolicy.budgetSeconds { break }
+                                }
+                            }
+                        }
+                        let finishedIDs = Set(checkpoint.completedItems.map(\.itemID))
+                        checkpoint.isComplete = changedIntent || changedDestination || lostDestination
+                            || !plannedRows.contains { !finishedIDs.contains($0.id) }
+                        store.recordAutomaticImportCheckpoint(checkpoint)
+                    }
+                    try afterLibraryCheckpoint?()
+                } catch {
+                    if owns(lease) {
+                        importStore.reportAutomaticSaveCheckpointFailure()
+                    }
+                    return result()
+                }
+                // No deferred persistence or lookup/list projection survives the
+                // awaited writer acknowledgement. Every mutable owner is fresh.
+                guard owns(lease) else { return result() }
+                guard importStore.applyAutomaticSaveCheckpoint(checkpoint, lease: lease) else { return result() }
+                if checkpoint.isComplete {
+                    store.retireCompletedAutomaticImportCheckpoint(checkpoint)
+                    completedBatchIDs.append(batchID)
+                    break
+                }
+                if let betweenChunks { await betweenChunks() } else { await Task.yield() }
+            }
+            if let betweenChunks { await betweenChunks() } else { await Task.yield() }
+        }
+        return result()
+    }
+
+    private static func isCommittable(_ item: PlaceImportItem) -> Bool {
+        !item.isSourceRetry && item.isSelectedForImport && item.selectedCandidate != nil
+            && (item.state == .ready || (item.state == .duplicate && item.duplicateUserPlaceID != nil))
+    }
+
+    private struct ManualSaveOverride {
+        let originalUserPlaceID: String
+        let currentUserPlaceID: String
+        let selection: PlaceImportSavedSelection
+    }
+
+    private static func manualSaveOverrides(in batch: PlaceImportBatch,
+                                            checkpoint: PlaceImportAutoSaveCheckpoint) -> [ManualSaveOverride] {
+        let overriddenIDs = Set(batch.automaticSaveReceiptOverrideItemIDs ?? [])
+        guard !overriddenIDs.isEmpty else { return [] }
+        let entries = Dictionary(grouping: batch.receipt?.entries ?? [], by: \.itemID)
+        return checkpoint.completedItems.flatMap { completed -> [ManualSaveOverride] in
+            guard overriddenIDs.contains(completed.itemID),
+                  let originalID = completed.entry.userPlaceID else { return [] }
+            return (entries[completed.itemID] ?? []).compactMap { entry in
+                guard let currentID = entry.userPlaceID, let selection = entry.savedSelection else { return nil }
+                return ManualSaveOverride(originalUserPlaceID: originalID, currentUserPlaceID: currentID,
+                    selection: selection)
+            }
+        }
+    }
+
+    private static func matches(_ adjustment: ManualSaveOverride, candidate: PlaceCandidate?, store: WanderStore) -> Bool {
+        guard let candidate, store.importCandidate(candidate, matchesUserPlaceID: adjustment.originalUserPlaceID) else {
+            return false
+        }
+        return adjustment.currentUserPlaceID == adjustment.originalUserPlaceID
+            || store.importCandidate(candidate, matchesUserPlaceID: adjustment.currentUserPlaceID)
     }
 
     private static var emptyResult: PlaceImportAutoSaveResult {
@@ -335,14 +425,14 @@ enum PlaceImportAutoSaveCoordinator {
 
     private static func destinationList(
         for batch: PlaceImportBatch,
-        importStore: PlaceImportStore,
+        checkpoint: PlaceImportAutoSaveCheckpoint,
         store: WanderStore
     ) -> LocalPlaceList? {
         guard batch.source == .googleMaps,
               let sourceListName = batch.sourceListName
         else { return nil }
-        if let listID = batch.destinationListID,
-           let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
+        if let listID = checkpoint.destinationListID ?? batch.destinationListID,
+           let existing = store.visiblePlaceLists.first(where: { [$0.id, $0.localID, $0.serverID].contains(listID) }) {
             return existing
         }
         let existingNames = Set(
@@ -359,7 +449,6 @@ enum PlaceImportAutoSaveCoordinator {
             description: "Imported from Google Maps",
             visibility: .stealth
         ) else { return nil }
-        importStore.setDestinationListID(list.id, batchID: batch.id)
         return list
     }
 }

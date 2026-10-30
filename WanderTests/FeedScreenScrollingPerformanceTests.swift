@@ -1,4 +1,5 @@
 #if DEBUG && targetEnvironment(simulator)
+import CryptoKit
 import SwiftUI
 import UIKit
 import XCTest
@@ -14,10 +15,15 @@ final class FeedScreenScrollingPerformanceTests: XCTestCase {
     }
 
     func testPerformanceMountedFeedScrollWith600EventsAndActualReplay() async throws {
+        guard await admitReplayFixtureHostIfRequested() else { return }
         try await runMountedFeed(replay: true)
     }
 
     private func runMountedFeed(replay: Bool) async throws {
+        // Opt-in diagnostics copy fictional fixture pixels and therefore are
+        // excluded from comparable performance runs. SDK policy is unchanged.
+        let capturesReplayDiagnostics = replay
+            && ProcessInfo.processInfo.environment["WANDER_REPLAY_DIAGNOSTICS"] == "1"
         let scene = try await foregroundScene()
         let originalWindow = try XCTUnwrap(scene.keyWindow)
         let originalRoot = try XCTUnwrap(originalWindow.rootViewController)
@@ -111,8 +117,12 @@ final class FeedScreenScrollingPerformanceTests: XCTestCase {
 
         // Replay is an additional workload, never a different Feed or scroll
         // driver. Preserve production masking, resolution and one-second cadence.
-        let replayFrames = MountedFeedReplayFrames(windowID: window.hash)
+        let replayFrames = MountedFeedReplayFrames(windowID: window.hash,
+            capturesDiagnostics: capturesReplayDiagnostics)
         let replayWindow = window as? MountedFeedReplayWindow
+        replayWindow?.capturesDiagnostics = capturesReplayDiagnostics
+        replayWindow?.diagnosticScrollView = scroll
+        var attachedReplayDiagnostics = false
         var replaySDK: PostHogSDK?
         defer { replaySDK?.close() }
         if replay {
@@ -163,6 +173,7 @@ final class FeedScreenScrollingPerformanceTests: XCTestCase {
             let firstNativeDraw = replayWindow?.drawDurations.count ?? 0
             let firstSuccessfulDraw = replayWindow?.successfulDraws ?? 0
             let firstEncodedFrame = replayFrames.count
+            replayWindow?.beginDiagnosticSample()
             let driver = MountedFeedScrollDriver(scroll: scroll, window: window)
             let result = await driver.run(frameCount: 180, timeout: replay ? .seconds(120) : .seconds(30))
             XCTAssertFalse(result.timedOut, "The foreground display link must deliver every measured frame.")
@@ -190,12 +201,20 @@ final class FeedScreenScrollingPerformanceTests: XCTestCase {
                       ProcessInfo.processInfo.systemUptime - drainStart < 10 {
                     try await Task.sleep(for: .milliseconds(20))
                 }
-                XCTAssertGreaterThan(replayFrames.count, firstEncodedFrame,
+                let finalEncodedFrame = replayFrames.count
+                let encodingDrainMS = (ProcessInfo.processInfo.systemUptime - drainStart) * 1_000
+                if capturesReplayDiagnostics, !attachedReplayDiagnostics,
+                   finalEncodedFrame <= firstEncodedFrame {
+                    attachedReplayDiagnostics = true
+                    attachReplayDiagnostics(window: replayWindow, frames: replayFrames,
+                        sample: sample, countBefore: firstEncodedFrame, countAfter: finalEncodedFrame)
+                }
+                XCTAssertGreaterThan(finalEncodedFrame, firstEncodedFrame,
                                      "Every scroll sample must deliver a decoded fixture-window SDK image.")
                 record("replay=true sample=\(sample) sdk=\(postHogVersion) "
                     + "native_draws=\(draws.count) successful_native_draws=\(replayWindow.successfulDraws - firstSuccessfulDraw) "
-                    + "native_draw_ms=\(draws) decoded_frames=\(replayFrames.count - firstEncodedFrame) "
-                    + "encoding_drain_ms=\((ProcessInfo.processInfo.systemUptime - drainStart) * 1_000)")
+                    + "native_draw_ms=\(draws) decoded_frames=\(finalEncodedFrame - firstEncodedFrame) "
+                    + "encoding_drain_ms=\(encodingDrainMS)")
             }
             record("replay=\(replay) sample=\(sample) events=600 frames=\(result.frames) host_viewport=393x852 "
                 + "scroll_viewport=\(scroll.bounds.width)x\(scroll.bounds.height) "
@@ -233,6 +252,38 @@ final class FeedScreenScrollingPerformanceTests: XCTestCase {
 
     private func record(_ summary: String) {
         let attachment = XCTAttachment(string: "REC675 mounted_feed_scroll \(summary)")
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func attachReplayDiagnostics(window: MountedFeedReplayWindow, frames: MountedFeedReplayFrames,
+                                         sample: Int, countBefore: Int, countAfter: Int) {
+        let snapshot = frames.diagnosticSnapshot
+        var lines = ["diagnostic_only=true; timings_not_comparable=true; sample=\(sample); decoded_before=\(countBefore); decoded_at_original_deadline=\(countAfter)",
+            "snapshot_events=\(snapshot.snapshotEvents); snapshot_records=\(snapshot.snapshotRecords); metadata_records=\(snapshot.metadataRecords); wireframes=\(snapshot.wireframes); fixture_wireframes=\(snapshot.fixtureWireframes); fixture_base64_frames=\(snapshot.fixtureBase64Frames); data_decode_failures=\(snapshot.dataDecodeFailures); image_decode_failures=\(snapshot.imageDecodeFailures); decoded_frames=\(snapshot.decodedFrames)"]
+        var attachedHashes = Set<String>()
+        func attach(_ image: UIImage?, name: String, detail: String) {
+            guard let image, let data = image.pngData() else {
+                lines.append("\(name): image_unavailable; \(detail)")
+                return
+            }
+            let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            lines.append("\(name): image_size=\(image.size); scale=\(image.scale); png_sha256=\(hash); \(detail)")
+            guard attachedHashes.insert(hash).inserted else { return }
+            let attachment = XCTAttachment(image: image)
+            attachment.name = "REC675 fictional Feed replay diagnostic \(name)"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
+        for (name, frame) in [("native-first", window.firstDiagnosticFrame),
+                              ("native-furthest-offset", window.furthestDiagnosticFrame),
+                              ("native-last", window.lastDiagnosticFrame)] {
+            attach(frame?.image, name: name, detail: "scroll_offset=\(String(describing: frame?.offsetY)); captured_uptime=\(String(describing: frame?.uptime))")
+        }
+        attach(snapshot.firstImage, name: "decoded-first", detail: "encoded_sha256=\(snapshot.firstEncodedHash ?? "none")")
+        attach(snapshot.lastImage, name: "decoded-last", detail: "encoded_sha256=\(snapshot.lastEncodedHash ?? "none")")
+        let attachment = XCTAttachment(string: lines.joined(separator: "\n"))
+        attachment.name = "REC675 fictional Feed replay pipeline diagnostics"
         attachment.lifetime = .keepAlways
         add(attachment)
     }
@@ -345,8 +396,24 @@ private final class MountedFeedScrollDriver: NSObject {
 /// continues to mount UIWindow and uses the identical original scroll driver.
 @MainActor
 private final class MountedFeedReplayWindow: UIWindow {
+    struct DiagnosticFrame {
+        let image: UIImage
+        let offsetY: CGFloat?
+        let uptime: TimeInterval
+    }
     var drawDurations: [Double] = []
     var successfulDraws = 0
+    var capturesDiagnostics = false
+    weak var diagnosticScrollView: UIScrollView?
+    private(set) var firstDiagnosticFrame: DiagnosticFrame?
+    private(set) var lastDiagnosticFrame: DiagnosticFrame?
+    private(set) var furthestDiagnosticFrame: DiagnosticFrame?
+
+    func beginDiagnosticSample() {
+        firstDiagnosticFrame = nil
+        lastDiagnosticFrame = nil
+        furthestDiagnosticFrame = nil
+    }
 
     override func drawHierarchy(in rect: CGRect, afterScreenUpdates afterUpdates: Bool) -> Bool {
         let start = ProcessInfo.processInfo.systemUptime
@@ -354,38 +421,115 @@ private final class MountedFeedReplayWindow: UIWindow {
         if !afterUpdates {
             drawDurations.append((ProcessInfo.processInfo.systemUptime - start) * 1_000)
             if success { successfulDraws += 1 }
+            if capturesDiagnostics, let image = UIGraphicsGetCurrentContext()?.makeImage() {
+                // Read the exact context already drawn by the SDK, without
+                // requesting another render or changing capture/masking policy.
+                let frame = DiagnosticFrame(image: UIImage(cgImage: image, scale: screen.scale, orientation: .up),
+                    offsetY: diagnosticScrollView?.contentOffset.y, uptime: ProcessInfo.processInfo.systemUptime)
+                if firstDiagnosticFrame == nil { firstDiagnosticFrame = frame }
+                lastDiagnosticFrame = frame
+                if furthestDiagnosticFrame == nil
+                    || (frame.offsetY ?? -.greatestFiniteMagnitude) > (furthestDiagnosticFrame?.offsetY ?? -.greatestFiniteMagnitude) {
+                    furthestDiagnosticFrame = frame
+                }
+            }
         }
         return success
     }
 }
 
 /// Counts only decoded images belonging to the isolated synthetic Feed window.
-/// No raw image, encoded frame, or SDK event is retained or attached to results.
+/// Ordinary runs retain no image or SDK event. Explicit diagnostic runs retain
+/// only the first/latest fictional images and aggregate pipeline counters.
 private final class MountedFeedReplayFrames: @unchecked Sendable {
+    struct Diagnostics {
+        var snapshotEvents = 0
+        var snapshotRecords = 0
+        var metadataRecords = 0
+        var wireframes = 0
+        var fixtureWireframes = 0
+        var fixtureBase64Frames = 0
+        var dataDecodeFailures = 0
+        var imageDecodeFailures = 0
+        var decodedFrames = 0
+        var firstImage: UIImage?
+        var lastImage: UIImage?
+        var firstEncodedHash: String?
+        var lastEncodedHash: String?
+    }
     private let windowID: Int
+    private let capturesDiagnostics: Bool
     private let lock = NSLock()
     private var decodedCount = 0
+    private var diagnostics = Diagnostics()
     var count: Int { lock.withLock { decodedCount } }
+    var diagnosticSnapshot: Diagnostics { lock.withLock { diagnostics } }
 
-    init(windowID: Int) { self.windowID = windowID }
+    init(windowID: Int, capturesDiagnostics: Bool = false) {
+        self.windowID = windowID
+        self.capturesDiagnostics = capturesDiagnostics
+    }
 
     func receive(_ event: PostHogEvent) {
         guard event.event == "$snapshot",
               let snapshots = event.properties["$snapshot_data"] as? [[String: Any]] else { return }
         var decoded = 0
+        var observation = Diagnostics()
+        if capturesDiagnostics {
+            observation.snapshotEvents = 1
+            observation.snapshotRecords = snapshots.count
+            observation.metadataRecords = snapshots.filter { $0["type"] as? Int == 4 }.count
+        }
         for snapshot in snapshots {
             guard let data = snapshot["data"] as? [String: Any],
                   let wireframes = data["wireframes"] as? [[String: Any]] else { continue }
             for frame in wireframes {
-                guard frame["id"] as? Int == windowID,
-                      let raw = frame["base64"] as? String,
-                      let imageData = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")),
-                      let image = UIImage(data: imageData),
-                      image.size.width > 0, image.size.height > 0 else { continue }
+                if capturesDiagnostics { observation.wireframes += 1 }
+                guard frame["id"] as? Int == windowID else { continue }
+                if capturesDiagnostics { observation.fixtureWireframes += 1 }
+                guard let raw = frame["base64"] as? String else { continue }
+                if capturesDiagnostics { observation.fixtureBase64Frames += 1 }
+                guard let imageData = Data(base64Encoded: String(raw.split(separator: ",").last ?? "")) else {
+                    if capturesDiagnostics { observation.dataDecodeFailures += 1 }
+                    continue
+                }
+                guard let image = UIImage(data: imageData), image.size.width > 0, image.size.height > 0 else {
+                    if capturesDiagnostics { observation.imageDecodeFailures += 1 }
+                    continue
+                }
                 decoded += 1
+                if capturesDiagnostics {
+                    let hash = SHA256.hash(data: imageData).map { String(format: "%02x", $0) }.joined()
+                    if observation.firstImage == nil { observation.firstImage = image; observation.firstEncodedHash = hash }
+                    observation.lastImage = image
+                    observation.lastEncodedHash = hash
+                }
             }
         }
-        if decoded > 0 { lock.withLock { decodedCount += decoded } }
+        if decoded > 0 || capturesDiagnostics {
+            lock.withLock {
+                decodedCount += decoded
+                if capturesDiagnostics {
+                    diagnostics.snapshotEvents += observation.snapshotEvents
+                    diagnostics.snapshotRecords += observation.snapshotRecords
+                    diagnostics.metadataRecords += observation.metadataRecords
+                    diagnostics.wireframes += observation.wireframes
+                    diagnostics.fixtureWireframes += observation.fixtureWireframes
+                    diagnostics.fixtureBase64Frames += observation.fixtureBase64Frames
+                    diagnostics.dataDecodeFailures += observation.dataDecodeFailures
+                    diagnostics.imageDecodeFailures += observation.imageDecodeFailures
+                    diagnostics.decodedFrames += decoded
+                    if diagnostics.firstImage == nil {
+                        diagnostics.firstImage = observation.firstImage
+                        diagnostics.firstEncodedHash = observation.firstEncodedHash
+                    }
+                    if let image = observation.lastImage {
+                        diagnostics.lastImage = image
+                        diagnostics.lastEncodedHash = observation.lastEncodedHash
+                    }
+                }
+            }
+        }
     }
 }
 

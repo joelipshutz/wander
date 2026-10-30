@@ -9,7 +9,18 @@ on:
       - 'WanderAppClipUITests/**'
       - '.github/workflows/app-clip-validation.yml'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/test_import_performance_routing.py'
+      - 'WanderTests/ImportAutoSaveFileResponsivenessTests.swift'
+      - 'WanderTests/ImportAutoSavePerformanceTests.swift'
+      - 'WanderTests/ImportAutoSaveWithoutListPerformanceTests.swift'
       - 'scripts/test_parent_regression.py'
+      - 'scripts/test_replay_isolation_workflows.py'
+      - 'scripts/record-replay-compiler-flags.py'
+      - 'scripts/test_record_replay_compiler_flags.py'
+      - 'WanderTests/ReplayFixtureHostAdmission.swift'
+      - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderTests/FeedScreenScrollingPerformanceTests.swift'
+      - 'WanderTests/PostHogReplayPerformanceTests.swift'
   workflow_dispatch:
     inputs:
       unpassed_only:
@@ -126,6 +137,37 @@ jobs:
           compression-level: 0
           retention-days: 2
 
+      - name: Build dedicated Replay products
+        if: ${{ !inputs.unpassed_only && !inputs.graphics_only && !inputs.parent_ui_recovery && !inputs.parent_three_case_recovery && !inputs.parent_map_navigation_recovery && !inputs.parent_native_controls_recovery }}
+        run: |
+          test ! -e "$RUNNER_TEMP/ReplayDerivedData"
+          test ! -L "$RUNNER_TEMP/ReplayDerivedData"
+          python3 -B -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          python3 -B -m unittest discover -s scripts -p test_replay_isolation_workflows.py
+          BUILD_DEVICE_ID="$(cat "$RUNNER_TEMP/build-device-id.txt")"
+          xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
+            -destination "platform=iOS Simulator,id=$BUILD_DEVICE_ID" \
+            -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
+            -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
+            -only-testing:WanderTests/ReplayMaskingTests \
+            -only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay \
+            -only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll \
+            CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
+            GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
+          python3 scripts/record-replay-compiler-flags.py \
+            --derived-data "$RUNNER_TEMP/ReplayDerivedData" --test-products "$RUNNER_TEMP/Replay.xctestproducts" \
+            --checkout "$(git rev-parse HEAD)" --output "$RUNNER_TEMP/replay-compiler-flags.json"
+          tar -czf "$RUNNER_TEMP/parent-replay-test-products.tar.gz" -C "$RUNNER_TEMP" \
+            Replay.xctestproducts replay-compiler-flags.json
+      - uses: actions/upload-artifact@v4
+        if: ${{ !inputs.unpassed_only && !inputs.graphics_only && !inputs.parent_ui_recovery && !inputs.parent_three_case_recovery && !inputs.parent_map_navigation_recovery && !inputs.parent_native_controls_recovery }}
+        with:
+          name: parent-replay-test-products
+          path: ${{ runner.temp }}/parent-replay-test-products.tar.gz
+          compression-level: 0
+          retention-days: 2
+
   parent:
     needs: build
     name: ${{ matrix.suite == 'clip' && 'App Clip suite' || format('Parent {0}', matrix.name) }}
@@ -202,6 +244,22 @@ jobs:
           test "$(cat "$RUNNER_TEMP/test-products-commit.txt")" = "$(git rev-parse HEAD)"
           xcodebuild -version > "$RUNNER_TEMP/current-xcode.txt"
           diff -u "$RUNNER_TEMP/test-products-xcode.txt" "$RUNNER_TEMP/current-xcode.txt"
+      - uses: actions/download-artifact@v4
+        if: ${{ matrix.suite == 'unit' }}
+        with:
+          name: parent-replay-test-products
+          path: ${{ runner.temp }}
+      - name: Unpack dedicated Replay products
+        if: ${{ matrix.suite == 'unit' }}
+        run: |
+          tar -xzf "$RUNNER_TEMP/parent-replay-test-products.tar.gz" -C "$RUNNER_TEMP"
+          python3 - <<'PY_REPLAY'
+          import json, os, subprocess
+          from pathlib import Path
+          receipt = json.loads((Path(os.environ['RUNNER_TEMP']) / 'replay-compiler-flags.json').read_text())
+          assert receipt['checkoutCommit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert receipt['observedCFlagsVerified'] is True
+          PY_REPLAY
       # Ad-hoc signing is required for Clerk's Keychain initialization in the
       # real startup path; this uses no Apple distribution identity or secrets.
       # Shared CI keeps full dense-map camera and bounded annotation-work checks.
@@ -260,15 +318,40 @@ jobs:
           command.extend('-only-testing:' + identifier for identifier in selected)
           raise SystemExit(subprocess.run(command, cwd=root, check=False).returncode)
           PY_RECOVERY
+      # Required three-sample stress workloads; ordinary test deadlines stay unchanged.
+      - name: Required 1500-row file import performance
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-file-performance \
+            --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts" \
+            --result-bundle "$RUNNER_TEMP/ImportFilePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-file-performance-selection.json"
+      - name: Required 1500-row automatic import performance
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-performance \
+            --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSavePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-performance-selection.json"
+      - name: Required 1500-row automatic import without list performance
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-no-list-performance \
+            --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSaveWithoutListPerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-no-list-performance-selection.json"
       # Each real-image fixture gets a separate host for process-wide SDK hooks,
       # matching Feed/Privacy. Keep the combined local mode for lifecycle work;
       # this isolation does not establish the cause of a combined CI failure.
-      # Both methods remain required, once each, with their original assertions.
+      # All four methods remain required, once each, with their original assertions.
       - name: Run private replay proof after parent units
         if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
         run: >-
           python3 scripts/run-parent-regression.py --suite replay-private
-          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Replay.xctestproducts"
           --result-bundle "$RUNNER_TEMP/ParentReplayPrivate.xcresult"
           --selection-file "$RUNNER_TEMP/replay-private-selection.json"
           --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayPrivate.host-admission.json"
@@ -276,17 +359,33 @@ jobs:
         if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
         run: >-
           python3 scripts/run-parent-regression.py --suite replay-credentials
-          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Parent.xctestproducts"
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Replay.xctestproducts"
           --result-bundle "$RUNNER_TEMP/ParentReplayCredentials.xcresult"
           --selection-file "$RUNNER_TEMP/replay-credentials-selection.json"
           --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayCredentials.host-admission.json"
+      - name: Run mounted Feed replay proof after parent units
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: >-
+          python3 scripts/run-parent-regression.py --suite replay-feed
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Replay.xctestproducts"
+          --result-bundle "$RUNNER_TEMP/ParentReplayFeed.xcresult"
+          --selection-file "$RUNNER_TEMP/replay-feed-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayFeed.host-admission.json"
+      - name: Run masked scrolling replay proof after parent units
+        if: ${{ (success() || failure()) && matrix.suite == 'unit' }}
+        run: >-
+          python3 scripts/run-parent-regression.py --suite replay-masked-scroll
+          --destination "$TEST_DEVICE_ID" --test-products "$RUNNER_TEMP/Replay.xctestproducts"
+          --result-bundle "$RUNNER_TEMP/ParentReplayMaskedScroll.xcresult"
+          --selection-file "$RUNNER_TEMP/replay-masked-scroll-selection.json"
+          --replay-fixture-host inert --replay-host-receipt "$RUNNER_TEMP/ParentReplayMaskedScroll.host-admission.json"
       - name: Summarize test result
         if: always()
         run: |
           if [ -f "$RUNNER_TEMP/Parent.xcresult/Info.plist" ]; then
             xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/Parent.xcresult" --format json > "$RUNNER_TEMP/parent-summary.json"
           fi
-      - name: Summarize and require both replay proofs
+      - name: Summarize and require all replay proofs
         if: ${{ always() && matrix.suite == 'unit' }}
         run: |
           python3 - <<'PY'
@@ -298,7 +397,9 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           problems = []
           for suite, name in [("replay-private", "ParentReplayPrivate"),
-                              ("replay-credentials", "ParentReplayCredentials")]:
+                              ("replay-credentials", "ParentReplayCredentials"),
+                              ("replay-feed", "ParentReplayFeed"),
+                              ("replay-masked-scroll", "ParentReplayMaskedScroll")]:
               bundle = root / (name + ".xcresult")
               if not (bundle / "Info.plist").is_file():
                   problems.append(suite + ": missing completed result bundle")
@@ -332,6 +433,18 @@ jobs:
           name: app-clip-parent-${{ matrix.suite }}-${{ matrix.shard }}
           path: |
             ${{ runner.temp }}/Parent.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.summary.json
+            ${{ runner.temp }}/ImportFilePerformance.tests.json
+            ${{ runner.temp }}/import-file-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSavePerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.tests.json
+            ${{ runner.temp }}/import-autosave-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.tests.json
+            ${{ runner.temp }}/import-autosave-no-list-performance-selection.json
             ${{ runner.temp }}/parent-summary.json
             ${{ runner.temp }}/test-selection.json
             ${{ runner.temp }}/ParentReplayPrivate.xcresult
@@ -346,4 +459,17 @@ jobs:
             ${{ runner.temp }}/ParentReplayPrivate.host-admission
             ${{ runner.temp }}/ParentReplayCredentials.host-admission.json
             ${{ runner.temp }}/ParentReplayCredentials.host-admission
+            ${{ runner.temp }}/replay-compiler-flags.json
+            ${{ runner.temp }}/ParentReplayFeed.xcresult
+            ${{ runner.temp }}/replay-feed-summary.json
+            ${{ runner.temp }}/replay-feed-tests.json
+            ${{ runner.temp }}/replay-feed-selection.json
+            ${{ runner.temp }}/ParentReplayFeed.host-admission.json
+            ${{ runner.temp }}/ParentReplayFeed.host-admission
+            ${{ runner.temp }}/ParentReplayMaskedScroll.xcresult
+            ${{ runner.temp }}/replay-masked-scroll-summary.json
+            ${{ runner.temp }}/replay-masked-scroll-tests.json
+            ${{ runner.temp }}/replay-masked-scroll-selection.json
+            ${{ runner.temp }}/ParentReplayMaskedScroll.host-admission.json
+            ${{ runner.temp }}/ParentReplayMaskedScroll.host-admission
           retention-days: 14

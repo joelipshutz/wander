@@ -1,5 +1,6 @@
 import XCTest
 import CoreGraphics
+import Combine
 @testable import Wander
 
 @MainActor
@@ -122,6 +123,38 @@ final class LiveMapResultsTests: XCTestCase {
         XCTAssertTrue(repository.requests.allSatisfy { $0.query == self.request().query && $0.audience == .everyone })
         model.revalidate(userID: "viewer", permits: { _ in false })
         XCTAssertTrue(model.activities.isEmpty, "Revoked social access must remove loaded pins immediately.")
+    }
+
+    func testEmptyFeaturedReceiptsAvoidRedundantPublicationAndRealChangesStillPublish() async {
+        let model = LiveMapResults()
+        let featured = place("featured")
+        var publications = 0
+        let subscription = model.$featuredPlaces.dropFirst().sink { _ in publications += 1 }
+        defer { subscription.cancel() }
+        let initial = request()
+        let responses: [[VisiblePlace]?] = [[], nil, [featured], [featured], [], nil]
+        for (index, response) in responses.enumerated() {
+            if index == 3 { featured.place.canonicalName = "Updated featured name" }
+            let forced = LiveMapRequest(userID: initial.userID, audience: initial.audience,
+                query: initial.query, featured: initial.featured, viewport: initial.viewport,
+                refresh: UInt64(index))
+            var beforeRevision: UInt64 = 0
+            var beforePublications = 0
+            var changesPlaces = false
+            await model.load(request: forced, repository: nil, fixture: [event(1)], featured: {
+                beforeRevision = model.revision
+                beforePublications = publications
+                changesPlaces = !model.featuredPlaces.isEmpty || !(response ?? []).isEmpty
+                return response
+            }, permits: { _ in true })
+            XCTAssertEqual(model.revision, beforeRevision + (changesPlaces ? 1 : 0))
+            XCTAssertEqual(publications, beforePublications + (changesPlaces ? 1 : 0))
+            XCTAssertEqual(model.featuredPlaces.map { $0.place.canonicalName },
+                (response ?? []).map { $0.place.canonicalName })
+            XCTAssertEqual(model.activities.map(\.id), [event(1).id])
+            XCTAssertTrue(model.complete)
+            XCTAssertFalse(model.error)
+        }
     }
 
     func testLateOldRequestCannotReplaceNewAccountResultsOrFeaturedPlaces() async {

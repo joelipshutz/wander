@@ -209,6 +209,49 @@ final class LiveTotemStateTests: XCTestCase {
         }
     }
 
+    func testStoreFriendEvidenceIsPreparedOnlyForFriendsWithoutChangingTotemResults() {
+        let own = row("own", ownerID: "me")
+        let friend = row("friend", ownerID: "friend", status: .wannaGo)
+        let following = row("following", ownerID: "following")
+        let rows = [own, friend, following]
+        let incoming = LocalFollow(localID: "incoming", followerUserID: friend.owner.id,
+                                   followedUserID: own.owner.id, source: .profile)
+        let follows = [incoming] + [friend, following].map {
+            LocalFollow(localID: "outgoing-\($0.owner.id)", followerUserID: own.owner.id,
+                        followedUserID: $0.owner.id, source: .profile)
+        }
+        let store = WanderStore(fixtures: WanderFixtures(currentUser: own.owner,
+            profiles: rows.map(\.owner), places: rows.map(\.place), userPlaces: rows.map(\.userPlace),
+            placeAttributes: [], follows: follows, blocks: [], placeLists: [], placeListMembers: [],
+            placeListItems: [], contactProvider: FakeContactProvider(seededMatches: [])))
+        let identity = LivePlaceIdentity(places: rows.map(\.place))
+        let events = rows.map { activity("event-\($0.id)", .placeBeen, $0) }
+        for incomingTarget in [own.owner.id, "different-viewer", own.owner.id] {
+            // A same-object graph edit must be included in the next synchronous
+            // context even without a presentation revision or count change.
+            incoming.followedUserID = incomingTarget
+            let eagerFriends = Set(store.profiles.filter { store.relationship(to: $0.id) == .mutual }.map(\.id))
+            for audience in FeedAudience.allCases {
+                store.selectFeedAudience(audience)
+                for query in [LiveFeedQuery(), .init(activityType: .checkIns),
+                              .init(activityType: .wannas), .init(personIDs: [friend.owner.id])] {
+                    let actual = store.liveTotemContext(query: query, currentStateIsComplete: true)
+                    let eager = LiveTotemContext(currentUserID: store.currentUser.id, query: query,
+                        currentSavedPlaces: actual.currentSavedPlaces, currentListPlaces: actual.currentListPlaces,
+                        currentListPlaceIDs: actual.currentListPlaceIDs, audience: audience,
+                        friendIDs: eagerFriends, currentStateIsComplete: true)
+                    XCTAssertEqual(actual.friendIDs, audience == .onlyFriends ? eagerFriends : [])
+                    for activity in [[], events] {
+                        for featured in [false, true] {
+                            XCTAssertEqual(actual.state(for: identity, activities: activity, featured: featured),
+                                eager.state(for: identity, activities: activity, featured: featured))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     func testDeletedAndInconsistentSaveEvidenceCannotSuppressFeaturedOrProduceRails() {
         let featured = row("featured", ownerID: FeaturedCommunityPlaceSignal.ownerID)
         let deletedSave = row("deleted-save", ownerID: "friend")

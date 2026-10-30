@@ -1,19 +1,37 @@
 import Foundation
 import UIKit
 
+enum WanderStorePersistenceError: Error, Equatable {
+    case checkpointUnsupported
+}
+
 struct WanderStorePersistence {
     let load: () -> WanderStoreSnapshot?
     let save: (WanderStoreSnapshot) -> Void
     let flush: () -> Void
+    /// Returns only after this exact snapshot has been written, or throws.
+    /// A legacy Void writer cannot certify durable success.
+    let checkpoint: (WanderStoreSnapshot) throws -> Void
+    /// The snapshot producer and caller remain on the main actor; file work
+    /// runs on the ordered writer queue while this entry point suspends.
+    let checkpointAsync: @MainActor (WanderStoreSnapshot) async throws -> Void
 
     init(
         load: @escaping () -> WanderStoreSnapshot?,
         save: @escaping (WanderStoreSnapshot) -> Void,
-        flush: @escaping () -> Void = {}
+        flush: @escaping () -> Void = {},
+        checkpoint: @escaping (WanderStoreSnapshot) throws -> Void = { _ in
+            throw WanderStorePersistenceError.checkpointUnsupported
+        },
+        checkpointAsync: @escaping @MainActor (WanderStoreSnapshot) async throws -> Void = { _ in
+            throw WanderStorePersistenceError.checkpointUnsupported
+        }
     ) {
         self.load = load
         self.save = save
         self.flush = flush
+        self.checkpoint = checkpoint
+        self.checkpointAsync = checkpointAsync
     }
 
     @MainActor
@@ -25,31 +43,40 @@ struct WanderStorePersistence {
     )
 
     static func file(url: URL) -> WanderStorePersistence {
-        WanderStorePersistence(
+        let write: (WanderStoreSnapshot) throws -> Void = { snapshot in
+            try writeFile(snapshot, to: url, formatting: [.prettyPrinted, .sortedKeys])
+        }
+        let writer = CoalescingWanderStoreSnapshotWriter(
+            write: { snapshot in
+                do { try write(snapshot) } catch {
+                    #if DEBUG
+                    print("Wander local persistence failed: \(error)")
+                    #endif
+                }
+            },
+            checkpointWrite: write,
+            flushOnAppLifecycle: false
+        )
+        return WanderStorePersistence(
             load: {
+                writer.flush()
                 guard let data = try? Data(contentsOf: url) else { return nil }
                 return try? JSONDecoder().decode(WanderStoreSnapshot.self, from: data)
             },
             save: { snapshot in
                 do {
-                    try FileManager.default.createDirectory(
-                        at: url.deletingLastPathComponent(),
-                        withIntermediateDirectories: true,
-                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-                    )
-                    let encoder = JSONEncoder()
-                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                    let data = try encoder.encode(snapshot)
-                    try data.write(
-                        to: url,
-                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-                    )
+                    // Ordinary file saves remain synchronous and exact. Unlike
+                    // the coalescing factory, none can be replaced by a later save.
+                    try writer.checkpoint(snapshot)
                 } catch {
                     #if DEBUG
                     print("Wander local persistence failed: \(error)")
                     #endif
                 }
-            }
+            },
+            flush: writer.flush,
+            checkpoint: writer.checkpoint,
+            checkpointAsync: writer.checkpointAsync
         )
     }
 
@@ -61,22 +88,14 @@ struct WanderStorePersistence {
             },
             write: { snapshot in
                 do {
-                    try FileManager.default.createDirectory(
-                        at: url.deletingLastPathComponent(),
-                        withIntermediateDirectories: true,
-                        attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
-                    )
-                    let data = try JSONEncoder().encode(snapshot)
-                    try data.write(
-                        to: url,
-                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-                    )
+                    try writeFile(snapshot, to: url)
                 } catch {
                     #if DEBUG
                     print("Wander local persistence failed: \(error)")
                     #endif
                 }
             },
+            checkpointWrite: { snapshot in try writeFile(snapshot, to: url) },
             flushOnAppLifecycle: true
         )
     }
@@ -84,10 +103,12 @@ struct WanderStorePersistence {
     static func coalescing(
         load: @escaping () -> WanderStoreSnapshot?,
         write: @escaping (WanderStoreSnapshot) -> Void,
+        checkpointWrite: ((WanderStoreSnapshot) throws -> Void)? = nil,
         flushOnAppLifecycle: Bool = false
     ) -> WanderStorePersistence {
         let writer = CoalescingWanderStoreSnapshotWriter(
             write: write,
+            checkpointWrite: checkpointWrite,
             flushOnAppLifecycle: flushOnAppLifecycle
         )
         return WanderStorePersistence(
@@ -96,7 +117,28 @@ struct WanderStorePersistence {
                 return load()
             },
             save: writer.save,
-            flush: writer.flush
+            flush: writer.flush,
+            checkpoint: writer.checkpoint,
+            checkpointAsync: writer.checkpointAsync
+        )
+    }
+
+    private static func writeFile(
+        _ snapshot: WanderStoreSnapshot,
+        to url: URL,
+        formatting: JSONEncoder.OutputFormatting = []
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true,
+            attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = formatting
+        let data = try encoder.encode(snapshot)
+        try data.write(
+            to: url,
+            options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
         )
     }
 }
@@ -105,15 +147,22 @@ private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.grayline.wander.persistence", qos: .utility)
     private let lock = NSLock()
     private let write: (WanderStoreSnapshot) -> Void
-    private var pendingSnapshot: WanderStoreSnapshot?
+    private let checkpointWrite: ((WanderStoreSnapshot) throws -> Void)?
+    private enum PendingWrite {
+        case coalesced(WanderStoreSnapshot)
+        case checkpoint(WanderStoreSnapshot, @Sendable (Result<Void, Error>) -> Void)
+    }
+    private var pendingWrites: [PendingWrite] = []
     private var isDrainScheduled = false
     private var lifecycleObservers: [NSObjectProtocol] = []
 
     init(
         write: @escaping (WanderStoreSnapshot) -> Void,
+        checkpointWrite: ((WanderStoreSnapshot) throws -> Void)?,
         flushOnAppLifecycle: Bool
     ) {
         self.write = write
+        self.checkpointWrite = checkpointWrite
 
         guard flushOnAppLifecycle else { return }
         let notificationCenter = NotificationCenter.default
@@ -143,7 +192,44 @@ private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
 
     func save(_ snapshot: WanderStoreSnapshot) {
         lock.lock()
-        pendingSnapshot = snapshot
+        if let last = pendingWrites.last, case .coalesced = last {
+            pendingWrites[pendingWrites.count - 1] = .coalesced(snapshot)
+        } else {
+            pendingWrites.append(.coalesced(snapshot))
+        }
+        scheduleDrainWhileLocked()
+    }
+
+    func checkpoint(_ snapshot: WanderStoreSnapshot) throws {
+        guard checkpointWrite != nil else {
+            throw WanderStorePersistenceError.checkpointUnsupported
+        }
+        let completion = CheckpointCompletion()
+        enqueueCheckpoint(snapshot) { completion.finish($0) }
+        try completion.wait()
+    }
+
+    @MainActor
+    func checkpointAsync(_ snapshot: WanderStoreSnapshot) async throws {
+        guard checkpointWrite != nil else {
+            throw WanderStorePersistenceError.checkpointUnsupported
+        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            enqueueCheckpoint(snapshot) { continuation.resume(with: $0) }
+        }
+    }
+
+    private func enqueueCheckpoint(
+        _ snapshot: WanderStoreSnapshot,
+        completion: @escaping @Sendable (Result<Void, Error>) -> Void
+    ) {
+        lock.lock()
+        pendingWrites.append(.checkpoint(snapshot, completion))
+        scheduleDrainWhileLocked()
+    }
+
+    /// Called with the lock held; always releases it before returning.
+    private func scheduleDrainWhileLocked() {
         guard !isDrainScheduled else {
             lock.unlock()
             return
@@ -163,15 +249,48 @@ private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
     private func drain() {
         while true {
             lock.lock()
-            guard let snapshot = pendingSnapshot else {
+            guard !pendingWrites.isEmpty else {
                 isDrainScheduled = false
                 lock.unlock()
                 return
             }
-            pendingSnapshot = nil
+            let pending = pendingWrites.removeFirst()
             lock.unlock()
 
-            write(snapshot)
+            switch pending {
+            case .coalesced(let snapshot):
+                write(snapshot)
+            case .checkpoint(let snapshot, let completion):
+                let result = Result {
+                    guard let checkpointWrite else {
+                        throw WanderStorePersistenceError.checkpointUnsupported
+                    }
+                    try checkpointWrite(snapshot)
+                }
+                completion(result)
+            }
+        }
+    }
+
+    private final class CheckpointCompletion: @unchecked Sendable {
+        private let semaphore = DispatchSemaphore(value: 0)
+        private let lock = NSLock()
+        private var result: Result<Void, Error>?
+
+        func finish(_ result: Result<Void, Error>) {
+            lock.lock()
+            self.result = result
+            lock.unlock()
+            semaphore.signal()
+        }
+
+        func wait() throws {
+            semaphore.wait()
+            lock.lock()
+            let result = result
+            lock.unlock()
+            // finish stores the result before signaling this one-shot waiter.
+            try result!.get()
         }
     }
 }
@@ -186,6 +305,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let placeAttributes: [PlaceAttributeRecord]
     let cachedCurrentUserVisiblePlaces: [VisiblePlaceRecord]?
     let importNotificationCommits: [ImportNotificationCommit]?
+    let automaticImportCheckpoints: [PlaceImportAutoSaveCheckpoint]?
     let placeWannaSaves: [PlaceWannaSave]?
     let placeVisits: [PlaceVisitRecord]?
     let visitPhotos: [VisitPhotoRecord]?
@@ -214,12 +334,12 @@ struct WanderStoreSnapshot: Codable, Equatable {
     let savedAt: Date
 
     @MainActor
-    init(store: WanderStore) {
+    init(store: WanderStore, records: AutomaticImportSnapshotRecords? = nil) {
         currentUser = ProfileRecord(store.currentUser)
         profiles = store.profiles.map(ProfileRecord.init)
-        places = store.places.map(PlaceRecord.init)
-        userPlaces = store.userPlaces.map(UserPlaceRecord.init)
-        placeAttributes = store.placeAttributes.map(PlaceAttributeRecord.init)
+        places = records?.places(store.places) ?? store.places.map(PlaceRecord.init)
+        userPlaces = records?.userPlaces(store.userPlaces) ?? store.userPlaces.map(UserPlaceRecord.init)
+        placeAttributes = records?.attributes(store.placeAttributes) ?? store.placeAttributes.map(PlaceAttributeRecord.init)
         cachedCurrentUserVisiblePlaces = store.remoteVisiblePlaceCache
             .filter {
                 $0.owner.id == store.currentUser.id
@@ -228,8 +348,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
             }
             .map(VisiblePlaceRecord.init)
         importNotificationCommits = store.importNotificationCommits
+        automaticImportCheckpoints = store.automaticImportCheckpoints
         placeWannaSaves = store.placeWannaSaves
-        placeVisits = store.placeVisits.map(PlaceVisitRecord.init)
+        placeVisits = records?.visits(store.placeVisits) ?? store.placeVisits.map(PlaceVisitRecord.init)
         visitPhotos = store.visitPhotos.map(VisitPhotoRecord.init)
         sharedVisitInvitations = store.sharedVisitInvitations
         sharedVisitInboxUserID = store.sharedVisitInboxUserID
@@ -280,6 +401,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
             placeAttributes: shouldResetSavedPlaces ? [] : placeAttributes.map { $0.model() },
             cachedCurrentUserVisiblePlaces: restoredCachedCurrentUserVisiblePlaces,
             importNotificationCommits: importNotificationCommits ?? [],
+            automaticImportCheckpoints: shouldResetSavedPlaces ? [] : automaticImportCheckpoints ?? [],
             placeWannaSaves: shouldResetSavedPlaces ? [] : placeWannaSaves ?? [],
             placeVisits: shouldResetSavedPlaces ? [] : Self.restoredPlaceVisits(records: placeVisits, userPlaces: userPlaces, placeAttributes: placeAttributes),
             visitPhotos: shouldResetSavedPlaces ? [] : visitPhotos?.map { $0.model() } ?? [],
@@ -321,6 +443,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let placeAttributes: [LocalPlaceAttribute]
         let cachedCurrentUserVisiblePlaces: [VisiblePlace]
         let importNotificationCommits: [ImportNotificationCommit]
+        let automaticImportCheckpoints: [PlaceImportAutoSaveCheckpoint]
         let placeWannaSaves: [PlaceWannaSave]
         let placeVisits: [LocalPlaceVisit]
         let visitPhotos: [LocalVisitPhoto]

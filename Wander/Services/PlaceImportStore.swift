@@ -1198,6 +1198,7 @@ final class PlaceImportStore: ObservableObject {
     private let resolver: any PlaceImportResolving
     private var ownerUserID: String?
     private var processingTasks: [String: ProcessingRun] = [:]
+    private var automaticSaveLeases: [String: PlaceImportAutoSaveLease] = [:]
     private var activeProcessingClaimIDs: [String: UUID] = [:]
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
     private var persistenceDeferralDepth = 0
@@ -1609,6 +1610,7 @@ final class PlaceImportStore: ObservableObject {
         let ids = Set(batchIDs)
         guard !ids.isEmpty else { return }
         for batchID in ids {
+            automaticSaveLeases[batchID] = nil
             processingTasks[batchID]?.task.cancel()
         }
         var didChange = false
@@ -1648,6 +1650,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].candidates.contains(where: { $0.id == candidateID })
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
         items[index].selectedCandidateIDsRaw = [candidateID]
@@ -1680,6 +1683,7 @@ final class PlaceImportStore: ObservableObject {
             changedBatchIDs.insert(items[index].batchID)
         }
         for batchID in changedBatchIDs {
+            automaticSaveLeases[batchID] = nil
             synchronizeBatch(batchID, persist: false)
         }
         if !changedBatchIDs.isEmpty { persist() }
@@ -1694,6 +1698,7 @@ final class PlaceImportStore: ObservableObject {
               ![.duplicate, .saved, .dismissed].contains(items[index].state)
         else { return }
 
+        automaticSaveLeases[items[index].batchID] = nil
         var selectedIDs = items[index].selectedCandidateIDs
         if let selectedIndex = selectedIDs.firstIndex(of: candidateID) {
             selectedIDs.remove(at: selectedIndex)
@@ -1721,6 +1726,7 @@ final class PlaceImportStore: ObservableObject {
         var didChange = false
         for index in items.indices
         where ids.contains(items[index].id) && [.ready, .saved].contains(items[index].state) {
+            automaticSaveLeases[items[index].batchID] = nil
             items[index].stagedStatus = status
             items[index].updatedAt = .now
             didChange = true
@@ -1740,6 +1746,7 @@ final class PlaceImportStore: ObservableObject {
         where ids.contains(items[index].id)
             && items[index].state != .dismissed
             && !items[index].isSourceRetry {
+            automaticSaveLeases[items[index].batchID] = nil
             items[index].isSelectedForImport = isIncluded
             items[index].updatedAt = .now
             didChange = true
@@ -1751,6 +1758,7 @@ final class PlaceImportStore: ObservableObject {
     /// owned by another account is cleared before any capture can be reviewed or saved.
     func bind(to userID: String) {
         guard ownerUserID != userID else { return }
+        automaticSaveLeases.removeAll()
         processingTasks.values.forEach { $0.task.cancel() }
         processingTasks.removeAll()
         activeProcessingClaimIDs.removeAll()
@@ -1766,6 +1774,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               [.ready, .saved].contains(items[index].state)
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         items[index].stagedNote = trimmed?.isEmpty == false ? trimmed : nil
         items[index].updatedAt = .now
@@ -1777,6 +1786,7 @@ final class PlaceImportStore: ObservableObject {
               [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].stagedRatingScore = score
         items[index].updatedAt = .now
         persist()
@@ -1787,6 +1797,7 @@ final class PlaceImportStore: ObservableObject {
               [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].stagedVisitedAt = date
         items[index].updatedAt = .now
         persist()
@@ -1797,6 +1808,7 @@ final class PlaceImportStore: ObservableObject {
         for index in items.indices where items[index].state == .ready {
             guard batchID == nil || items[index].batchID == batchID else { continue }
             if items[index].stagedStatus != status {
+                automaticSaveLeases[items[index].batchID] = nil
                 items[index].stagedStatus = status
                 items[index].updatedAt = .now
                 changed = true
@@ -1809,6 +1821,7 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingName = items[index].seed.nameHint?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasNameHint = existingName?.isEmpty == false
@@ -1939,6 +1952,7 @@ final class PlaceImportStore: ObservableObject {
         else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -1974,6 +1988,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return nil }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return nil }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -2007,6 +2022,7 @@ final class PlaceImportStore: ObservableObject {
 
     func markSaved(itemID: String, userPlaceID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].state = .saved
         items[index].savedUserPlaceID = userPlaceID
@@ -2057,21 +2073,161 @@ final class PlaceImportStore: ObservableObject {
         return try operation()
     }
 
+    func beginAutomaticSaveLease(batchID: String, ownerUserID expectedOwner: String) -> PlaceImportAutoSaveLease? {
+        guard ownerUserID == expectedOwner,
+              let batch = batches.first(where: { $0.id == batchID }),
+              batch.shouldSaveAutomatically, batch.state != .cancelled,
+              !items.contains(where: { $0.batchID == batchID && [.queued, .resolving].contains($0.state) })
+        else { return nil }
+        let lease = PlaceImportAutoSaveLease(id: UUID(), ownerUserID: expectedOwner,
+            batchID: batchID, batchCreatedAt: batch.createdAt)
+        automaticSaveLeases[batchID] = lease
+        return lease
+    }
+
+    func ownsAutomaticSaveLease(_ lease: PlaceImportAutoSaveLease) -> Bool {
+        ownerUserID == lease.ownerUserID && automaticSaveLeases[lease.batchID] == lease
+            && batches.contains { $0.id == lease.batchID && $0.createdAt == lease.batchCreatedAt
+                && $0.shouldSaveAutomatically && $0.state != .cancelled }
+    }
+
+    func endAutomaticSaveLease(_ lease: PlaceImportAutoSaveLease) {
+        if automaticSaveLeases[lease.batchID] == lease { automaticSaveLeases[lease.batchID] = nil }
+    }
+
+    /// A foreground review can invalidate captured inputs while its durable
+    /// library write is pending. Re-enter with fresh inputs, without stealing a
+    /// replacement run or retrying a failed checkpoint in a busy loop.
+    func canRetryAutomaticSave(after lease: PlaceImportAutoSaveLease) -> Bool {
+        persistenceError == nil && ownerUserID == lease.ownerUserID
+            && automaticSaveLeases[lease.batchID] == nil
+            && batches.contains { $0.id == lease.batchID && $0.createdAt == lease.batchCreatedAt
+                && $0.shouldSaveAutomatically && $0.state != .cancelled }
+    }
+
+    func invalidateAutomaticSaveLeases(batchIDs: [String]) {
+        for batchID in batchIDs { automaticSaveLeases[batchID] = nil }
+    }
+
+    func reportAutomaticSaveCheckpointFailure() {
+        persistenceError = "Import progress could not be saved. Keep Astir open and try again."
+    }
+
+    /// Call only after the matching library checkpoint has succeeded. Its
+    /// immutable outcomes repair the two-file crash window without re-saving.
+    @discardableResult
+    func applyAutomaticSaveCheckpoint(_ checkpoint: PlaceImportAutoSaveCheckpoint,
+                                      lease: PlaceImportAutoSaveLease) -> Bool {
+        guard persistenceDeferralDepth == 0, ownsAutomaticSaveLease(lease),
+              let batchIndex = batches.firstIndex(where: { $0.id == lease.batchID }),
+              checkpoint.belongs(to: batches[batchIndex], ownerUserID: lease.ownerUserID)
+        else { return false }
+        let previousBatches = batches
+        let previousItems = items
+        let oldReceipt = batches[batchIndex].receipt
+        let destinationListID = batches[batchIndex].automaticSaveDestinationOverrideID ?? checkpoint.destinationListID
+        let manualItemIDs = Set(batches[batchIndex].automaticSaveReceiptOverrideItemIDs ?? [])
+        let oldEntries = Dictionary((oldReceipt?.entries ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let plannedInputs = Dictionary(checkpoint.plannedItems.map { ($0.itemID, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let currentItems = Dictionary(items.filter { $0.batchID == lease.batchID }.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+        performBatchedMutations {
+            var savedIDs: [String: String] = [:]
+            for completed in checkpoint.completedItems {
+                guard !manualItemIDs.contains(completed.itemID),
+                      let item = currentItems[completed.itemID],
+                      item.seed.id == completed.seedID, let saveID = completed.entry.userPlaceID else { continue }
+                // A retry or explicit edit after a prior checkpoint owns its
+                // current row. Recovery may only advance the original version.
+                if item.state != .saved, plannedInputs[item.id]?.matches(item) == true {
+                    savedIDs[item.id] = saveID
+                }
+            }
+            markSavedItems(savedIDs)
+            var entries = checkpoint.completedItems
+                .filter { !manualItemIDs.contains($0.itemID) }
+                .map { oldEntries[$0.entry.id] ?? $0.entry }
+            entries.append(contentsOf: (oldReceipt?.entries ?? []).filter { manualItemIDs.contains($0.itemID) })
+            if checkpoint.isComplete {
+                entries.append(contentsOf: items(for: lease.batchID).filter {
+                    !$0.isSourceRetry && !manualItemIDs.contains($0.id)
+                        && ![.saved, .dismissed].contains($0.state)
+                }.map { item in
+                    PlaceImportReceiptEntry(itemID: item.id, displayName: item.displayName,
+                        displayArea: item.displayArea, status: item.state == .ready ? item.stagedStatus : nil,
+                        outcome: .needsReview, userPlaceID: item.duplicateUserPlaceID)
+                })
+            }
+            if !manualItemIDs.isEmpty {
+                // Keep every manual entry verbatim, including multiple matches
+                // for an item, while interleaving new automatic cards by source.
+                let sourceOrder = Dictionary(items.enumerated().filter { $0.element.batchID == lease.batchID }
+                    .map { ($0.element.id, ($0.element.seed.sourceLine, $0.offset)) },
+                    uniquingKeysWith: { first, _ in first })
+                entries = entries.enumerated().sorted { lhs, rhs in
+                    let left = sourceOrder[lhs.element.itemID] ?? (Int.max, Int.max)
+                    let right = sourceOrder[rhs.element.itemID] ?? (Int.max, Int.max)
+                    if left.0 != right.0 { return left.0 < right.0 }
+                    if left.1 != right.1 { return left.1 < right.1 }
+                    return lhs.offset < rhs.offset
+                }.map(\.element)
+            }
+            let retries = items.filter { $0.batchID == lease.batchID && $0.isSourceRetry
+                && ![.saved, .dismissed].contains($0.state) }.count
+            batches[batchIndex].destinationListID = destinationListID
+            let retainedManualReceipt = manualItemIDs.isEmpty ? nil : oldReceipt
+            batches[batchIndex].receipt = PlaceImportReceipt(id: retainedManualReceipt?.id ?? checkpoint.receiptID, batchID: lease.batchID,
+                sourceName: batches[batchIndex].sourceName, createdAt: retainedManualReceipt?.createdAt ?? checkpoint.receiptCreatedAt,
+                entries: entries, destinationListID: destinationListID, sourceRetryCount: retries,
+                presentedAt: retainedManualReceipt?.presentedAt
+                    ?? (oldReceipt?.id == checkpoint.receiptID ? oldReceipt?.presentedAt : nil))
+            if checkpoint.isComplete { batches[batchIndex].automaticSaveCompletedAt = .now }
+            batches[batchIndex].updatedAt = .now
+            persist()
+        }
+        guard persistenceError == nil else {
+            // Library rows and journal remain durable. Keep import progress at
+            // its last durable state so the next run can retry this projection.
+            items = previousItems
+            batches = previousBatches
+            return false
+        }
+        return true
+    }
+
     func recordReceipt(
         batchID: String,
         entries: [PlaceImportReceiptEntry],
         destinationListID: String?
     ) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        automaticSaveLeases[batchID] = nil
         let sourceRetryItems = items.filter { $0.batchID == batchID && $0.isSourceRetry }
         let sourceRetryItemIDs = Set(sourceRetryItems.map(\.id))
         let activeSourceRetryCount = sourceRetryItems.filter {
             ![.saved, .dismissed].contains($0.state)
         }.count
+        let nextEntries = entries.filter { !sourceRetryItemIDs.contains($0.itemID) }
+        if batches[index].automaticSaveRequested == true {
+            let previousByItem = Dictionary(grouping: batches[index].receipt?.entries ?? [], by: \.itemID)
+            let nextByItem = Dictionary(grouping: nextEntries, by: \.itemID)
+            let changedItemIDs = Set(previousByItem.keys).union(nextByItem.keys).filter {
+                previousByItem[$0] != nextByItem[$0]
+            }
+            if !changedItemIDs.isEmpty {
+                // recordReceipt is the explicit review path. Checkpoint replay
+                // writes its projection directly and never takes manual ownership.
+                batches[index].automaticSaveReceiptOverrideItemIDs = Array(
+                    Set(batches[index].automaticSaveReceiptOverrideItemIDs ?? []).union(changedItemIDs)
+                ).sorted()
+            }
+        }
         let receipt = PlaceImportReceipt(
             batchID: batchID,
             sourceName: batches[index].sourceName,
-            entries: entries.filter { !sourceRetryItemIDs.contains($0.itemID) },
+            entries: nextEntries,
             destinationListID: destinationListID,
             sourceRetryCount: activeSourceRetryCount
         )
@@ -2123,6 +2279,10 @@ final class PlaceImportStore: ObservableObject {
 
     func setDestinationListID(_ destinationListID: String, batchID: String) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        automaticSaveLeases[batchID] = nil
+        if batches[index].automaticSaveRequested == true {
+            batches[index].automaticSaveDestinationOverrideID = destinationListID
+        }
         batches[index].destinationListID = destinationListID
         batches[index].updatedAt = .now
         persist()
@@ -2139,6 +2299,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
             return
         }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].state = .dismissed
         items[index].updatedAt = .now
@@ -2146,6 +2307,7 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func cancel(batchID: String) {
+        automaticSaveLeases[batchID] = nil
         processingTasks[batchID]?.task.cancel()
         processingTasks[batchID] = nil
         for item in items where item.batchID == batchID {
@@ -2172,6 +2334,7 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func deleteBatch(batchID: String) {
+        automaticSaveLeases[batchID] = nil
         processingTasks[batchID]?.task.cancel()
         processingTasks[batchID] = nil
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
@@ -2187,6 +2350,7 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func clearAll() {
+        automaticSaveLeases.removeAll()
         for task in processingTasks.values {
             task.task.cancel()
         }
@@ -2281,6 +2445,7 @@ final class PlaceImportStore: ObservableObject {
               items.contains(where: { $0.batchID == batchID && $0.state == .queued })
         else { return }
 
+        automaticSaveLeases[batchID] = nil
         let runID = UUID()
         let task = Task<Void, Never> { [weak self] in
             await self?.process(batchID: batchID, runID: runID)

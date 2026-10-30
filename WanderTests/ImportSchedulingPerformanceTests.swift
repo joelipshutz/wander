@@ -263,7 +263,7 @@ private func schedulingSnapshot(count: Int, source: PlaceImportSource = .googleM
             seed: PlaceImportSeed(id: "seed-\(index)", rawText: "Fixture \(index)",
                 nameHint: "Fixture \(index)", areaHint: nil, sourceURLString: nil, sourceLine: index))
     }
-    return PlaceImportSnapshot(batches: [PlaceImportBatch(id: "scheduling-batch", source: source,
+    return PlaceImportSnapshot(ownerUserID: "local_profile_current", batches: [PlaceImportBatch(id: "scheduling-batch", source: source,
         sourceName: "Fixture import", totalCount: count, automaticSaveRequested: automatic,
         requestedStatus: .wannaGo)], items: items)
 }

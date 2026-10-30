@@ -155,6 +155,11 @@ struct LiveScreen: View {
             .onChange(of: detent) { _, _ in saveBrowseState() }
             .onChange(of: selection) { _, _ in saveBrowseState() }
             .onChange(of: store.feedAudience) { _, _ in saveBrowseState() }
+            #if DEBUG && targetEnvironment(simulator)
+            .onChange(of: filtersPresented) { _, presented in
+                recordFilterReviewMarker(presented ? "state true" : "state false")
+            }
+            #endif
     }
 
     private var livePresentedContent: some View {
@@ -253,7 +258,14 @@ struct LiveScreen: View {
                 ).modifier(modalLifecycle)
             }
         }
-        .sheet(isPresented: $filtersPresented, onDismiss: modalDidDismiss) { filters.modifier(modalLifecycle) }
+        .sheet(isPresented: $filtersPresented, onDismiss: modalDidDismiss) {
+            #if DEBUG && targetEnvironment(simulator)
+            filters.modifier(modalLifecycle)
+                .onAppear { recordFilterReviewMarker("sheet appeared") }
+            #else
+            filters.modifier(modalLifecycle)
+            #endif
+        }
         .sheet(isPresented: $showsIntroductionGuide, onDismiss: modalDidDismiss) {
             NavigationStack {
                 LiveIntroductionGuide(orientation: introductionAudience == .firstVisit
@@ -352,12 +364,16 @@ struct LiveScreen: View {
                 featured: { await featuredMapPlaces(request: request) },
                 permits: { event in store.currentUser.id == request.userID && store.canDisplayLiveMapActivity(event) })
         }
-        .onChange(of: mapResults.revision) { _, _ in rebuildMapProjection() }
+        .onChange(of: mapResults.revision) { _, _ in
+            rebuildMapProjection(cause: "Live Map Projection Results")
+        }
         .task(id: pinStateRequest) {
             await pinStateLoader.load(request: pinStateRequest,
                 repository: auth.isSignedIn ? backend.feedRepository as? any LiveMapPinStateRepository : nil)
         }
-        .onChange(of: pinStateLoader.revision) { _, _ in rebuildMapProjection() }
+        .onChange(of: pinStateLoader.revision) { _, _ in
+            rebuildMapProjection(cause: "Live Map Projection Pin State")
+        }
         .onReceive(store.$followedFeedPage) { page in refreshEnrichedMapActivity(page) }
         .onChange(of: store.presentationRevision) { _, _ in
             mapResults.revalidate(userID: store.currentUser.id, permits: store.canDisplayLiveMapActivity)
@@ -375,6 +391,9 @@ struct LiveScreen: View {
         }
         .onChange(of: store.followedFeedPage?.fetchedAt, initial: true) { _, _ in frameInitialMap() }
         .onChange(of: store.currentUser.id) { _, _ in
+            #if DEBUG && targetEnvironment(simulator)
+            recordFilterReviewMarker("account reset")
+            #endif
             pinStateLoader.reset()
             isFeedDestinationActive = false
             clearNativePlaceSelection()
@@ -398,6 +417,9 @@ struct LiveScreen: View {
             frameInitialMap()
         }
         .onChange(of: presentationResetRequest?.id) { _, _ in
+            #if DEBUG && targetEnvironment(simulator)
+            recordFilterReviewMarker("presentation reset")
+            #endif
             clearNativePlaceSelection(); fullProfileCandidate = nil
             isFeedDestinationActive = false
             filtersPresented = false; showsMessages = false; replyTarget = nil
@@ -465,6 +487,9 @@ struct LiveScreen: View {
         // Merge only enriched copies of already enumerated event IDs.
         // Keep the projection typed outside the large SwiftUI result builder.
         guard let page else { return }
+        guard !mapActivity.isEmpty || !mapResults.featuredPlaces.isEmpty || !mapProjection.pins.isEmpty else { return }
+        let interval = WanderDebugLog.beginPerformanceInterval("Live Map Projection Feed Enrichment")
+        defer { WanderDebugLog.endPerformanceInterval("Live Map Projection Feed Enrichment", id: interval) }
         let enriched: [String: FeedActivity] = Dictionary(
             page.activity.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         var refreshed: [FeedActivity] = []
@@ -475,12 +500,7 @@ struct LiveScreen: View {
             refreshed.append(event)
         }
         mapActivity = refreshed
-        mapProjection = LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
-            ownCheckInPlaces: ownCheckInPlaces,
-            totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
-                currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
-                allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
-            previousPins: previousPinIdentities), activities: mapActivity)
+        mapProjection = makeMapProjection(activities: refreshed)
     }
 
     private struct LocationActivation: Equatable {
@@ -1144,6 +1164,9 @@ struct LiveScreen: View {
     }
 
     private func openFilters(nearby: Bool = false) {
+        #if DEBUG && targetEnvironment(simulator)
+        recordFilterReviewMarker("action entered")
+        #endif
         draftSelection = selection
         expandedFilterCategories.formUnion(selection.categoryOptions.keys)
         if draftSelection.cityID == nil { draftSelection.cityID = HomeMetro.find(homeMetroID)?.id }
@@ -1153,8 +1176,22 @@ struct LiveScreen: View {
         }
         draftAudience = store.feedAudience
         draftClearsArea = false
+        #if DEBUG && targetEnvironment(simulator)
+        recordFilterReviewMarker("draft prepared")
+        #endif
         filtersPresented = true
+        #if DEBUG && targetEnvironment(simulator)
+        recordFilterReviewMarker("state set true")
+        #endif
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    private func recordFilterReviewMarker(_ marker: StaticString) {
+        let required: Set<String> = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderUnifiedLiveUITest"]
+        guard required.isSubset(of: Set(ProcessInfo.processInfo.arguments)) else { return }
+        WanderDebugLog.performance.notice("Live Filters Review: \(String(describing: marker), privacy: .public)")
+    }
+    #endif
 
     private func resetDraftFilters() {
         let cityID = draftSelection.cityID
@@ -1314,16 +1351,27 @@ struct LiveScreen: View {
         return [selected] + pins.filter { $0.id != selected.id }
     }
 
-    private func rebuildMapProjection() {
+    private func rebuildMapProjection(cause: StaticString) {
+        let interval = WanderDebugLog.beginPerformanceInterval(cause)
+        defer { WanderDebugLog.endPerformanceInterval(cause, id: interval) }
         mapActivity = mapResults.activities.filter {
             store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
-        mapProjection = LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+        mapProjection = makeMapProjection(activities: mapActivity)
+    }
+
+    private func makeMapProjection(activities: [FeedActivity]) -> LiveMapDisplayProjection {
+        // Histories supply evidence for existing pins; they cannot create a
+        // result. Still replace a previous nonempty projection when rows clear.
+        guard !activities.isEmpty || !mapResults.featuredPlaces.isEmpty else {
+            return LiveMapDisplayProjection(pins: [], activities: activities)
+        }
+        return LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: activities, featured: mapResults.featuredPlaces,
                 ownCheckInPlaces: ownCheckInPlaces,
                 totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
                     currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
                     allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
-                previousPins: previousPinIdentities), activities: mapActivity)
+                previousPins: previousPinIdentities), activities: activities)
     }
 
     private var activeFilterCount: Int {

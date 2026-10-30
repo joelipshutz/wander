@@ -1039,7 +1039,10 @@ final class FirstVisitWalkthroughCoordinator: ObservableObject {
         if isEnabled && enrollCurrentUser {
             store.enrollContextualHints(for: userID)
         }
-        isContextualEnabled = isEnabled && hasContextualEnrollment
+        let contextualEnabled = isEnabled && hasContextualEnrollment
+        if isContextualEnabled != contextualEnabled {
+            isContextualEnabled = contextualEnabled
+        }
         if !isContextualEnabled, !self.isEnabled,
            let activeSurface,
            FirstVisitWalkthroughContent.contextualSurfaces.contains(activeSurface) {

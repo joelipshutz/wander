@@ -7,6 +7,75 @@ final class LiveMapPinStateLoaderTests: XCTestCase {
     private let placeID = "00000000-0000-0000-0000-000000000001"
     private let additionalPlaceID = "00000000-0000-0000-0000-000000000002"
 
+    func testRepeatedEmptyResetsAndMissingRepositoryLoadsDoNotPublish() async {
+        let loader = LiveMapPinStateLoader()
+        var snapshotPublications = 0
+        var revisionPublications = 0
+        var objectPublications = 0
+        let observations = [
+            loader.$snapshot.dropFirst().sink { _ in snapshotPublications += 1 },
+            loader.$revision.dropFirst().sink { _ in revisionPublications += 1 },
+            loader.objectWillChange.sink { _ in objectPublications += 1 }
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        for revision in 1...30 {
+            loader.reset()
+            await loader.load(request: nil, repository: nil)
+            await loader.load(request: request(resultRevision: UInt64(revision)), repository: nil)
+        }
+        XCTAssertNil(loader.snapshot)
+        XCTAssertEqual(loader.revision, 0)
+        XCTAssertEqual(snapshotPublications, 0)
+        XCTAssertEqual(revisionPublications, 0)
+        XCTAssertEqual(objectPublications, 0)
+    }
+
+    func testResolvedReceiptPublishesOneClearBeforeEmptyResetsBecomeSilent() async {
+        let loader = LiveMapPinStateLoader()
+        await loader.load(request: request(), repository: Stub { _ in self.snapshot(hasList: true) })
+        let revision = loader.revision
+        var clearedSnapshots = 0
+        var revisions: [UInt64] = []
+        let observations = [
+            loader.$snapshot.dropFirst().sink { value in
+                XCTAssertNil(value)
+                clearedSnapshots += 1
+            },
+            loader.$revision.dropFirst().sink { revisions.append($0) }
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        await loader.load(request: request(), repository: nil)
+        XCTAssertNil(loader.snapshot)
+        XCTAssertEqual(clearedSnapshots, 1)
+        XCTAssertEqual(revisions, [revision + 1])
+        loader.reset()
+        await loader.load(request: nil, repository: nil)
+        loader.revalidate(now: Date.now.addingTimeInterval(901))
+        XCTAssertEqual(clearedSnapshots, 1)
+        XCTAssertEqual(revisions, [revision + 1])
+    }
+
+    func testSilentEmptyResetStillRejectsLateSuccessAndFailure() async {
+        for fails in [false, true] {
+            let loader = LiveMapPinStateLoader()
+            let gate = DeferredStateRepository()
+            let pending = Task { await loader.load(request: request(), repository: gate) }
+            await gate.waitUntilRequested()
+            XCTAssertNil(loader.snapshot)
+            loader.reset()
+            XCTAssertEqual(loader.revision, 0)
+            gate.resolve(fails ? .failure(WanderRemoteError.invalidResponse("Unavailable"))
+                : .success(snapshot(hasList: true)))
+            await pending.value
+            XCTAssertNil(loader.snapshot, "A silent reset must still fence the uncancelled old request.")
+            XCTAssertEqual(loader.revision, 0)
+            let current = snapshot(saves: [ownSave])
+            await loader.load(request: request(storeRevision: 2), repository: Stub { _ in current })
+            XCTAssertEqual(loader.snapshot, current)
+            XCTAssertEqual(loader.revision, 1)
+        }
+    }
+
     func testCompleteStateIsClearedWhenRepositoryOrAccountScopeDisappears() async {
         let loader = LiveMapPinStateLoader()
         let expected = snapshot()
