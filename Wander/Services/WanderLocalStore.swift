@@ -169,11 +169,41 @@ struct SmartFilter: Identifiable, Equatable {
     let query: String
 }
 
+/// Pure date conversion reuse for one synchronous import. The caller still
+/// reads every live source and recalculates the complete streak on each read.
+final class ImportSaveStreakDateProjection {
+    private var calendar: Calendar?
+    private var daysByDate: [Date: Date] = [:]
+    private(set) var normalizationCount = 0
+
+    func uniqueDays(in dates: [Date], calendar: Calendar) -> [Date] {
+        if self.calendar != calendar {
+            self.calendar = calendar
+            daysByDate.removeAll(keepingCapacity: true)
+        }
+        var days = Set<Date>()
+        for date in dates {
+            let day: Date
+            if let cached = daysByDate[date] {
+                day = cached
+            } else {
+                day = calendar.startOfDay(for: date)
+                daysByDate[date] = day
+                normalizationCount += 1
+            }
+            days.insert(day)
+        }
+        return Array(days)
+    }
+}
+
 @MainActor
 final class WanderStore: ObservableObject {
     @Published private(set) var currentUser: LocalProfile
     @Published private(set) var profiles: [LocalProfile]
-    @Published private(set) var places: [LocalPlace]
+    @Published private(set) var places: [LocalPlace] {
+        didSet { importPlaceCollectionRevision &+= 1 }
+    }
     @Published private(set) var userPlaces: [LocalUserPlace]
     @Published private(set) var placeAttributes: [LocalPlaceAttribute]
     @Published private(set) var placeVisits: [LocalPlaceVisit]
@@ -200,16 +230,28 @@ final class WanderStore: ObservableObject {
 
     var wannaGoReminderItems: [WannaGoReminderItem] {
         var remindersByPlaceID: [String: WannaGoReminderItem] = [:]
-
-        for userPlace in userPlaces where userPlace.userID == currentUser.id
+        let plannedPlaces = userPlaces.filter { userPlace in
+            userPlace.userID == currentUser.id
             && userPlace.status == .wannaGo
-            && userPlace.deletedAt == nil {
+            && userPlace.deletedAt == nil
+            && userPlace.plannedDate != nil
+        }
+        // Preserve the first array match across local/server aliases. Build
+        // only when local plans need resolution, and re-read mutable models
+        // each time the root observes reminder changes.
+        var firstPlaceByReferenceID: [String: LocalPlace] = [:]
+        if !plannedPlaces.isEmpty {
+            for place in places {
+                let references: [String?] = [place.id, place.localID, place.serverID]
+                for reference in references.compactMap({ $0 })
+                where firstPlaceByReferenceID[reference] == nil {
+                    firstPlaceByReferenceID[reference] = place
+                }
+            }
+        }
+        for userPlace in plannedPlaces {
             guard let plannedDate = userPlace.plannedDate,
-                  let place = places.first(where: { place in
-                      place.id == userPlace.placeID
-                          || place.localID == userPlace.placeID
-                          || place.serverID == userPlace.placeID
-                  })
+                  let place = firstPlaceByReferenceID[userPlace.placeID]
             else { continue }
 
             let routePlaceID = place.serverID ?? place.id
@@ -312,6 +354,24 @@ final class WanderStore: ObservableObject {
     @Published private(set) var isLoadingMoreFeed = false
     @Published private(set) var feedPaginationFailed = false
     private var groupedFeedActivity: [FeedActivityGroup] = []
+    private struct LiveFeedSectionMember: Equatable {
+        let activityID: String
+        let placeID: String?
+        let ticketKind: FeedTicketKind
+        let stage: LiveFeedExpansionStage
+    }
+    private struct LiveFeedSectionProjection {
+        let userID: String
+        let query: LiveFeedQuery
+        let stage: LiveFeedExpansionStage
+        let audience: FeedAudience
+        let limit: Int
+        let members: [LiveFeedSectionMember]
+        let builtAt: Date
+        let sections: [LiveFeedActivitySection]
+    }
+    private var liveFeedSectionProjection: LiveFeedSectionProjection?
+    private(set) var liveFeedSectionBuildCount = 0
     private var feedRefreshCompletedAt: Date?
     private var feedRefreshCompletedRevision: UInt64?
     @Published private(set) var placeWannaSaves: [PlaceWannaSave] = []
@@ -329,7 +389,10 @@ final class WanderStore: ObservableObject {
     private var liveFeedLeaseTask: Task<Void, Never>?
     private let liveFeedClock: () -> ContinuousClock.Instant
     @Published private(set) var followedFeedPage: FollowedFeedPage? {
-        didSet { groupedFeedActivity = feedGroups(in: followedFeedPage) }
+        didSet {
+            liveFeedSectionProjection = nil
+            groupedFeedActivity = feedGroups(in: followedFeedPage)
+        }
     }
     @Published private(set) var feedLoadState: FeedLoadState = .idle
     @Published private(set) var lastFeedRefreshAt: Date?
@@ -657,6 +720,9 @@ final class WanderStore: ObservableObject {
         listIDs: Set<String>,
         projection: ListSuggestionCandidateProjection
     )] = []
+    private var importPlaceCollectionRevision: UInt64 = 0
+    private var importPlaceLookupProjection: ImportPlaceLookupProjection?
+    private var importSaveStreakDateProjection: ImportSaveStreakDateProjection?
     private var visiblePlaceListLookupCache: VisiblePlaceListLookup?
     private var visibleListFallbackResolutionCount = 0
     #if DEBUG
@@ -970,6 +1036,7 @@ final class WanderStore: ObservableObject {
     }
 
     private func invalidatePresentationCaches() {
+        liveFeedSectionProjection = nil
         visiblePlacesCache.removeAll(keepingCapacity: true)
         visiblePlaceCountsByOwnerIDCache = nil
         visiblePlacesByOwnerIDCache = nil
@@ -1386,6 +1453,30 @@ final class WanderStore: ObservableObject {
         try withDeferredPersistence(operation)
     }
 
+    /// Shares strict candidate lookup work only during a synchronous import.
+    /// Model identity edits invalidate the shortlist; other save/read callers
+    /// continue to inspect the live places array without retaining an index.
+    func withImportPlaceLookupProjection<Result>(
+        _ operation: () throws -> Result
+    ) rethrows -> Result {
+        let previousProjection = importPlaceLookupProjection
+        importPlaceLookupProjection = ImportPlaceLookupProjection(
+            places: places, collectionRevision: importPlaceCollectionRevision
+        )
+        defer { importPlaceLookupProjection = previousProjection }
+        return try operation()
+    }
+
+    /// Import writes share strict identity preparation and one durable snapshot.
+    func performBatchedImportMutations<Result>(_ operation: () throws -> Result) rethrows -> Result {
+        let previousStreakProjection = importSaveStreakDateProjection
+        importSaveStreakDateProjection = ImportSaveStreakDateProjection()
+        defer { importSaveStreakDateProjection = previousStreakProjection }
+        return try withImportPlaceLookupProjection {
+            try performBatchedLocalMutations(operation)
+        }
+    }
+
     func apply(authState: AuthState) {
         switch authState {
         case .signedIn(let session), .offline(let session, _):
@@ -1512,7 +1603,20 @@ final class WanderStore: ObservableObject {
     }
 
     var saveStreakSummary: SaveStreakSummary {
-        SaveStreakCalculator.summary(
+        if let importSaveStreakDateProjection {
+            let saveDates = currentUserSaveStreakDates
+            let recoveryDates = saveStreakRecoveryDatesByUserID[currentUser.id, default: []]
+            let calendar = Calendar.current
+            // The calculator already uses Set(startOfDay(input)). Reusing only
+            // that pure conversion keeps every mutation, account and day change
+            // visible, without repeating it for the growing import ledger.
+            return SaveStreakCalculator.summary(
+                saveDates: importSaveStreakDateProjection.uniqueDays(in: saveDates, calendar: calendar),
+                recoveryDates: importSaveStreakDateProjection.uniqueDays(in: recoveryDates, calendar: calendar),
+                calendar: calendar
+            )
+        }
+        return SaveStreakCalculator.summary(
             saveDates: currentUserSaveStreakDates,
             recoveryDates: saveStreakRecoveryDatesByUserID[currentUser.id, default: []]
         )
@@ -1860,6 +1964,16 @@ final class WanderStore: ObservableObject {
             let remoteReferenceIDs = remoteOwnerPlaces.reduce(into: Set<String>()) {
                 $0.formUnion(Self.referenceIDs(for: $1.userPlace))
             }
+            // A remote omission keeps a synced parent only when it has local
+            // work. Index child parents once instead of rescanning both arrays
+            // for every omitted save. Deleted dirty children still count.
+            var unsyncedChildParentIDs = Set<String>()
+            for attribute in placeAttributes where attribute.syncState != .synced {
+                unsyncedChildParentIDs.insert(attribute.userPlaceID)
+            }
+            for visit in placeVisits where visit.syncState != .synced {
+                unsyncedChildParentIDs.insert(visit.userPlaceID)
+            }
             let preservedLocalRows = userPlaces.filter { userPlace in
                 guard userPlace.userID == currentUser.id,
                       userPlace.deletedAt == nil
@@ -1867,9 +1981,9 @@ final class WanderStore: ObservableObject {
                 if userPlace.syncState != .synced {
                     return true
                 }
-                return Self.referenceIDs(for: userPlace)
-                    .isDisjoint(with: remoteReferenceIDs)
-                    && hasUnsyncedCalendarChildren(for: userPlace)
+                let referenceIDs = Self.referenceIDs(for: userPlace)
+                return referenceIDs.isDisjoint(with: remoteReferenceIDs)
+                    && !referenceIDs.isDisjoint(with: unsyncedChildParentIDs)
             }
             let preservedLocalReferenceIDs = preservedLocalRows.reduce(into: Set<String>()) {
                 $0.formUnion(Self.referenceIDs(for: $1))
@@ -1902,20 +2016,6 @@ final class WanderStore: ObservableObject {
         )
         currentUserCalendarProjectionCache = (currentUser.id, projection)
         return projection
-    }
-
-    private func hasUnsyncedCalendarChildren(for userPlace: LocalUserPlace) -> Bool {
-        let userPlaceReferenceIDs = Self.referenceIDs(for: userPlace)
-        if placeAttributes.contains(where: {
-            userPlaceReferenceIDs.contains($0.userPlaceID)
-                && $0.syncState != .synced
-        }) {
-            return true
-        }
-        return placeVisits.contains {
-            userPlaceReferenceIDs.contains($0.userPlaceID)
-                && $0.syncState != .synced
-        }
     }
 
     /// Audience is ephemeral. Cancel old work before clearing its page so a
@@ -2987,19 +3087,47 @@ final class WanderStore: ObservableObject {
     var visibleLiveFeedSections: [LiveFeedActivitySection] {
         guard let query = liveFeedQuery else { return [] }
         let now = liveFeedClock()
+        let wallNow = Date.now
+        // Authorization and mutable query inputs are evaluated even on a warm
+        // read. An expiry task may not have run before this frame is requested.
         let allowed = groupedFeedActivity.flatMap(\.activities).filter {
             query.includes($0, through: liveFeedExpansionStage)
                 && liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: now)
         }
+        let members = allowed.map {
+            LiveFeedSectionMember(activityID: $0.id, placeID: $0.place?.place.id,
+                                  ticketKind: $0.resolvedTicketKind,
+                                  stage: query.expansionStage(for: $0))
+        }
+        // Future envelopes have time-dependent grouping and sort behavior. Keep
+        // rebuilding those reads, including the five-minute clock-skew edge.
+        let canReuse = allowed.allSatisfy { $0.occurredAt <= wallNow }
+        if canReuse, let cached = liveFeedSectionProjection,
+           cached.userID == currentUser.id, cached.query == query,
+           cached.stage == liveFeedExpansionStage, cached.audience == feedAudience,
+           cached.limit == feedVisibleTileLimit, cached.members == members,
+           wallNow >= cached.builtAt {
+            return cached.sections
+        }
+        liveFeedSectionBuildCount += 1
         var remaining = feedVisibleTileLimit
-        return FeedPresentation.stagedActivitySections(allowed, query: query, through: liveFeedExpansionStage).map { section in
+        let sections = FeedPresentation.stagedActivitySections(
+            allowed, query: query, through: liveFeedExpansionStage, relativeTo: wallNow
+        ).map { section in
             let visible = Array(section.groups.prefix(remaining))
             remaining -= visible.count
             return LiveFeedActivitySection(stage: section.stage, groups: visible)
         }
+        liveFeedSectionProjection = canReuse ? LiveFeedSectionProjection(
+            userID: currentUser.id, query: query, stage: liveFeedExpansionStage,
+            audience: feedAudience, limit: feedVisibleTileLimit, members: members,
+            builtAt: wallNow, sections: sections
+        ) : nil
+        return sections
     }
 
     private func clearLiveFeedLease() {
+        liveFeedSectionProjection = nil
         liveFeedLeaseTask?.cancel()
         liveFeedLeaseTask = nil
         liveFeedDisplayLease = LiveFeedDisplayLease()
@@ -3418,6 +3546,11 @@ final class WanderStore: ObservableObject {
         followedPlaces: [VisiblePlace],
         relativeTo now: Date
     ) -> FollowedFeedPage {
+        #if DEBUG && targetEnvironment(simulator)
+        if LivePerformanceUITestPolicy.isEnabled() {
+            return livePerformanceFixtureFeedPage(from: followedPlaces, relativeTo: now)
+        }
+        #endif
         let savedPlaceIDs = Set(currentUserVisiblePlaces.map { $0.place.id })
         let placeEvents = followedPlaces
             .filter { !savedPlaceIDs.contains($0.place.id) }
@@ -3471,6 +3604,52 @@ final class WanderStore: ObservableObject {
             fetchedAt: now
         )
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// Opt-in, memory-only scale data for the real Live UI. Keep the authorized
+    /// saves and identities, but place their display copies inside one viewport.
+    /// This neither mutates the store's rows nor introduces a production limit.
+    func livePerformanceFixtureFeedPage(from followedPlaces: [VisiblePlace], relativeTo now: Date) -> FollowedFeedPage {
+        var seen = Set<String>()
+        var distinct: [VisiblePlace] = []
+        for source in followedPlaces.sorted(by: { $0.place.id < $1.place.id }) {
+            guard seen.insert(source.place.id).inserted else { continue }
+            distinct.append(source)
+            if distinct.count == 300 { break }
+        }
+        var events: [FeedActivity] = []
+        events.reserveCapacity(distinct.count * 2)
+        for (index, source) in distinct.enumerated() {
+            let original = source.place
+            let latitude: Double = 34.075 + Double(index / 20 - 7) * 0.002
+            let longitude: Double = -118.285 + (Double(index % 20) - 9.5) * 0.002
+            let place = LocalPlace(localID: original.localID, serverID: original.serverID,
+                canonicalName: original.canonicalName, category: original.category,
+                primaryCategory: original.primaryCategory, subcategory: original.subcategory,
+                address: original.address, locality: "Los Angeles", region: "CA", country: "US",
+                latitude: latitude, longitude: longitude,
+                sourceProvider: original.sourceProvider, sourceProviderPlaceID: original.sourceProviderPlaceID,
+                syncState: .synced)
+            let visible = VisiblePlace(id: source.id, place: place, userPlace: source.userPlace,
+                                       owner: source.owner, attributes: source.attributes)
+            let actor: ProfileShell = shell(for: source.owner)
+            let note = "A fictional place memory for the Live scale review. "
+                + String(repeating: "A useful stop worth remembering. ", count: 1 + index % 4)
+            for occurrence in 0..<2 {
+                let eventID = String(format: "live-perf-%03d-%d", index, occurrence)
+                let kind: FeedActivityKind = occurrence == 0 ? .placeWannaGo : .placeBeen
+                let secondsAgo: TimeInterval = 3_600 + Double(index * 30) + Double(occurrence * 7_200)
+                let occurredAt: Date = now.addingTimeInterval(-secondsAgo)
+                let event = FeedActivity(id: eventID, kind: kind, actor: actor,
+                                         place: visible, occurredAt: occurredAt, note: note)
+                events.append(event)
+            }
+        }
+        let ordered: [FeedActivity] = FeedPresentation.newestFirst(events, relativeTo: now)
+        return FollowedFeedPage(activity: ordered,
+                                featuredPlaces: [], nextCursor: nil, fetchedAt: now)
+    }
+    #endif
 
     var effectiveDefaultVisibility: PlaceVisibility {
         isPrivateProfile ? .selfOnly : defaultVisibility.normalizedForStealthMode
@@ -3872,6 +4051,234 @@ final class WanderStore: ObservableObject {
         return result
     }
 
+    /// A synchronous insertion operation retains value fingerprints, never a
+    /// store-global cache. Saves may append places between insertions; edits,
+    /// reordered places, and changed list memberships rebuild the affected data.
+    private struct ListInsertionPlaceFingerprint: Equatable {
+        let identity: ObjectIdentifier
+        let localID: String
+        let serverID: String?
+        let name: String
+        let provider: String
+        let providerID: String?
+        let address: String?
+        let locality: String?
+        let region: String?
+        let country: String?
+        let latitude: UInt64
+        let longitude: UInt64
+
+        init(_ place: LocalPlace) {
+            identity = ObjectIdentifier(place)
+            localID = place.localID
+            serverID = place.serverID
+            name = place.canonicalName
+            provider = place.sourceProvider
+            providerID = place.sourceProviderPlaceID
+            address = place.address
+            locality = place.locality
+            region = place.region
+            country = place.country
+            latitude = place.latitude.bitPattern
+            longitude = place.longitude.bitPattern
+        }
+    }
+
+    @MainActor
+    private final class ListInsertionProjection {
+        private enum Group: Hashable {
+            case resolved(Int)
+            case unresolved(String)
+        }
+        private var fingerprints: [ListInsertionPlaceFingerprint] = []
+        private var localeID = Locale.current.identifier
+        private var parents: [Int] = []
+        private var nodeByAlias: [String: Int] = [:]
+        private var nodeByReference: [String: Int] = [:]
+        private(set) var firstPlaceByReference: [String: LocalPlace] = [:]
+        private(set) var aliasesByPlace: [ObjectIdentifier: Set<String>] = [:]
+        private(set) var supportsProjection = true
+        private var listAliases = Set<String>()
+        private var rawMembers: [LocalPlaceListItem] = []
+        private var orderedMembers: [LocalPlaceListItem] = []
+        private var visibleMembers: [LocalPlaceListItem]?
+
+        func prepare(store: WanderStore, list: LocalPlaceList) {
+            let next = store.places.map(ListInsertionPlaceFingerprint.init)
+            let currentLocaleID = Locale.current.identifier
+            let canAppend = currentLocaleID == localeID && next.count >= fingerprints.count
+                && zip(fingerprints, next).allSatisfy { $0.0 == $0.1 }
+            if !canAppend {
+                fingerprints.removeAll(keepingCapacity: true)
+                parents.removeAll(keepingCapacity: true)
+                nodeByAlias.removeAll(keepingCapacity: true)
+                nodeByReference.removeAll(keepingCapacity: true)
+                firstPlaceByReference.removeAll(keepingCapacity: true)
+                aliasesByPlace.removeAll(keepingCapacity: true)
+                supportsProjection = true
+                visibleMembers = nil
+            }
+            localeID = currentLocaleID
+            if next.count != fingerprints.count {
+                for place in store.places.dropFirst(fingerprints.count) { append(place) }
+                visibleMembers = nil
+            }
+            fingerprints = next
+
+            let currentAliases = store.listReferenceIDs(for: list)
+            let currentMembers = store.placeListItems.filter { currentAliases.contains($0.listID) }
+            if currentAliases != listAliases || currentMembers != rawMembers {
+                listAliases = currentAliases
+                rawMembers = currentMembers
+                orderedMembers = currentMembers.sorted(by: store.listItemPresentationIsOrderedBefore)
+                visibleMembers = nil
+            }
+        }
+
+        private func root(_ node: Int) -> Int {
+            var result = node
+            while parents[result] != result { result = parents[result] }
+            var current = node
+            while parents[current] != current {
+                let next = parents[current]
+                parents[current] = result
+                current = next
+            }
+            return result
+        }
+
+        private func append(_ place: LocalPlace) {
+            let node = parents.count
+            parents.append(node)
+            let aliases = VisiblePlaceGrouping.groupingAliases(for: place)
+            aliasesByPlace[ObjectIdentifier(place)] = aliases
+            for alias in aliases {
+                if let prior = nodeByAlias[alias] {
+                    let priorRoot = root(prior)
+                    let nextRoot = root(node)
+                    parents[priorRoot] = nextRoot
+                }
+                nodeByAlias[alias] = node
+            }
+            let references: [String?] = [place.id, place.localID, place.serverID]
+            for reference in references.compactMap({ $0 }) {
+                if firstPlaceByReference[reference] == nil { firstPlaceByReference[reference] = place }
+                // Empty/whitespace identifiers can collide without joining a
+                // normalized alias group. Retain the original path in that case.
+                if let previous = nodeByReference[reference], root(previous) != root(node) {
+                    supportsProjection = false
+                }
+                nodeByReference[reference] = node
+            }
+        }
+
+        func members(store: WanderStore) -> [LocalPlaceListItem] {
+            if let visibleMembers { return visibleMembers }
+            var latest: [Group: LocalPlaceListItem] = [:]
+            for item in orderedMembers {
+                let group = nodeByReference[item.placeID].map { Group.resolved(root($0)) }
+                    ?? .unresolved(item.placeID)
+                if let previous = latest[group] {
+                    if store.listMembershipItemIsOlder(previous, item) { latest[group] = item }
+                } else {
+                    latest[group] = item
+                }
+            }
+            let visible = latest.values.filter { $0.deletedAt == nil }
+            visibleMembers = visible
+            return visible
+        }
+
+        func didAppend(_ item: LocalPlaceListItem, store: WanderStore) {
+            rawMembers.append(item)
+            var lower = 0
+            var upper = orderedMembers.count
+            while lower < upper {
+                let middle = (lower + upper) / 2
+                if store.listItemPresentationIsOrderedBefore(item, orderedMembers[middle]) {
+                    upper = middle
+                } else {
+                    lower = middle + 1
+                }
+            }
+            orderedMembers.insert(item, at: lower)
+            visibleMembers = nil
+        }
+    }
+
+    /// The closure cannot suspend, so its projection never spans an account
+    /// handoff or unrelated asynchronous work. Each insertion still validates
+    /// permissions and publishes the same membership mutation as the row API.
+    func withBatchedCurrentUserPlaceListInsertions<Result>(
+        to list: LocalPlaceList?,
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        _ operation: (_ insert: (String) -> ListPlaceAddResult) throws -> Result
+    ) rethrows -> Result {
+        let projection = ListInsertionProjection()
+        return try withDeferredPersistence {
+            try operation { userPlaceID in
+                guard let list else {
+                    return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
+                }
+                return addCurrentUserPlace(userPlaceID: userPlaceID, to: list,
+                    senderNotificationPolicy: senderNotificationPolicy, projection: projection)
+            }
+        }
+    }
+
+    func addCurrentUserPlaces(userPlaceIDs: [String], to list: LocalPlaceList,
+                              senderNotificationPolicy: SenderNotificationPolicy = .standard) -> [ListPlaceAddResult] {
+        withBatchedCurrentUserPlaceListInsertions(to: list, senderNotificationPolicy: senderNotificationPolicy) { insert in
+            userPlaceIDs.map(insert)
+        }
+    }
+
+    private func addCurrentUserPlace(userPlaceID: String, to list: LocalPlaceList,
+                                     senderNotificationPolicy: SenderNotificationPolicy,
+                                     projection: ListInsertionProjection) -> ListPlaceAddResult {
+        guard canAddPlaces(to: list), let userPlace = currentUserPlace(matching: userPlaceID) else {
+            return ListPlaceAddResult(outcome: .permissionDenied, companionSave: .none)
+        }
+        projection.prepare(store: self, list: list)
+        guard projection.supportsProjection else {
+            return addCurrentUserPlace(userPlaceID: userPlaceID, to: list,
+                senderNotificationPolicy: senderNotificationPolicy)
+        }
+        let members = projection.members(store: self)
+        let alreadyPresent: Bool
+        if let target = projection.firstPlaceByReference[userPlace.placeID] {
+            let targetAliases = projection.aliasesByPlace[ObjectIdentifier(target)] ?? []
+            let references: [String?] = [target.id, target.localID, target.serverID]
+            let targetReferences = Set(references.compactMap { $0 })
+            alreadyPresent = members.contains { item in
+                let matches = projection.firstPlaceByReference[item.placeID].map {
+                    !(projection.aliasesByPlace[ObjectIdentifier($0)] ?? []).isDisjoint(with: targetAliases)
+                } ?? targetReferences.contains(item.placeID)
+                return matches || item.ownerUserPlaceID == userPlace.id || item.sourceUserPlaceID == userPlace.id
+            }
+        } else {
+            alreadyPresent = members.contains {
+                $0.placeID == userPlace.placeID || $0.ownerUserPlaceID == userPlace.id || $0.sourceUserPlaceID == userPlace.id
+            }
+        }
+        guard !alreadyPresent else { return ListPlaceAddResult(outcome: .alreadyInList, companionSave: .none) }
+        let item = LocalPlaceListItem(
+            localID: "local_list_item_\(slug(list.id))_\(slug(userPlace.placeID))_\(placeListItems.count + 1)",
+            listID: list.id, placeID: userPlace.placeID, ownerUserPlaceID: userPlace.id,
+            sourceUserPlaceID: userPlace.id, addedByUserID: currentUser.id,
+            syncState: .pendingCreate, senderNotificationPolicy: senderNotificationPolicy)
+        placeListItems.append(item)
+        projection.didAppend(item, store: self)
+        if let index = placeLists.firstIndex(where: { $0.id == list.id }) {
+            placeLists[index].updatedAt = .now
+            if canManage(placeLists[index]) { placeLists[index].syncStateRaw = SyncState.pendingUpdate.rawValue }
+            placeLists[index].cachedItemCount = projection.members(store: self).count
+        }
+        persist()
+        return ListPlaceAddResult(outcome: .added,
+            companionSave: userPlace.status == .been ? .none : .existingWanna(userPlaceID: userPlace.id))
+    }
+
     /// Adds an already-owned place to a list without rebuilding the visible
     /// place projection. Import batches use this inside a deferred-persistence
     /// transaction after saving the corresponding user place.
@@ -3890,13 +4297,31 @@ final class WanderStore: ObservableObject {
                 companionSave: .none
             )
         }
-        let userPlaceAlreadyInList = place(matching: userPlace.placeID).map { resolvedPlace in
-            listItems(for: list).contains { item in
-                listItem(item, represents: resolvedPlace)
+        // Keep the array-first alias resolution used by place(matching:), but
+        // build it once for this insertion instead of scanning every place for
+        // every existing list member. No lookup survives mutable model changes.
+        var firstPlaceByReferenceID: [String: LocalPlace] = [:]
+        firstPlaceByReferenceID.reserveCapacity(places.count * 2)
+        for place in places {
+            let referenceIDs: [String?] = [place.id, place.localID, place.serverID]
+            for referenceID in referenceIDs.compactMap({ $0 })
+            where firstPlaceByReferenceID[referenceID] == nil {
+                firstPlaceByReferenceID[referenceID] = place
+            }
+        }
+        let currentItems = listItems(for: list)
+        let userPlaceAlreadyInList = firstPlaceByReferenceID[userPlace.placeID].map { resolvedPlace in
+            let targetAliases = VisiblePlaceGrouping.groupingAliases(for: resolvedPlace)
+            let targetReferenceIDs = Set([resolvedPlace.id, resolvedPlace.localID, resolvedPlace.serverID].compactMap { $0 })
+            return currentItems.contains { item in
+                let representsPlace = firstPlaceByReferenceID[item.placeID].map {
+                    !VisiblePlaceGrouping.groupingAliases(for: $0).isDisjoint(with: targetAliases)
+                } ?? targetReferenceIDs.contains(item.placeID)
+                return representsPlace
                     || item.ownerUserPlaceID == userPlace.id
                     || item.sourceUserPlaceID == userPlace.id
             }
-        } ?? listItems(for: list).contains { item in
+        } ?? currentItems.contains { item in
             item.placeID == userPlace.placeID
                 || item.ownerUserPlaceID == userPlace.id
                 || item.sourceUserPlaceID == userPlace.id
@@ -5664,20 +6089,49 @@ final class WanderStore: ObservableObject {
     }
 
     private func remoteVisiblePlaces(filters: PlaceFilters) -> [VisiblePlace] {
-        remoteVisiblePlaceCache
-            .map(visiblePlaceWithLatestOwner)
+        guard !remoteVisiblePlaceCache.isEmpty else { return [] }
+        // Preserve profiles.first(id OR handle), including a handle match that
+        // precedes an ID match. These indices live only for this synchronous
+        // read so direct model changes cannot leave an owner lookup stale.
+        var firstProfileByID: [String: Int] = [:]
+        var firstProfileByHandle: [String: Int] = [:]
+        for (index, profile) in profiles.enumerated() {
+            if firstProfileByID[profile.id] == nil { firstProfileByID[profile.id] = index }
+            if firstProfileByHandle[profile.handle] == nil { firstProfileByHandle[profile.handle] = index }
+        }
+        let viewerID = currentUser.id
+        var blockedOwnerIDs = Set<String>()
+        for block in blocks {
+            if block.blockerUserID == viewerID { blockedOwnerIDs.insert(block.blockedUserID) }
+            if block.blockedUserID == viewerID { blockedOwnerIDs.insert(block.blockerUserID) }
+        }
+        let followingIDs = Set(follows.lazy.filter { $0.followerUserID == viewerID }.map(\.followedUserID))
+        let followerIDs = Set(follows.lazy.filter { $0.followedUserID == viewerID }.map(\.followerUserID))
+        let normalizedCategories = filters.normalizedCategories
+        return remoteVisiblePlaceCache
+            .map { visiblePlace in
+                let index = min(firstProfileByID[visiblePlace.owner.id] ?? Int.max,
+                                firstProfileByHandle[visiblePlace.owner.handle] ?? Int.max)
+                guard index != Int.max else { return visiblePlace }
+                return VisiblePlace(id: visiblePlace.id, place: visiblePlace.place,
+                    userPlace: visiblePlace.userPlace, owner: profiles[index], attributes: visiblePlace.attributes)
+            }
             .filter { visiblePlace in
-                guard canDisplayRemotePlace(visiblePlace) else { return false }
+                let ownerID = visiblePlace.owner.id
+                guard visiblePlace.userPlace.deletedAt == nil,
+                      visibilityPolicy.canDisplayServerAuthorizedPlace(
+                        viewerID: viewerID, ownerID: visiblePlace.userPlace.userID,
+                        visibility: visiblePlace.userPlace.visibility,
+                        isBlocked: blockedOwnerIDs.contains(ownerID)) else { return false }
                 guard filters.statuses.isEmpty || filters.statuses.contains(visiblePlace.userPlace.status) else { return false }
-                let normalizedCategories = filters.normalizedCategories
                 guard normalizedCategories.isEmpty || normalizedCategories.contains(visiblePlace.effectiveCategory) else { return false }
-                guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(visiblePlace.owner.id) else { return false }
+                guard filters.ownerIDs.isEmpty || filters.ownerIDs.contains(ownerID) else { return false }
 
                 guard !filters.ownerScopes.isEmpty else { return true }
 
-                let isMine = visiblePlace.owner.id == currentUser.id
-                let relationship = relationship(to: visiblePlace.owner.id)
-                let isFriend = relationship == .mutual
+                let isMine = ownerID == viewerID
+                let isFriend = !isMine && !blockedOwnerIDs.contains(ownerID)
+                    && followingIDs.contains(ownerID) && followerIDs.contains(ownerID)
                 return (filters.ownerScopes.contains("you") && isMine)
                     || (filters.ownerScopes.contains("friends") && !isMine && (isFriend || visiblePlace.userPlace.visibility == .mutuals))
                     || (filters.ownerScopes.contains("following") && !isMine)
@@ -5693,20 +6147,6 @@ final class WanderStore: ObservableObject {
                 visibility: visiblePlace.userPlace.visibility,
                 isBlocked: isBlockedBetweenCurrentUser(and: visiblePlace.owner.id)
             )
-    }
-
-    private func visiblePlaceWithLatestOwner(_ visiblePlace: VisiblePlace) -> VisiblePlace {
-        guard let owner = profiles.first(where: { $0.id == visiblePlace.owner.id || $0.handle == visiblePlace.owner.handle }) else {
-            return visiblePlace
-        }
-
-        return VisiblePlace(
-            id: visiblePlace.id,
-            place: visiblePlace.place,
-            userPlace: visiblePlace.userPlace,
-            owner: owner,
-            attributes: visiblePlace.attributes
-        )
     }
 
     private func mergeVisiblePlaces(_ places: [VisiblePlace]) -> [VisiblePlace] {
@@ -5867,6 +6307,42 @@ final class WanderStore: ObservableObject {
         return placeAttributes
             .filter { userPlaceIDs.contains($0.userPlaceID) }
             .sorted { $0.questionKey < $1.questionKey }
+    }
+
+    /// Read several saves in one projection without rescanning all attributes
+    /// for each row. Nothing survives the call: mutable aliases and question
+    /// keys retain the same behavior as individual attributes(for:) reads.
+    func attributesByUserPlaceID(for userPlaceIDs: [String]) -> [String: [LocalPlaceAttribute]] {
+        guard !userPlaceIDs.isEmpty else { return [:] }
+        var firstUserPlaceByReferenceID: [String: LocalUserPlace] = [:]
+        for userPlace in userPlaces {
+            for referenceID in Self.referenceIDs(for: userPlace)
+            where firstUserPlaceByReferenceID[referenceID] == nil {
+                firstUserPlaceByReferenceID[referenceID] = userPlace
+            }
+        }
+        let attributesByReferenceID = Dictionary(grouping: placeAttributes.enumerated(), by: { $0.element.userPlaceID })
+        var result: [String: [LocalPlaceAttribute]] = [:]
+        result.reserveCapacity(userPlaceIDs.count)
+        for userPlaceID in userPlaceIDs where result[userPlaceID] == nil {
+            let referenceIDs: Set<String>
+            if let userPlace = firstUserPlaceByReferenceID[userPlaceID] {
+                referenceIDs = Self.referenceIDs(for: userPlace)
+            } else {
+                referenceIDs = [userPlaceID]
+            }
+            result[userPlaceID] = referenceIDs.flatMap { attributesByReferenceID[$0] ?? [] }
+                .sorted {
+                    if $0.element.questionKey != $1.element.questionKey {
+                        return $0.element.questionKey < $1.element.questionKey
+                    }
+                    // The original filter preserves array order for equal keys,
+                    // independently of which alias each attribute references.
+                    return $0.offset < $1.offset
+                }
+                .map(\.element)
+        }
+        return result
     }
 
     /// Pending deletion intent wins over remote snapshots. A completed deletion
@@ -11542,7 +12018,11 @@ final class WanderStore: ObservableObject {
             return
         }
 
-        updateVisitSummary(for: userPlace, activeVisits: visits(for: userPlace.id))
+        // Deleted and Wanna saves clear their ratings without consuming visits.
+        // Avoid resolving aliases and scanning history that the summary ignores.
+        let activeVisits = userPlace.deletedAt == nil && userPlace.status == .been
+            ? visits(for: userPlace.id) : []
+        updateVisitSummary(for: userPlace, activeVisits: activeVisits)
     }
 
     private func updateVisitSummary(for userPlace: LocalUserPlace, activeVisits: [LocalPlaceVisit]) {
@@ -13007,11 +13487,19 @@ final class WanderStore: ObservableObject {
             syncState: .pendingCreate
         )
         places.append(place)
+        importPlaceLookupProjection?.didAppend(
+            place, totalCount: places.count, collectionRevision: importPlaceCollectionRevision
+        )
         return place
     }
 
     private func place(matching candidate: PlaceCandidate) -> LocalPlace? {
-        places.first {
+        if let importPlaceLookupProjection {
+            return importPlaceLookupProjection.firstMatch(
+                for: candidate, in: places, collectionRevision: importPlaceCollectionRevision
+            )
+        }
+        return places.first {
             VisiblePlaceGrouping.matches($0, candidate: candidate)
         }
     }

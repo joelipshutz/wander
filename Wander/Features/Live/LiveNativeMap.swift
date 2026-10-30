@@ -42,6 +42,8 @@ struct LiveNativeMap: UIViewRepresentable {
     let positionRevision: UInt64
     let proxy: LiveNativeMapProxy
     let pins: [LivePlacePin]
+    // Callers without a projection generation retain the conservative refresh.
+    var pinsRevision: UUID? = nil
     let selectedID: String?
     let viewedPins: [String: Date]
     let brand: AstirBrandMode
@@ -87,6 +89,9 @@ struct LiveNativeMap: UIViewRepresentable {
         private let basemapAppearance = MapBasemapAppearance()
         private var annotations: [String: LiveNativePinAnnotation] = [:]
         private var annotationSnapshot: [AnnotationSnapshot] = []
+        private var lastPinsRevision: UUID?
+        private var densitySnapshot: DensitySnapshot?
+        private var densitySelectionID: String?
         private var pinByID: [String: LivePlacePin] = [:]
         private var compactIDs: Set<String> = []
         private var visibleViews: [String: WeakPinView] = [:]
@@ -115,6 +120,10 @@ struct LiveNativeMap: UIViewRepresentable {
             (map as? LiveNativeMapView)?.onLayout = { [weak self, weak map] in
                 guard let self, let map else { return }
                 self.applyCameraCommand(to: map, animated: self.pendingCameraAnimation)
+                // Camera-only layouts keep the delegate's 100ms throttle.
+                if self.densitySnapshot?.bounds != map.bounds || self.densitySnapshot?.margins != map.layoutMargins {
+                    self.refreshDensity(in: map)
+                }
             }
             map.register(LiveNativePinView.self, forAnnotationViewWithReuseIdentifier: LiveNativePinView.reuseIdentifier)
             interactionObserver.delegate = self
@@ -143,9 +152,17 @@ struct LiveNativeMap: UIViewRepresentable {
             let margins = UIEdgeInsets(top: parent.contentInsets.top, left: parent.contentInsets.leading,
                                        bottom: parent.contentInsets.bottom, right: parent.contentInsets.trailing)
             if map.layoutMargins != margins { map.layoutMargins = margins }
-            map.isUserInteractionEnabled = !parent.drawing
-            map.selectableMapFeatures = parent.drawing ? [] : [.pointsOfInterest]
-            map.showsUserLocation = parent.showsUserLocation
+            let interactionEnabled = !parent.drawing
+            if map.isUserInteractionEnabled != interactionEnabled {
+                map.isUserInteractionEnabled = interactionEnabled
+            }
+            let selectableFeatures: MKMapFeatureOptions = parent.drawing ? [] : [.pointsOfInterest]
+            if map.selectableMapFeatures != selectableFeatures {
+                map.selectableMapFeatures = selectableFeatures
+            }
+            if map.showsUserLocation != parent.showsUserLocation {
+                map.showsUserLocation = parent.showsUserLocation
+            }
             if lastSelectionRevision != parent.nativeSelectionRevision {
                 lastSelectionRevision = parent.nativeSelectionRevision
                 for feature in map.selectedAnnotations where feature is MKMapFeatureAnnotation {
@@ -153,9 +170,9 @@ struct LiveNativeMap: UIViewRepresentable {
                 }
             }
             updateAreaOverlays(in: map)
-            synchronizePins(in: map)
+            let pinsChanged = synchronizePins(in: map)
             applyCameraCommand(to: map, animated: animated)
-            refreshDensity(in: map)
+            refreshDensity(in: map, force: pinsChanged)
         }
 
         private func applyCameraCommand(to map: MKMapView, animated: Bool) {
@@ -223,7 +240,10 @@ struct LiveNativeMap: UIViewRepresentable {
             return query()
         }
 
-        private func synchronizePins(in map: MKMapView) {
+        @discardableResult
+        private func synchronizePins(in map: MKMapView) -> Bool {
+            if let revision = parent.pinsRevision, revision == lastPinsRevision { return false }
+            lastPinsRevision = parent.pinsRevision
             let validPins = parent.pins.filter {
                 CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(
                     latitude: $0.place.place.latitude, longitude: $0.place.place.longitude))
@@ -233,7 +253,8 @@ struct LiveNativeMap: UIViewRepresentable {
                 AnnotationSnapshot(id: $0.id, title: $0.place.place.canonicalName,
                     latitude: $0.place.place.latitude, longitude: $0.place.place.longitude)
             }
-            guard nextSnapshot != annotationSnapshot else { return }
+            // Content and totem state may change while coordinates/IDs do not.
+            guard nextSnapshot != annotationSnapshot else { return true }
             annotationSnapshot = nextSnapshot
             let removed = annotations.filter { pinByID[$0.key] == nil }
             map.removeAnnotations(Array(removed.values))
@@ -253,6 +274,7 @@ struct LiveNativeMap: UIViewRepresentable {
                     map.addAnnotation(annotation)
                 }
             }
+            return true
         }
 
         private func updateAreaOverlays(in map: MKMapView) {
@@ -278,10 +300,24 @@ struct LiveNativeMap: UIViewRepresentable {
             }
         }
 
-        private func refreshDensity(in map: MKMapView) {
+        private func refreshDensity(in map: MKMapView, force: Bool = false) {
             // Query MapKit's spatial index instead of walking the full history
             // during every camera movement. Match the previous 44pt overscan.
             guard map.bounds.width > 0, map.bounds.height > 0 else { return }
+            let geometry = DensitySnapshot(map: map)
+            guard force || geometry != densitySnapshot || parent.selectedID != densitySelectionID else {
+                // Keep event-relative timestamps and viewed expiry exact on each
+                // update without repeating the spatial query or density sort.
+                for (id, reference) in visibleViews {
+                    guard let view = reference.view,
+                          let annotation = view.annotation as? LiveNativePinAnnotation,
+                          annotation.pinID == id else { continue }
+                    configure(view, annotation: annotation, map: map)
+                }
+                return
+            }
+            densitySnapshot = geometry
+            densitySelectionID = parent.selectedID
             let rect = map.visibleMapRect
             let paddedRect = rect.insetBy(dx: -rect.width * 44 / map.bounds.width,
                                           dy: -rect.height * 44 / map.bounds.height)
@@ -299,14 +335,14 @@ struct LiveNativeMap: UIViewRepresentable {
                 guard let view = map.view(for: annotation) as? LiveNativePinView else { continue }
                 configure(view, annotation: annotation, map: map)
                 if let point = points[annotation.pinID] {
-                    view.isAccessibilityElement = CGRect(x: point.x - 22, y: point.y - 22,
-                        width: 44, height: 44).intersects(map.bounds)
+                    view.setAccessibilityVisibility(CGRect(x: point.x - 22, y: point.y - 22,
+                        width: 44, height: 44).intersects(map.bounds))
                 }
                 nextViews[annotation.pinID] = WeakPinView(view)
             }
             for (id, reference) in visibleViews where nextViews[id] == nil {
                 if let view = reference.view, (view.annotation as? LiveNativePinAnnotation)?.pinID == id {
-                    view.isAccessibilityElement = false
+                    view.setAccessibilityVisibility(false)
                 }
             }
             visibleViews = nextViews
@@ -317,6 +353,9 @@ struct LiveNativeMap: UIViewRepresentable {
             view.configure(pin: pin, selected: pin.id == parent.selectedID,
                            viewed: pin.isViewed(dates: parent.viewedPins),
                            compact: compactIDs.contains(pin.id), brand: parent.brand)
+            #if DEBUG && targetEnvironment(simulator)
+            if LivePerformanceUITestPolicy.isEnabled() { view.performanceTestMap = map }
+            #endif
             view.onActivate = { [weak self] in
                 guard let self, !self.parent.drawing, let pin = self.pinByID[annotation.pinID] else { return }
                 self.parent.onSelectPin(pin)
@@ -328,7 +367,7 @@ struct LiveNativeMap: UIViewRepresentable {
             guard let view = mapView.dequeueReusableAnnotationView(withIdentifier: LiveNativePinView.reuseIdentifier,
                                                                   for: pin) as? LiveNativePinView else { return nil }
             configure(view, annotation: pin, map: mapView)
-            view.isAccessibilityElement = false
+            view.setAccessibilityVisibility(false)
             return view
         }
 
@@ -337,7 +376,8 @@ struct LiveNativeMap: UIViewRepresentable {
                 view.isEnabled = false
                 view.canShowCallout = false
             }
-            refreshDensity(in: mapView)
+            // MapKit can mount a reused view without changing the camera.
+            refreshDensity(in: mapView, force: true)
         }
 
         func mapView(_ mapView: MKMapView, didSelect annotation: any MKAnnotation) {
@@ -419,6 +459,23 @@ struct LiveNativeMap: UIViewRepresentable {
             let longitude: Double
         }
 
+        private struct DensitySnapshot: Equatable {
+            let bounds: CGRect
+            let margins: UIEdgeInsets
+            let geometry: [Double]
+
+            @MainActor
+            init(map: MKMapView) {
+                bounds = map.bounds
+                margins = map.layoutMargins
+                let rect = map.visibleMapRect
+                let camera = map.camera
+                geometry = [rect.origin.x, rect.origin.y, rect.size.width, rect.size.height,
+                    camera.centerCoordinate.latitude, camera.centerCoordinate.longitude,
+                    camera.centerCoordinateDistance, camera.heading, Double(camera.pitch)]
+            }
+        }
+
         private final class WeakPinView {
             weak var view: LiveNativePinView?
             init(_ view: LiveNativePinView) { self.view = view }
@@ -463,11 +520,39 @@ struct LiveNativeHostedPin: View, Equatable {
     }
 }
 
-final class LiveNativePinView: MKAnnotationView {
+class LiveNativePinView: MKAnnotationView {
     static let reuseIdentifier = "live.native.pin"
     private var host: UIHostingController<LiveNativeHostedPin>?
     private var signature: LiveNativeHostedPin?
+    private var preservesAnimatedHosting = false
+    private var compactImageView: UIImageView?
+    var compactImageCache = LiveCompactPinImageCache.shared
     var onActivate: (() -> Void)?
+    var mountedHostingController: UIHostingController<LiveNativeHostedPin>? {
+        guard let host, host.view.superview === self else { return nil }
+        return host
+    }
+
+    #if DEBUG && targetEnvironment(simulator)
+    weak var performanceTestMap: MKMapView?
+
+    override var accessibilityValue: String? {
+        get { performanceTestAccessibilityValue() }
+        set { super.accessibilityValue = newValue }
+    }
+
+    /// Pin values are exported directly by MapKit's annotation accessibility.
+    /// Read the live camera only for the explicitly enabled performance fixture.
+    func performanceTestAccessibilityValue(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = true
+    ) -> String? {
+        let base = super.accessibilityValue
+        guard LivePerformanceUITestPolicy.isEnabled(arguments: arguments, isSimulator: isSimulator),
+              let map = performanceTestMap else { return base }
+        return "\(base ?? "")|live.performance.cameraDistanceMeters=\(map.camera.centerCoordinateDistance)"
+    }
+    #endif
 
     override init(annotation: (any MKAnnotation)?, reuseIdentifier: String?) {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
@@ -480,39 +565,130 @@ final class LiveNativePinView: MKAnnotationView {
         accessibilityTraits = .button
         collisionMode = .circle
         displayPriority = .required
+        registerForTraitChanges([UITraitDisplayScale.self, UITraitAccessibilityContrast.self, UITraitDisplayGamut.self]) {
+            (view: LiveNativePinView, _: UITraitCollection) in
+            view.refreshCompactImageForTraits()
+        }
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
     func configure(pin: LivePlacePin, selected: Bool, viewed: Bool, compact: Bool, brand: AstirBrandMode) {
-        accessibilityIdentifier = "live.pin.\(pin.id)"
-        accessibilityLabel = pin.accessibilityLabel
-        accessibilityValue = compact && !selected ? "Map dot" : "Category pin"
-        accessibilityTraits = selected ? [.button, .selected] : .button
-        zPriority = selected ? .max : .defaultUnselected
+        let identifier = "live.pin.\(pin.id)"
+        if accessibilityIdentifier != identifier { accessibilityIdentifier = identifier }
+        // Recompute time-dependent copy on every refresh, but avoid notifying
+        // UIKit/accessibility when its current value is unchanged.
+        let label = pin.accessibilityLabel
+        if accessibilityLabel != label { accessibilityLabel = label }
+        let value = compact && !selected ? "Map dot" : "Category pin"
+        // The performance fixture's getter appends live camera metadata. The
+        // stored semantic value remains the correct comparison for this setter.
+        if super.accessibilityValue != value { accessibilityValue = value }
+        let traits: UIAccessibilityTraits = selected ? [.button, .selected] : .button
+        // MapKit adds annotation traits of its own to the getter. Compare only
+        // the bits this view owns and retain the native annotation semantics.
+        let ownedTraits: UIAccessibilityTraits = [.button, .selected]
+        let currentTraits = accessibilityTraits
+        if currentTraits.intersection(ownedTraits) != traits {
+            accessibilityTraits = currentTraits.subtracting(ownedTraits).union(traits)
+        }
+        let priority: MKAnnotationViewZPriority = selected ? .max : .defaultUnselected
+        if zPriority != priority { zPriority = priority }
         let root = LiveNativeHostedPin(state: pin.totemState, categoryEmoji: pin.place.categoryEmoji,
             selected: selected, viewed: viewed, compact: compact, brand: brand)
-        guard root != signature else { return }
+        let previous = signature
+        let hasAnimatedChange = previous.map { $0.selected != selected || $0.viewed != viewed } ?? false
+        if hasAnimatedChange { preservesAnimatedHosting = true }
         signature = root
-        if let host { host.rootView = root }
+        if showCompactImage(root) { return }
+        guard root != previous || host?.view.superview == nil else { return }
+        showHosted(root, previous: previous, preservingTransition: hasAnimatedChange)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        refreshCompactImageForTraits()
+    }
+
+    private func refreshCompactImageForTraits() {
+        guard let root = signature, root.compact, !root.selected, !preservesAnimatedHosting else { return }
+        if !showCompactImage(root) { showHosted(root, previous: root, preservingTransition: false) }
+    }
+
+    @discardableResult
+    private func showCompactImage(_ root: LiveNativeHostedPin) -> Bool {
+        guard root.compact, !root.selected, !preservesAnimatedHosting,
+              let image = compactImageCache.image(for: root, scale: traitCollection.displayScale == 0 ? 1 : traitCollection.displayScale, traits: traitCollection)
+        else { return false }
+        let imageView: UIImageView
+        if let compactImageView { imageView = compactImageView }
         else {
-            let controller = UIHostingController(rootView: root)
-            controller.view.backgroundColor = .clear
-            // Totem's selected halo extends beyond its unchanged 44pt target.
-            controller.view.clipsToBounds = false
-            controller.view.isUserInteractionEnabled = false
-            controller.view.accessibilityElementsHidden = true
-            controller.view.frame = bounds
-            controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            addSubview(controller.view)
-            host = controller
+            imageView = UIImageView(frame: bounds)
+            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            imageView.isUserInteractionEnabled = false
+            imageView.isAccessibilityElement = false
+            imageView.accessibilityElementsHidden = true
+            compactImageView = imageView
         }
-        host?.overrideUserInterfaceStyle = brand.prefersDarkInterface ? .dark : .light
+        if imageView.image !== image { imageView.image = image }
+        if imageView.superview == nil { addSubview(imageView) }
+        // No selected/viewed transition is active on this path. Discard its
+        // dormant graph: reusing it can animate a previous pin's selected glyph
+        // on a later density-only remount, even after a nonanimated root update.
+        host?.view.removeFromSuperview()
+        host = nil
+        return true
+    }
+
+    private func showHosted(_ root: LiveNativeHostedPin, previous: LiveNativeHostedPin?, preservingTransition: Bool) {
+        let host: UIHostingController<LiveNativeHostedPin>
+        let needsMount = self.host?.view.superview == nil
+        if let existing = self.host { host = existing }
+        else {
+            host = UIHostingController(rootView: preservingTransition ? previous ?? root : root)
+            host.view.backgroundColor = .clear
+            host.view.clipsToBounds = false
+            host.view.isUserInteractionEnabled = false
+            host.view.accessibilityElementsHidden = true
+            host.view.frame = bounds
+            host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            self.host = host
+        }
+        host.overrideUserInterfaceStyle = root.brand.prefersDarkInterface ? .dark : .light
+        if needsMount {
+            // Establish the prior compact state before applying selection or
+            // viewed changes. The existing SwiftUI spring/ease modifiers keep
+            // their history, including an image-backed pin's first selection.
+            var seedTransaction = Transaction(animation: nil)
+            seedTransaction.disablesAnimations = true
+            withTransaction(seedTransaction) {
+                // A reused detached host may still contain another pin's
+                // selected state. Seed the current image state atomically.
+                host.rootView = preservingTransition ? previous ?? root : root
+                addSubview(host.view)
+                if preservingTransition {
+                    host.view.setNeedsLayout()
+                    host.view.layoutIfNeeded()
+                }
+            }
+        }
+        compactImageView?.removeFromSuperview()
+        if host.rootView != root { host.rootView = root }
+    }
+
+    func setAccessibilityVisibility(_ visible: Bool) {
+        if isAccessibilityElement != visible { isAccessibilityElement = visible }
     }
 
     override func prepareForReuse() {
         super.prepareForReuse()
         onActivate = nil
         signature = nil
+        preservesAnimatedHosting = false
+        compactImageView?.removeFromSuperview()
+        compactImageView?.image = nil
+        #if DEBUG && targetEnvironment(simulator)
+        performanceTestMap = nil
+        #endif
     }
 
     override func accessibilityActivate() -> Bool {

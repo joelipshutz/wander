@@ -830,6 +830,7 @@ struct WanderRootView: View {
     }
 
     private var activeImportSaveSyncNotice: PlaceImportSaveSyncNotice? {
+        guard importStore.batches.contains(where: { $0.receipt != nil }) else { return nil }
         let syncStates = store.currentUserVisiblePlaces.reduce(into: [String: SyncState]()) { result, visible in
             result[visible.userPlace.id] = visible.userPlace.syncState
             result[visible.userPlace.localID] = visible.userPlace.syncState

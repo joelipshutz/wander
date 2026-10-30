@@ -1007,7 +1007,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
         guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
         importStore.performBatchedMutations {
-            for (id, saveID) in completedItems { importStore.markSaved(itemID: id, userPlaceID: saveID) }
+            importStore.markSavedItems(completedItems)
             for (id, entries, destinationID) in completedReceipts {
                 importStore.recordReceipt(batchID: id, entries: entries, destinationListID: destinationID)
             }

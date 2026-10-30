@@ -26,12 +26,17 @@ enum WanderWidgetSnapshotPublisher {
 
         let projection = store.currentUserCalendarProjection
         let monthDates = [previousMonth, currentMonth, nextMonth]
-        let months = monthDates.map { month in
+        let daySummaries = ProfileInsightsPresenter.calendarDaySummaries(
+            ownerID: store.currentUser.id,
+            userPlaces: projection.userPlaces,
+            visits: projection.visits,
+            places: projection.places,
+            months: monthDates,
+            calendar: calendar
+        )
+        let months = monthDates.enumerated().map { index, month in
             makeMonthSnapshot(
-                ownerID: store.currentUser.id,
-                userPlaces: projection.userPlaces,
-                visits: projection.visits,
-                places: projection.places,
+                daySummaries: daySummaries[index],
                 month: month,
                 calendar: calendar
             )
@@ -82,21 +87,10 @@ enum WanderWidgetSnapshotPublisher {
     }
 
     private static func makeMonthSnapshot(
-        ownerID: String,
-        userPlaces: [LocalUserPlace],
-        visits: [LocalPlaceVisit],
-        places: [LocalPlace],
+        daySummaries: [Date: ProfileCalendarDaySummary],
         month: Date,
         calendar: Calendar
     ) -> WanderCalendarMonthSnapshot {
-        let insights = ProfileInsightsPresenter.present(
-            ownerID: ownerID,
-            userPlaces: userPlaces,
-            visits: visits,
-            places: places,
-            month: month,
-            calendar: calendar
-        )
         let monthStart = calendar.dateInterval(of: .month, for: month)?.start ?? month
         let components = calendar.dateComponents([.year, .month], from: monthStart)
         let year = components.year ?? 1
@@ -104,7 +98,7 @@ enum WanderWidgetSnapshotPublisher {
         let dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 28
         let firstWeekday = calendar.component(.weekday, from: monthStart)
         let leadingBlankCount = (firstWeekday - calendar.firstWeekday + 7) % 7
-        let days = insights.monthDaySummaries.values.compactMap { summary -> WanderCalendarDaySnapshot? in
+        let days = daySummaries.values.compactMap { summary -> WanderCalendarDaySnapshot? in
             guard summary.visitCount > 0 else { return nil }
             return WanderCalendarDaySnapshot(
                 dayNumber: calendar.component(.day, from: summary.date),

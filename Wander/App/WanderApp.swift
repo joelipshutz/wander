@@ -51,6 +51,33 @@ enum ReplayFixtureHostPolicy {
 }
 #endif
 
+/// Shared opt-in for the large Live UI fixture and its matching fake session.
+/// Ordinary simulator sessions retain their existing demo account.
+enum LivePerformanceUITestPolicy {
+    static let currentUserID = "perf_user_000"
+
+    static func isEnabled(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        let required: Set<String> = ["-WanderLivePerformanceUITest", "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest", "-WanderUnifiedLiveUITest"]
+        return isSimulator && required.isSubset(of: Set(arguments))
+        #else
+        return false
+        #endif
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let resetAuthenticatedFixtureArgument = "-WanderResetAuthenticatedUITest"
@@ -91,6 +118,14 @@ enum SimulatorTestSessionPolicy {
         }
 
         return defaults.bool(forKey: persistenceKey)
+    }
+
+    static func authenticatedFixtureUserID(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> String {
+        LivePerformanceUITestPolicy.isEnabled(arguments: arguments, isSimulator: isSimulator)
+            ? LivePerformanceUITestPolicy.currentUserID : "user_joe"
     }
 
     static func forcedOnboardingStep(
@@ -175,7 +210,7 @@ struct WanderApp: App {
                     provider: PreviewAuthSessionProvider(
                         state: .signedIn(
                             AuthSession(
-                                userID: "user_joe",
+                                userID: SimulatorTestSessionPolicy.authenticatedFixtureUserID(),
                                 displayName: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "Joe",
                                 handle: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "joe",
                                 isAppleSignIn: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? true : nil
@@ -1053,6 +1088,17 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
         guard authenticatedUserID == "user_joe",
               requiredArguments.isSubset(of: Set(arguments)) else { return nil }
         return LiveManualPaginationUITestRepository()
+    }
+
+    func liveMapActivity(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int
+    ) async throws -> FollowedFeedPage {
+        guard audience == .everyone, query.isValid, before == nil, limit == 50 else {
+            throw FixtureError.unexpectedRequest
+        }
+        // This fixture has only a place-less list activity. Its independent map
+        // is empty and terminal; map reads must never prime/reset Feed cursors.
+        return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
     }
 
     func liveFeed(

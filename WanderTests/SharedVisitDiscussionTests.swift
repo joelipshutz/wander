@@ -1,8 +1,107 @@
+import Combine
 import XCTest
 @testable import Wander
 
 @MainActor
 final class SharedVisitDiscussionTests: XCTestCase {
+    func testUnusedPostcardInvalidationDoesNotPublishEmptyState() {
+        let model = SharedVisitDiscussionModel()
+        var publications = 0
+        let observation = model.objectWillChange.sink { publications += 1 }
+        defer { observation.cancel() }
+
+        for _ in 0..<200 { model.invalidate() }
+
+        XCTAssertEqual(publications, 0)
+        XCTAssertNil(model.collection)
+        XCTAssertTrue(model.comments.isEmpty)
+        XCTAssertFalse(model.hasMore)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertFalse(model.failed)
+        XCTAssertTrue(model.pendingCommentIDs.isEmpty)
+    }
+
+    func testInvalidationClearsLoadedAndFailedStateThenStopsPublishing() async {
+        let repository = fake(["a"])
+        repository.pages["a:nil"] = page("a", ids: ["comment"], cursor: "older")
+        let model = SharedVisitDiscussionModel()
+        await model.load(activityID: "a", groupID: "g", repository: repository,
+                         includeComments: true, isCurrent: { true })
+        XCTAssertNotNil(model.collection)
+        XCTAssertFalse(model.comments.isEmpty)
+        XCTAssertTrue(model.hasMore)
+
+        var publications = 0
+        let observation = model.objectWillChange.sink { publications += 1 }
+        defer { observation.cancel() }
+        model.invalidate()
+        XCTAssertEqual(publications, 2, "Only the populated collection and comments need publication")
+        XCTAssertNil(model.collection)
+        XCTAssertTrue(model.comments.isEmpty)
+        XCTAssertFalse(model.hasMore)
+        model.invalidate()
+        XCTAssertEqual(publications, 2)
+
+        repository.failingID = "a"
+        await model.load(activityID: "a", groupID: "g", repository: repository,
+                         includeComments: true, isCurrent: { true })
+        XCTAssertTrue(model.failed)
+        publications = 0
+        model.invalidate()
+        XCTAssertEqual(publications, 1)
+        XCTAssertFalse(model.failed)
+        model.invalidate()
+        XCTAssertEqual(publications, 1)
+    }
+
+    func testRepeatedEmptyInvalidationRejectsLateResponseAndPreservesReplacementLoad() async throws {
+        let originalRepository = fake(["a"])
+        originalRepository.suspendsSharedVisitRequest = true
+        let replacementRepository = fake(["b"])
+        replacementRepository.suspendsSharedVisitRequest = true
+        let model = SharedVisitDiscussionModel()
+        let originalTask = Task { @MainActor in
+            await model.load(activityID: "a", groupID: "g", repository: originalRepository,
+                             includeComments: false, isCurrent: { true })
+        }
+        defer {
+            originalTask.cancel()
+            let gate = originalRepository.sharedVisitGate
+            originalRepository.sharedVisitGate = nil
+            gate?.resume()
+        }
+        for _ in 0..<100 where originalRepository.sharedVisitGate == nil { await Task.yield() }
+        let original = try XCTUnwrap(originalRepository.sharedVisitGate)
+        model.invalidate()
+        model.invalidate() // No public state changes; the old generation must remain invalid.
+
+        let replacementTask = Task { @MainActor in
+            await model.load(activityID: "b", groupID: "g", repository: replacementRepository,
+                             includeComments: false, isCurrent: { true })
+        }
+        defer {
+            replacementTask.cancel()
+            let gate = replacementRepository.sharedVisitGate
+            replacementRepository.sharedVisitGate = nil
+            gate?.resume()
+        }
+        for _ in 0..<100 where replacementRepository.sharedVisitGate == nil { await Task.yield() }
+        let replacement = try XCTUnwrap(replacementRepository.sharedVisitGate)
+        originalRepository.sharedVisitGate = nil
+        original.resume()
+        await originalTask.value
+        XCTAssertNil(model.collection)
+        XCTAssertTrue(model.isLoading, "Old completion must not clear the replacement's loading state")
+        XCTAssertFalse(model.failed)
+
+        replacementRepository.sharedVisitGate = nil
+        replacement.resume()
+        await replacementTask.value
+        XCTAssertEqual(model.collection?.commentActivityID, "b")
+        XCTAssertFalse(model.isLoading)
+        XCTAssertFalse(model.failed)
+    }
+
     func testCollectionRejectsDuplicateOriginalsWrongKindAndMissingTarget() {
         let a = post("a"), b = post("b", kind: .placeWannaGo)
         XCTAssertNil(SharedVisitPostCollection(groupID: "g", commentActivityID: "a", posts: [a, a]))
@@ -189,8 +288,18 @@ final class SharedVisitDiscussionTests: XCTestCase {
     var lastMutation: String?
     var onCommentRequest: (() -> Void)?
     var postContinuation: CheckedContinuation<ActivityCommentPostResult, Error>?
+    var suspendsSharedVisitRequest = false
+    var sharedVisitGate: CheckedContinuation<Void, Never>?
     init(collection: SharedVisitPostCollection) { self.collection = collection }
-    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? { collection }
+    func sharedVisitPosts(activityID: String) async throws -> SharedVisitPostCollection? {
+        if suspendsSharedVisitRequest {
+            // The gate sends no actor-owned model values across a continuation.
+            // Read the collection here after resuming on the repository's actor.
+            await withCheckedContinuation { sharedVisitGate = $0 }
+            try Task.checkCancellation()
+        }
+        return collection
+    }
     func comments(activityID: String, before: String?, limit: Int) async throws -> ActivityCommentsPage {
         active += 1; maximumActive = max(maximumActive, active)
         defer { active -= 1 }

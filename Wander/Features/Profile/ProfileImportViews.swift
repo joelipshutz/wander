@@ -3797,10 +3797,12 @@ private struct PlaceImportCandidatePicker: View {
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
-        store.currentUserVisiblePlaces.map { visiblePlace in
+        let ownPlaces = store.currentUserVisiblePlaces
+        let attributesByID = store.attributesByUserPlaceID(for: ownPlaces.map { $0.userPlace.id })
+        return ownPlaces.map { visiblePlace in
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                attributes: attributesByID[visiblePlace.userPlace.id] ?? [],
                 viewerFollowsOwner: false
             )
         }

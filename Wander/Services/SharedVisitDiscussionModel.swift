@@ -54,12 +54,15 @@ final class SharedVisitDiscussionModel: ObservableObject {
 
     func invalidate() {
         generation = UUID()
-        collection = nil
-        comments = []
+        // Ordinary postcards also own this model. Their disappearance must not
+        // publish unchanged empty state, but every invalidation still fences
+        // outstanding responses through the generation above.
+        if collection != nil { collection = nil }
+        if !comments.isEmpty { comments = [] }
         cursors = [:]
-        isLoading = false
-        failed = false
-        pendingCommentIDs = []
+        if isLoading { isLoading = false }
+        if failed { failed = false }
+        if !pendingCommentIDs.isEmpty { pendingCommentIDs = [] }
     }
 
     func load(activityID: String, groupID: String, repository: any ActivityEngagementRepository,

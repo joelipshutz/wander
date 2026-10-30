@@ -647,20 +647,6 @@ enum PlaceImportCandidateMatcher {
                 nameHint,
                 maximumEdits: maximumNearSpellingEdits
             )
-        let exactEquivalentCount = scored.filter { scoredCandidate in
-            namesAreEquivalentForSelection(
-                scoredCandidate.candidate.name,
-                nameHint,
-                areaHint: areaHint,
-                selectionPolicy: selectionPolicy
-            )
-                || (allowNearSpellingMatch
-                    && isNearSpellingMatch(
-                        scoredCandidate.candidate.name,
-                        nameHint,
-                        maximumEdits: maximumNearSpellingEdits
-                    ))
-        }.count
         let equivalentCandidates = scored.filter { scoredCandidate in
             namesAreEquivalentForSelection(
                 scoredCandidate.candidate.name,
@@ -675,6 +661,7 @@ enum PlaceImportCandidateMatcher {
                         maximumEdits: maximumNearSpellingEdits
                     ))
         }
+        let exactEquivalentCount = equivalentCandidates.count
         let hasClearLead = best.score - runnerUpScore >= 0.08
         let isUniqueExactMatch = (equivalentName || nearSpellingName)
             && exactEquivalentCount == 1

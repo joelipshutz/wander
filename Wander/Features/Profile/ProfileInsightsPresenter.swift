@@ -340,6 +340,43 @@ private struct ProfileCalendarDayAccumulator {
 }
 
 enum ProfileInsightsPresenter {
+    /// Builds only calendar activity, sharing the parent/visit selection across
+    /// requested months. Keep interval membership independent: DateInterval
+    /// includes its endpoint, so an exact month boundary can belong to both.
+    static func calendarDaySummaries(
+        ownerID: String,
+        userPlaces: [LocalUserPlace],
+        visits: [LocalPlaceVisit],
+        places: [LocalPlace],
+        months: [Date],
+        calendar: Calendar = .current
+    ) -> [[Date: ProfileCalendarDaySummary]] {
+        let inputs = calendarInputs(ownerID: ownerID, userPlaces: userPlaces, visits: visits)
+        let placeByID = keyedPlaces(places)
+        let intervals = months.map { calendar.dateInterval(of: .month, for: $0) }
+        var accumulators = Array(
+            repeating: [Date: ProfileCalendarDayAccumulator](), count: months.count
+        )
+        for visit in inputs.visits {
+            let matchingMonths = intervals.indices.filter {
+                intervals[$0]?.contains(visit.visitedAt) == true
+            }
+            guard !matchingMonths.isEmpty else { continue }
+            let day = calendar.startOfDay(for: visit.visitedAt)
+            let placeID = calendarPlaceID(
+                for: visit, userPlaceByID: inputs.userPlaceByID, placeByID: placeByID
+            )
+            for index in matchingMonths {
+                accumulators[index][day, default: ProfileCalendarDayAccumulator()].visitCount += 1
+                if let placeID {
+                    accumulators[index][day, default: ProfileCalendarDayAccumulator()]
+                        .visitPlaceIDs.insert(placeID)
+                }
+            }
+        }
+        return accumulators.map(daySummaries)
+    }
+
     static func present(
         ownerID: String,
         userPlaces: [LocalUserPlace],
@@ -348,19 +385,11 @@ enum ProfileInsightsPresenter {
         month: Date,
         calendar: Calendar = .current
     ) -> ProfileInsights {
-        let activeOwnerPlaces = uniqueUserPlaces(userPlaces.filter {
-            $0.userID == ownerID && $0.deletedAt == nil
-        })
-        let activeBeen = activeOwnerPlaces.filter {
-            $0.status == .been
-        }
-        let userPlaceByID = keyedUserPlaces(activeBeen)
+        let inputs = calendarInputs(ownerID: ownerID, userPlaces: userPlaces, visits: visits)
+        let userPlaceByID = inputs.userPlaceByID
         let placeByID = keyedPlaces(places)
-        let activeVisits = uniqueVisits(visits.filter {
-            $0.deletedAt == nil && userPlaceByID[$0.userPlaceID] != nil
-        })
         let monthInterval = calendar.dateInterval(of: .month, for: month)
-        let monthVisits = activeVisits.filter { visit in
+        let monthVisits = inputs.visits.filter { visit in
             monthInterval?.contains(visit.visitedAt) == true
         }
 
@@ -368,18 +397,15 @@ enum ProfileInsightsPresenter {
         for visit in monthVisits {
             let day = calendar.startOfDay(for: visit.visitedAt)
             dayAccumulators[day, default: ProfileCalendarDayAccumulator()].visitCount += 1
-            if let userPlace = userPlaceByID[visit.userPlaceID] {
-                let canonicalPlaceID = placeByID[userPlace.placeID]?.id ?? userPlace.placeID
+            if let canonicalPlaceID = calendarPlaceID(
+                for: visit, userPlaceByID: userPlaceByID, placeByID: placeByID
+            ) {
                 dayAccumulators[day, default: ProfileCalendarDayAccumulator()]
                     .visitPlaceIDs
                     .insert(canonicalPlaceID)
             }
         }
-        let monthDaySummaries = Dictionary(
-            uniqueKeysWithValues: dayAccumulators.map { day, accumulator in
-                (day, accumulator.summary(on: day))
-            }
-        )
+        let monthDaySummaries = daySummaries(dayAccumulators)
 
         let monthUserPlaces = uniqueUserPlaces(
             monthVisits.compactMap { userPlaceByID[$0.userPlaceID] }
@@ -440,6 +466,36 @@ enum ProfileInsightsPresenter {
                 total: mapPlaces.count
             )
         )
+    }
+
+    private static func calendarInputs(
+        ownerID: String, userPlaces: [LocalUserPlace], visits: [LocalPlaceVisit]
+    ) -> (userPlaceByID: [String: LocalUserPlace], visits: [LocalPlaceVisit]) {
+        let activeOwnerPlaces = uniqueUserPlaces(userPlaces.filter {
+            $0.userID == ownerID && $0.deletedAt == nil
+        })
+        let userPlaceByID = keyedUserPlaces(activeOwnerPlaces.filter { $0.status == .been })
+        let activeVisits = uniqueVisits(visits.filter {
+            $0.deletedAt == nil && userPlaceByID[$0.userPlaceID] != nil
+        })
+        return (userPlaceByID, activeVisits)
+    }
+
+    private static func calendarPlaceID(
+        for visit: LocalPlaceVisit,
+        userPlaceByID: [String: LocalUserPlace],
+        placeByID: [String: LocalPlace]
+    ) -> String? {
+        guard let userPlace = userPlaceByID[visit.userPlaceID] else { return nil }
+        return placeByID[userPlace.placeID]?.id ?? userPlace.placeID
+    }
+
+    private static func daySummaries(
+        _ accumulators: [Date: ProfileCalendarDayAccumulator]
+    ) -> [Date: ProfileCalendarDaySummary] {
+        Dictionary(uniqueKeysWithValues: accumulators.map { day, accumulator in
+            (day, accumulator.summary(on: day))
+        })
     }
 
     private static func keyedUserPlaces(_ userPlaces: [LocalUserPlace]) -> [String: LocalUserPlace] {

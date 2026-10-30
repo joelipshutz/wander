@@ -21,7 +21,7 @@ struct LiveScreen: View {
     @StateObject private var mapResults = LiveMapResults()
     @StateObject private var pinStateLoader = LiveMapPinStateLoader()
     @State private var mapActivity: [FeedActivity] = []
-    @State private var mapPins: [LivePlacePin] = []
+    @State private var mapProjection = LiveMapDisplayProjection()
     @State private var committedMapBoundary: LiveDrawnArea?
     @State private var committedMapViewport: MapViewport?
     @State private var mapRefresh: UInt64 = 0
@@ -115,7 +115,7 @@ struct LiveScreen: View {
 
     private var authorizedActivity: [FeedActivity] { mapActivity }
     private var activity: [FeedActivity] { mapActivity }
-    private var pins: [LivePlacePin] { mapPins }
+    private var pins: [LivePlacePin] { mapProjection.pins }
     private var usesTotemReviewFixture: Bool {
         #if DEBUG && targetEnvironment(simulator)
         if LiveTotemUITestFixtures.isEnabled { return true }
@@ -125,7 +125,7 @@ struct LiveScreen: View {
     private var pinStateRequest: LiveMapPinStateRequest? {
         guard !usesTotemReviewFixture, let request = mapRequest else { return nil }
         return LiveMapPinStateRequest(map: request,
-            placeIDs: Array(Set(mapPins.flatMap { $0.identity.persistedPlaceIDs })).sorted(),
+            placeIDs: mapProjection.persistedPlaceIDs,
             resultRevision: mapResults.revision, storeRevision: store.liveContentRevision)
     }
     private var mapRequest: LiveMapRequest? {
@@ -135,7 +135,7 @@ struct LiveScreen: View {
             viewport: committedMapViewport, refresh: mapRefresh)
     }
 
-    private var selectedPin: LivePlacePin? { pins.first { $0.id == selectedPlaceID } }
+    private var selectedPin: LivePlacePin? { mapProjection.pin(id: selectedPlaceID) }
 
     private var hasPlacePreview: Bool { selectedPin != nil || selectedCandidate != nil }
     private var previewID: String? { selectedPin?.id ?? nativePreviewID }
@@ -380,7 +380,7 @@ struct LiveScreen: View {
             clearNativePlaceSelection()
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
             fullProfilePin = nil; fullProfileCandidate = nil; committedMapBoundary = nil; committedMapViewport = nil
-            mapActivity = []; mapPins = []
+            mapActivity = []; mapProjection = LiveMapDisplayProjection()
             didRestoreBrowse = false; restoredWithoutLocation = false; lastLocationCenter = nil; backgroundedAt = nil
             launchLocation = LiveMapLaunchLocation()
             mapSearch = LiveMapSearchState(); setMapCamera(.region(launchLocation.region))
@@ -406,7 +406,7 @@ struct LiveScreen: View {
             previewSaveContext = nil; previewSharePlace = nil
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
         }
-        .onChange(of: pins.map(\.id)) { _, ids in
+        .onChange(of: mapProjection.pinIDs) { _, ids in
             if let selectedPlaceID, !ids.contains(selectedPlaceID) { dismissPlacePreview() }
             frameInitialMap()
         }
@@ -475,12 +475,12 @@ struct LiveScreen: View {
             refreshed.append(event)
         }
         mapActivity = refreshed
-        mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+        mapProjection = LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
             ownCheckInPlaces: ownCheckInPlaces,
             totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
                 currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
                 allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
-            previousPins: previousPinIdentities)
+            previousPins: previousPinIdentities), activities: mapActivity)
     }
 
     private struct LocationActivation: Equatable {
@@ -554,7 +554,7 @@ struct LiveScreen: View {
         let layout = LiveMapSearchLayout(size: size,
             controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
         return LiveNativeMap(
-            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, selectedID: selectedPlaceID,
+            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, pinsRevision: mapProjection.revision, selectedID: selectedPlaceID,
             viewedPins: viewedPins, brand: brand, coloredMap: store.isColoredMapEnabled,
             drawing: drawing,
             contentInsets: EdgeInsets(top: drawing ? 8 : layout.controlsHeight + 8, leading: 8,
@@ -852,7 +852,7 @@ struct LiveScreen: View {
                     isEmbedded: true,
                     showsInviteEntry: false,
                     isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination && !drawing,
-                    filteredActivityIDs: Set(activity.map(\.id)),
+                    filteredActivityIDs: mapProjection.activityIDs,
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
                     onEmbeddedDestinationActiveChange: { isFeedDestinationActive = $0 },
@@ -1289,11 +1289,13 @@ struct LiveScreen: View {
         // The committed query already applies both primary and child choices.
         // A second primary-only pass would discard child matches in other categories.
         let refinements = MapMoreFilterSelection()
+        let ownPlaces = store.currentUserVisiblePlaces
+        let attributesByID = store.attributesByUserPlaceID(for: ownPlaces.map { $0.userPlace.id })
         return MapFeaturedSelection.places(from: refined, currentUserID: request.userID,
             followedOwnerIDs: Set(store.following(of: request.userID).map(\.id)),
             in: region, refinements: refinements,
-            tasteSaves: store.currentUserVisiblePlaces.map { PlaceSaveSummary(visiblePlace: $0,
-                attributes: store.attributes(for: $0.userPlace.id), viewerFollowsOwner: false) },
+            tasteSaves: ownPlaces.map { PlaceSaveSummary(visiblePlace: $0,
+                attributes: attributesByID[$0.userPlace.id] ?? [], viewerFollowsOwner: false) },
             limit: Int.max)
     }
 
@@ -1308,20 +1310,20 @@ struct LiveScreen: View {
     }
 
     private var previousPinIdentities: [LivePlacePin] {
-        guard let selected = selectedPin else { return mapPins }
-        return [selected] + mapPins.filter { $0.id != selected.id }
+        guard let selected = selectedPin else { return pins }
+        return [selected] + pins.filter { $0.id != selected.id }
     }
 
     private func rebuildMapProjection() {
         mapActivity = mapResults.activities.filter {
             store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
-        mapPins = LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
+        mapProjection = LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: mapActivity, featured: mapResults.featuredPlaces,
                 ownCheckInPlaces: ownCheckInPlaces,
                 totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
                     currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
                     allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
-                previousPins: previousPinIdentities)
+                previousPins: previousPinIdentities), activities: mapActivity)
     }
 
     private var activeFilterCount: Int {

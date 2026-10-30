@@ -22,7 +22,7 @@ packages:
     exactVersion: 5.0.8
   posthog-ios:
     url: https://github.com/PostHog/posthog-ios.git
-    from: 3.59.3
+    exactVersion: 3.68.3
   clerk-ios:
     url: https://github.com/clerk/clerk-ios
     from: 1.5.0

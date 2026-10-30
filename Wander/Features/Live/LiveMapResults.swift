@@ -261,7 +261,12 @@ struct LivePlaceIdentity: Hashable {
     func matches(_ place: LocalPlace) -> Bool { matches(Member(place)) }
 
     func intersects(_ other: LivePlaceIdentity) -> Bool {
-        other.members.contains { matches($0) }
+        // Matching is symmetric. Probe the larger identity's alias index with
+        // the smaller collection so a single pin never scans all saved history.
+        if members.count < other.members.count {
+            return members.contains { other.matches($0) }
+        }
+        return other.members.contains { matches($0) }
     }
 
     private func matches(_ member: Member) -> Bool {
@@ -480,11 +485,12 @@ enum LiveMapProjection {
             let identity = LivePlaceIdentity(places: indices.map { identityPlaces[$0] })
             let featuredPlaces = indices.filter { $0 >= events.count && $0 < places.count }.map { places[$0] }
             let isFeatured = featuredPlaces.contains { $0.userPlace.deletedAt == nil && $0.owner.deletedAt == nil }
+            let hasPriorOwnCheckIn = identity.intersects(ownIdentity)
             result.append(LivePlacePin(id: place.place.id, place: place,
                 activities: FeedPresentation.newestFirst(groupEvents),
-                hasPriorOwnCheckIn: identity.intersects(ownIdentity), identity: identity,
+                hasPriorOwnCheckIn: hasPriorOwnCheckIn, identity: identity,
                 totemState: totemContext?.state(for: identity, activities: groupEvents, featured: isFeatured,
-                    additionalSavedPlaces: featuredPlaces, hasPriorOwnCheckIn: identity.intersects(ownIdentity)) ?? .empty))
+                    additionalSavedPlaces: featuredPlaces, hasPriorOwnCheckIn: hasPriorOwnCheckIn) ?? .empty))
         }
         result.sort { $0.id < $1.id }
         var previousByAlias: [String: Set<Int>] = [:]

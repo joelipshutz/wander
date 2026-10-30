@@ -242,7 +242,7 @@ struct PlaceProfileFullScreen: View {
         _saveActionSnapshot = State(initialValue: saveActionSnapshot)
     }
 
-    private var presentation: PlaceProfilePresentation {
+    private func presentation(for resolvedSaves: [PlaceSaveSummary]) -> PlaceProfilePresentation {
         PlaceProfilePresenter.presentation(
             placeID: place.id,
             category: place.primaryCategory,
@@ -316,10 +316,15 @@ struct PlaceProfileFullScreen: View {
     }
 
     private var profileContent: some View {
-        PlaceProfileFullView(
+        // History grouping is shared by ratings, the history section and action
+        // state. Resolve it once for this render; action handlers still read the
+        // latest store state when the person taps.
+        let savesForRender = resolvedSaves
+        let actionStateForRender = currentUserActionState(for: savesForRender)
+        return PlaceProfileFullView(
             place: place,
-            presentation: presentation,
-            saves: resolvedSaves,
+            presentation: presentation(for: savesForRender),
+            saves: savesForRender,
             currentUserID: currentUserID,
             action: action,
             saveActionSnapshot: saveActionSnapshot,
@@ -390,7 +395,7 @@ struct PlaceProfileFullScreen: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .toolbar(hidesTabBar ? .hidden : .visible, for: .tabBar)
-        .onChange(of: currentUserActionState) { _, state in
+        .onChange(of: actionStateForRender) { _, state in
             guard let snapshot = saveActionSnapshot,
                   snapshot.usesFloatingActions,
                   snapshot.presentation != .empty
@@ -412,6 +417,10 @@ struct PlaceProfileFullScreen: View {
     }
 
     private var currentUserActionState: PlaceProfileSaveActionState {
+        currentUserActionState(for: resolvedSaves)
+    }
+
+    private func currentUserActionState(for resolvedSaves: [PlaceSaveSummary]) -> PlaceProfileSaveActionState {
         PlaceProfileSaveActionPolicy.state(
             saves: resolvedSaves,
             currentUserID: currentUserID,

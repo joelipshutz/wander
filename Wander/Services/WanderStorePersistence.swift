@@ -358,11 +358,15 @@ struct WanderStoreSnapshot: Codable, Equatable {
             return records.map { $0.model() }
         }
 
+        // Legacy snapshots have no visits. Keep source order across local/server
+        // aliases without rescanning the entire attribute table for each save.
+        let attributesByParent = Dictionary(grouping: placeAttributes.enumerated(), by: { $0.element.userPlaceID })
         return userPlaces
             .filter { $0.statusRaw == PlaceStatus.been.rawValue && $0.deletedAt == nil }
             .map { userPlace in
                 let userPlaceIDs = Set([userPlace.localID, userPlace.serverID].compactMap { $0 })
-                let attributes = placeAttributes.filter { userPlaceIDs.contains($0.userPlaceID) }
+                let attributes = userPlaceIDs.flatMap { attributesByParent[$0] ?? [] }
+                    .sorted { $0.offset < $1.offset }.map(\.element)
                 let attributeDrafts = attributes.map {
                     PlaceAttributeDraft(questionKey: $0.questionKey, valueType: $0.valueType, valueJSON: $0.valueJSON)
                 }

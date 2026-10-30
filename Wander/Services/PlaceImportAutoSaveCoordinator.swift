@@ -72,7 +72,9 @@ enum PlaceImportAutoSavePolicy {
     static func committableItemIDs(
         batchItems: [(batch: PlaceImportBatch, items: [PlaceImportItem])]
     ) -> Set<String> {
-        let automatic = batchItems.filter { $0.batch.shouldSaveAutomatically }
+        let automatic = batchItems.filter {
+            $0.batch.shouldSaveAutomatically && $0.batch.state != .cancelled
+        }
         let captures = Dictionary(grouping: automatic) { pair in
             captureID(for: pair.batch)
         }
@@ -135,7 +137,7 @@ enum PlaceImportAutoSaveCoordinator {
             return emptyResult
         }
 
-        return store.performBatchedLocalMutations {
+        return store.performBatchedImportMutations {
             importStore.performBatchedMutations {
                 let visiblePlaces = store.currentUserVisiblePlaces
                 let visiblePlacesByUserPlaceID = visiblePlaces.reduce(
@@ -165,7 +167,8 @@ enum PlaceImportAutoSaveCoordinator {
 
                 for batchID in orderedIDs {
                     guard let batch = importStore.batches.first(where: { $0.id == batchID }),
-                          batch.shouldSaveAutomatically
+                          batch.shouldSaveAutomatically,
+                          batch.state != .cancelled
                     else { continue }
 
                     let items = importStore.items(for: batchID)
@@ -183,6 +186,7 @@ enum PlaceImportAutoSaveCoordinator {
                             store: store
                         )
                     var entries: [PlaceImportReceiptEntry] = []
+                    var savedUserPlaceIDsByItemID: [String: String] = [:]
                     if !committableIDs.isEmpty {
                         // Persist consumption with the save transaction so a
                         // lost receipt cannot reopen an automatic silent import.
@@ -191,73 +195,71 @@ enum PlaceImportAutoSaveCoordinator {
                         store.completeImportNotificationCommit(policy)
                     }
 
-                    for item in items where committableIDs.contains(item.id) {
-                        guard let candidate = item.selectedCandidate else { continue }
-                        let reconciledExistingSave = item.duplicateUserPlaceID.flatMap {
-                            visiblePlacesByUserPlaceID[$0]
-                        }.map {
-                            ExistingImportSave(
-                                userPlaceID: $0.userPlace.id,
-                                status: $0.userPlace.status,
-                                syncState: $0.userPlace.syncState,
-                                placeID: $0.place.serverID
+                    store.withBatchedCurrentUserPlaceListInsertions(to: destination, senderNotificationPolicy: .silent) { insertInDestination in
+                        for item in items where committableIDs.contains(item.id) {
+                            guard let candidate = item.selectedCandidate else { continue }
+                            let reconciledExistingSave = item.duplicateUserPlaceID.flatMap {
+                                visiblePlacesByUserPlaceID[$0]
+                            }.map {
+                                ExistingImportSave(
+                                    userPlaceID: $0.userPlace.id,
+                                    status: $0.userPlace.status,
+                                    syncState: $0.userPlace.syncState,
+                                    placeID: $0.place.serverID
+                                )
+                            }
+                            // Use the exact same identity matcher as the save path.
+                            // Reconciliation is UI-oriented and intentionally looser;
+                            // it must never decide whether a prior memory can be deleted.
+                            let existingSave = store.existingImportSave(matching: candidate)
+                                ?? reconciledExistingSave
+                            let upgradesExistingWanna = existingSave?.status == .wannaGo
+                                && batch.requestedStatus == .been
+                            let result: SaveResult
+                            if let existingSave, !upgradesExistingWanna {
+                                // An import never rewrites a pre-existing personal memory.
+                                // It can still add the place to the imported Google list.
+                                result = SaveResult(
+                                    userPlaceID: existingSave.userPlaceID,
+                                    syncState: existingSave.syncState,
+                                    placeID: existingSave.placeID
+                                )
+                            } else {
+                                result = store.saveImportedCandidate(
+                                    candidate,
+                                    status: batch.requestedStatus,
+                                    visibility: .selfOnly,
+                                    note: item.stagedNote,
+                                    sourceType: item.source.addSourceType,
+                                    ratingScore: batch.requestedStatus == .been
+                                        ? (item.stagedRatingScore ?? batch.requestedRatingScore)
+                                        : nil,
+                                    visitedAt: item.stagedVisitedAt ?? .now
+                                )
+                            }
+                            if destination != nil {
+                                _ = insertInDestination(result.userPlaceID)
+                            }
+                            savedUserPlaceIDsByItemID[item.id] = result.userPlaceID
+                            let wasAddedByThisItem = existingSave == nil
+                                && committedUserPlaceIDs.insert(result.userPlaceID).inserted
+                            let outcome: PlaceImportReceiptOutcome = wasAddedByThisItem ? .added : .existing
+                            if outcome == .added { addedCount += 1 } else { existingCount += 1 }
+                            entries.append(
+                                PlaceImportReceiptEntry(
+                                    itemID: item.id,
+                                    displayName: item.displayName,
+                                    displayArea: item.displayArea,
+                                    status: upgradesExistingWanna
+                                        ? .been
+                                        : (existingSave?.status ?? batch.requestedStatus),
+                                    outcome: outcome,
+                                    userPlaceID: result.userPlaceID
+                                )
                             )
                         }
-                        // Use the exact same identity matcher as the save path.
-                        // Reconciliation is UI-oriented and intentionally looser;
-                        // it must never decide whether a prior memory can be deleted.
-                        let existingSave = store.existingImportSave(matching: candidate)
-                            ?? reconciledExistingSave
-                        let upgradesExistingWanna = existingSave?.status == .wannaGo
-                            && batch.requestedStatus == .been
-                        let result: SaveResult
-                        if let existingSave, !upgradesExistingWanna {
-                            // An import never rewrites a pre-existing personal memory.
-                            // It can still add the place to the imported Google list.
-                            result = SaveResult(
-                                userPlaceID: existingSave.userPlaceID,
-                                syncState: existingSave.syncState,
-                                placeID: existingSave.placeID
-                            )
-                        } else {
-                            result = store.saveImportedCandidate(
-                                candidate,
-                                status: batch.requestedStatus,
-                                visibility: .selfOnly,
-                                note: item.stagedNote,
-                                sourceType: item.source.addSourceType,
-                                ratingScore: batch.requestedStatus == .been
-                                    ? (item.stagedRatingScore ?? batch.requestedRatingScore)
-                                    : nil,
-                                visitedAt: item.stagedVisitedAt ?? .now
-                            )
-                        }
-                        if let destination {
-                            _ = store.addCurrentUserPlace(
-                                userPlaceID: result.userPlaceID,
-                                to: destination,
-                                senderNotificationPolicy: .silent
-                            )
-                        }
-                        importStore.markSaved(itemID: item.id, userPlaceID: result.userPlaceID)
-                        let wasAddedByThisItem = existingSave == nil
-                            && committedUserPlaceIDs.insert(result.userPlaceID).inserted
-                        let outcome: PlaceImportReceiptOutcome = wasAddedByThisItem ? .added : .existing
-                        if outcome == .added { addedCount += 1 } else { existingCount += 1 }
-                        entries.append(
-                            PlaceImportReceiptEntry(
-                                itemID: item.id,
-                                displayName: item.displayName,
-                                displayArea: item.displayArea,
-                                status: upgradesExistingWanna
-                                    ? .been
-                                    : (existingSave?.status ?? batch.requestedStatus),
-                                outcome: outcome,
-                                userPlaceID: result.userPlaceID
-                            )
-                        )
                     }
-
+                    importStore.markSavedItems(savedUserPlaceIDsByItemID)
                     let pending = importStore.items(for: batchID).filter {
                         !$0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
                     }
