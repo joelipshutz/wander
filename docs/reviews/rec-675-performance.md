@@ -3,6 +3,20 @@
 Issue: [REC-675](https://linear.app/recme/issue/REC-675/reduce-app-wide-interaction-latency-by-at-least-50percent-without).
 Baseline: `2bb08f8e47`. Branch: `codex/rec-675-app-performance`.
 
+Latest follow-up: the list/calendar snapshot decoder and its 13 new semantic /
+responsiveness tests pass the full **3,579/3,579** unit/stress gate, with zero
+failures or skips and unchanged source throughout. The optimized Release gate
+also passes **12/12 semantic tests plus the exact responsiveness benchmark**.
+The revised location journey passes on both the large iPhone 17 Pro and compact
+iPhone SE (3rd generation) Simulators, covering real simulated CoreLocation at
+launch in New York and foreground return in Seattle, under unchanged deadlines.
+Its first revision incorrectly searched only descendants of MapKit's native Map
+element; the recorded hierarchy placed annotations beside that element inside
+the map wrapper. A one-line test-only correction searches that wrapper while
+retaining the native-map geometry checks. Exact input reconstruction confirms
+that application, unit-test and build inputs from the passing 3,579-case and
+Release gates are unchanged. The failed UI attempt is preserved outside Git.
+
 ## Acceptance and current validation
 
 **Draft: the real Live ≥50% latency target remains unmet.** Component gains and
@@ -131,9 +145,36 @@ will not be reinstalled over candidate data. The PR stays draft pending final CI
 validation and the unmet whole-journey performance target; these phone results
 also predate the latest Profile Messages correction.
 
-The candidate-only quiet-stage profiling test compiled successfully, but its
-device preflight stopped on disconnection before runner installation, app launch,
-or trace recording. Reconnection is pending; no profiling result is claimed.
+The subsequent candidate-only quiet-stage profile completed on pushed commit
+`4f8afe4008`, installed in place with the existing app/data-sharing identities.
+The exact read-only navigation test passed and its app-only Time Profiler
+recording covers three complete quiet intervals. Seven same-recording signpost
+boundaries align the clocks within a 7.2 microsecond common offset bracket;
+host wall-clock alignment is not used.
+
+| Complete quiet interval | Interval length | Main-thread sampled weight |
+| --- | ---: | ---: |
+| Collapsed Live after readiness | 5.026 s | 1.723 s |
+| Expanded Feed after readiness | 5.051 s | 0.149 s |
+| First Profile after readiness | 6.051 s | 0.009 s |
+
+These are statistical CPU sample weights, not elapsed execution times, FPS or
+interaction latency. Returned Live is only partially recorded; warm Profile is
+outside the recording. Profile mounting occurs before its quiet interval, so
+this does not establish a first-versus-warm comparison or justify disabling
+retained views. Thermal state was Nominal and Low Power Mode was off.
+
+Collapsed Live includes approximately 245 ms of main-thread sampled weight
+within RPC decoding. Twelve complete RPC Decode scopes cover 248.6 ms of wall
+time; these nested scopes are not additive with CPU samples. The targeted
+follow-up moves only immutable list/calendar snapshot decoding to an actor,
+with MainActor model application and post-decode cancellation/account checks.
+Its full unit/stress and optimized Release gates pass; the controlled decoding
+measurement below exceeds the predeclared 50% main-loop stall reduction target.
+The recording also contains
+background replay image encoding; no capture cadence, image fidelity, privacy
+setting or SDK implementation was changed based on this diagnostic.
+
 The separate fixed-workload checkpoint diagnostic passed three correctness tests
 and all 12 trials: 24 complete atomic writes per trial, 2,011,778 bytes per
 snapshot, with full content and graphics-control parity. Verified queue-priority
@@ -172,6 +213,40 @@ passed six selected Release benchmarks, 33 AstirClip tests, two compact-phone
 UI checks, and the 29-test pixel/transition rendering gate.
 
 ## Durable imports and startup
+
+### Immutable startup snapshot decoding
+
+Only `visible_place_lists_snapshot` and `current_user_calendar_snapshot` opt in
+to the actor-owned decoder. Checked-Sendable wire values cross the actor boundary;
+SwiftData/model construction and application stay on MainActor. Legacy and custom
+decoders are unchanged. Cancellation and account identity are checked after both
+successful and failed decoding, including after a token refresh. No server RPC,
+payload, authorization policy or analytics capture contract changed.
+
+The optimized Release test uses the same 502,929-byte synthetic JSON payload for
+both paths: 600 places, 1,200 visits, 40 lists, 600 memberships and 4,904 dates.
+It checks every decoded value against independent expected values, warms both
+decoders, alternates order across three pairs, and measures an actual 1 ms main
+run-loop timer including its first post-decode delivery. The unrelated app root
+is detached in both modes. The acceptance rule was fixed before execution:
+worker median maximum main-loop gap must be at most half the legacy median.
+
+| Median across three samples | Existing main-actor path | Snapshot actor |
+| --- | ---: | ---: |
+| Maximum main-loop heartbeat gap | 175.644 ms | 1.228 ms |
+| Total decode wall time | 175.608 ms | 180.675 ms |
+
+The maximum-gap reduction is **99.3%**; every individual pair is between 99.28%
+and 99.32%. Worker samples deliver 179–182 main-loop ticks while decoding;
+legacy samples deliver none. Total parsing time is about 2.9% higher, so this
+is a responsiveness improvement, not a parsing-throughput claim. Networking,
+model hydration/application and complete Live interaction latency are excluded.
+Twelve separate Release semantic tests pass on the same immutable products,
+covering date/error parity, real off-main decoding, concurrent callers, unchanged
+custom/fake paths, exact repository routing, retries, private-error redaction,
+empty responses, cancellation and account/session changes.
+
+### Existing matched workloads
 
 Times below are medians on the same iOS 26.5 Simulator. Final Debug imports use
 three samples collected during the full unit gate; the original baseline used the
@@ -517,6 +592,16 @@ After XcodeGen generation, focused import selection is
 `-only-testing:WanderTests/ImportAutoSaveFileResponsivenessTests` on scheme `Wander`.
 Keep candidate-only checkpoint/context tests separate from the baseline checkout.
 
+For snapshot decoding, select `RemoteSnapshotDecoderTests` and
+`RemoteSnapshotDecodingResponsivenessTests/testSnapshotDecodeResponsivenessWith600PlacesAnd1200Visits`.
+The optimized measurement uses a unit-only Release scheme with testability on,
+standard `-O` optimization and exactly those two test source files plus
+`PureModelPerformanceTestHost.swift`; production source membership is unchanged.
+Run the 12 semantic methods before the one benchmark, on the same built products.
+Do not add unrelated tests, profiler attachment or concurrent builds to its timed
+run. Preserve all six samples and report decoding wall time separately from the
+median maximum main-loop gap.
+
 Required fresh-process replay suites are `replay-private`, `replay-credentials`,
 `replay-feed`, and `replay-masked-scroll` through `scripts/run-parent-regression.py`.
 Explicit fixture-host requests must pass admission before constructing fictional
@@ -525,9 +610,11 @@ privacy/OCR checks remain. Diagnostic image capture is opt-in and excluded from
 comparable timings. No assertions, masking, sampling, or capture fidelity were relaxed.
 
 Before acceptance: verify corrected UI cases, independent CI workers and prior
-timeout failures on the final pushed head. Local native validation is complete:
-3,566 unit methods, the selected 11-case Release inventory and four separately
-invoked Debug SDK cases. The unit gate includes the Profile Messages, flush-order
+timeout failures on the final pushed head. The latest decoder follow-up passes
+3,579 unit methods and 12 semantic plus one responsiveness Release case. Its
+large/compact location UI validation also passes. Prior selected 11-case Release
+and four isolated Debug SDK gates remain applicable to their unchanged paths.
+The unit gate includes the Profile Messages, flush-order
 and observation-bridge changes plus all three unchanged 1,500-row cases under
 600/900-second limits. The appearance
 query-consolidation rerun is already complete. Further physical work must cover

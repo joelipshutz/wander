@@ -309,6 +309,7 @@
 		6D0CB764DC1731499600BA2E /* LiveLocationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5FB2A6C0E0A4EF692A0F90B /* LiveLocationUITests.swift */; };
 		6DD4FB880BABD14154A14AC1 /* rec-106-manual-place-search-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */; };
 		6DFF4237F14D67530BCAA99C /* ActivityPrivacyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 551BB525BFD48426F9681713 /* ActivityPrivacyTests.swift */; };
+		6E30E23744854CE6C117081B /* RemoteSnapshotDecodingResponsivenessTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC49F46B64B5C8A839631F37 /* RemoteSnapshotDecodingResponsivenessTests.swift */; };
 		6E9158FD9B2D0F28A8EA451A /* ContactDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6329999DDA4FB2DD0DC5F98B /* ContactDiscoveryView.swift */; };
 		6E92ECEF915365AE40170F7E /* AnalyticsEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE62D76C9EC89546850909A7 /* AnalyticsEvent.swift */; };
 		6F1F81050CE0974860EC102A /* MapSnapshotListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B541F93C896A5613DCA47F /* MapSnapshotListTests.swift */; };
@@ -406,6 +407,7 @@
 		93E16EB26DD015377F5B2D9A /* rec-274-messages-composer-dismissal-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = B4CFACA664252A3BBDF70791 /* rec-274-messages-composer-dismissal-pre.json */; };
 		940CAA6829765C20043647D3 /* BuildConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3ACC5DD4963E929A9354E95 /* BuildConfigurationTests.swift */; };
 		94101CBEC699B5B5B8B8996F /* LivePerformanceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7ABDBCC5071809291CCBC33 /* LivePerformanceUITests.swift */; };
+		946CC5D4D6DE673F3E7C23FA /* RemoteSnapshotDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54C0C23A810B92C9A53BA35A /* RemoteSnapshotDecoder.swift */; };
 		9493A1744D00946C4A5AF7C4 /* PlacePlanInvitationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA91EB8A28701B077AF8EC89 /* PlacePlanInvitationUITests.swift */; };
 		94A459A0912D07C798A88FD0 /* CommonGroundEvidenceIndexTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2DAB02848ECB530868E8E7B /* CommonGroundEvidenceIndexTests.swift */; };
 		94E86D3C58FD2446923FA635 /* RecentPlaceListChoiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829AD1AFDCD102634C8E1A34 /* RecentPlaceListChoiceTests.swift */; };
@@ -530,6 +532,7 @@
 		C3810DB62E007982986F1549 /* SharedVisitDiscussionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA28DE935170887E6BCE200 /* SharedVisitDiscussionModel.swift */; };
 		C3FAE1FFEACA2D3807DC3E61 /* EventsComingSoonTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6772946B0D4A0BF264E2BCB4 /* EventsComingSoonTests.swift */; };
 		C449432F1CB448A2FD84237C /* WanderDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E635EA909370EB6D597D27AC /* WanderDebugLog.swift */; };
+		C4F93EC5E915F03BC8B76877 /* RemoteSnapshotDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34069EA5664EA7F442B86798 /* RemoteSnapshotDecoderTests.swift */; };
 		C500C85EDAC2AC11197F7CC8 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E382A2A47A6DC2EAEF12F23 /* ShareViewController.swift */; };
 		C59670B14A081B1E8CD6A303 /* CalendarReservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CCA0CB4F9DCF420A76B30B3 /* CalendarReservationTests.swift */; };
 		C5C321B30AB5C45FF046F95D /* ProfileIdentityDraftTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EBB83E471DD06673AA7C4A9 /* ProfileIdentityDraftTests.swift */; };
@@ -909,6 +912,7 @@
 		32A8F53FE02BFE14BBC76C34 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3397584216C4AA278DF3FF00 /* CommonGroundMessagesMockup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMessagesMockup.swift; sourceTree = "<group>"; };
 		33B88381D028E94C235961B1 /* PlacePlanInvitationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationTests.swift; sourceTree = "<group>"; };
+		34069EA5664EA7F442B86798 /* RemoteSnapshotDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSnapshotDecoderTests.swift; sourceTree = "<group>"; };
 		340C9BD0B57127620176A8E9 /* PlacePlanInvitationInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacePlanInvitationInboxTests.swift; sourceTree = "<group>"; };
 		3483D9CDDB48DA65E279CFF8 /* WanderActionButtonControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderActionButtonControlTests.swift; sourceTree = "<group>"; };
 		34905E496D66A68FF5ACC37A /* rec-227-adaptive-import-flow-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-227-adaptive-import-flow-pre.json"; sourceTree = "<group>"; };
@@ -985,6 +989,7 @@
 		541F19B34A4A3BAEB65C2836 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		5437F8A1F2D3679CC1C6F8C4 /* ImportResolvedPlaceSaveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportResolvedPlaceSaveTests.swift; sourceTree = "<group>"; };
 		54901841BFF245767870FA47 /* LiveIntroductionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveIntroductionPolicy.swift; sourceTree = "<group>"; };
+		54C0C23A810B92C9A53BA35A /* RemoteSnapshotDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSnapshotDecoder.swift; sourceTree = "<group>"; };
 		551BB525BFD48426F9681713 /* ActivityPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityPrivacyTests.swift; sourceTree = "<group>"; };
 		559E3EBD79D87A1737DA8CB3 /* ActivityNotificationInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityNotificationInbox.swift; sourceTree = "<group>"; };
 		55E1982754D8F9C0128D97CB /* AppEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEntryView.swift; sourceTree = "<group>"; };
@@ -1334,6 +1339,7 @@
 		DB83727DB2DEC9045DD7A63A /* PlaceCheckInQuestionCatalog+CoreQuestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlaceCheckInQuestionCatalog+CoreQuestions.swift"; sourceTree = "<group>"; };
 		DC06C31D2307BD2324467750 /* WanderBackendConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WanderBackendConfiguration.swift; sourceTree = "<group>"; };
 		DC1B59C0663E50FF95BF1523 /* LivePlaceFullProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePlaceFullProfileScreen.swift; sourceTree = "<group>"; };
+		DC49F46B64B5C8A839631F37 /* RemoteSnapshotDecodingResponsivenessTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteSnapshotDecodingResponsivenessTests.swift; sourceTree = "<group>"; };
 		DC4FA0045D32E48965A6784A /* ActivityBookmarkProjectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityBookmarkProjectionTests.swift; sourceTree = "<group>"; };
 		DC60DC3360C6A82B207204FE /* ContactDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactDiscoveryService.swift; sourceTree = "<group>"; };
 		DD08C8D51EA03071934C8973 /* ShareCardMockupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareCardMockupUITests.swift; sourceTree = "<group>"; };
@@ -1713,6 +1719,7 @@
 				3D4A1A4FB98EED71034CDC4A /* PlacePlanInvitationRepository.swift */,
 				F11A073C18E4F65225BB2B17 /* PrivateMessageRepository.swift */,
 				77E52D1EBC16B66D03A58DE1 /* PrivateMessageRPCClient.swift */,
+				54C0C23A810B92C9A53BA35A /* RemoteSnapshotDecoder.swift */,
 				DF1C440B331334B43475853A /* ShareCardPreviewRepository.swift */,
 				F126C80903F3E0CACBB1278E /* SimulatorPlacePlanInvitationRepository.swift */,
 				21979B6601194E839F12552D /* SupabaseDTOs.swift */,
@@ -1961,6 +1968,8 @@
 				0E0007B352AEA63619118290 /* QuickPlaceSearchTests.swift */,
 				829AD1AFDCD102634C8E1A34 /* RecentPlaceListChoiceTests.swift */,
 				38B79CCA80D059C362EF9946 /* RemoteRepositoryTests.swift */,
+				34069EA5664EA7F442B86798 /* RemoteSnapshotDecoderTests.swift */,
+				DC49F46B64B5C8A839631F37 /* RemoteSnapshotDecodingResponsivenessTests.swift */,
 				91A72D3B6185C6669B67A3A2 /* ReplayFixtureHostAdmission.swift */,
 				0E7D3372B0F59D7408026AF1 /* ReplayMaskingTests.swift */,
 				CED105CA66FE92EEE8EF49E1 /* ReplayPublicMarkerTests.swift */,
@@ -3118,6 +3127,7 @@
 				2A71E673BB673EE4BDBA2F02 /* RecentPlaceListAdd.swift in Sources */,
 				DCC1376C5EEB781DC4FE1AD6 /* RecentPlaceListChoice.swift in Sources */,
 				D5890A6DC2951A2698AEA92A /* RecmePlaceSearchFusion.swift in Sources */,
+				946CC5D4D6DE673F3E7C23FA /* RemoteSnapshotDecoder.swift in Sources */,
 				A586AFE40AEFCE74B711BAA5 /* RepositoryProtocols.swift in Sources */,
 				DC93B6D45F927B63B3DD012D /* SaveStreak.swift in Sources */,
 				FC37BACBA2619692E8814305 /* SaveStreakCelebrationView.swift in Sources */,
@@ -3406,6 +3416,8 @@
 				082179FFF6CFEB28DC3CA46F /* QuickPlaceSearchTests.swift in Sources */,
 				94E86D3C58FD2446923FA635 /* RecentPlaceListChoiceTests.swift in Sources */,
 				63D03A5DB6608EC245B1087E /* RemoteRepositoryTests.swift in Sources */,
+				C4F93EC5E915F03BC8B76877 /* RemoteSnapshotDecoderTests.swift in Sources */,
+				6E30E23744854CE6C117081B /* RemoteSnapshotDecodingResponsivenessTests.swift in Sources */,
 				E8FD855186A6A14747EA1322 /* ReplayFixtureHostAdmission.swift in Sources */,
 				A5E3EB302EADA77412726ABD /* ReplayMaskingTests.swift in Sources */,
 				5BCF5FD6C7C5E2ADFF3C46FD /* ReplayPublicMarkerTests.swift in Sources */,
