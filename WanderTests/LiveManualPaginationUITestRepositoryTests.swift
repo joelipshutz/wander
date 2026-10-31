@@ -41,6 +41,107 @@ final class LiveManualPaginationUITestRepositoryTests: XCTestCase {
         XCTAssertTrue(query.includes(activity))
     }
 
+    func testIndependentMapSnapshotDoesNotPrimeOrReplaceFeedCursorQuery() async throws {
+        let repository = try XCTUnwrap(LiveManualPaginationUITestRepository.make(
+            arguments: arguments, authenticatedUserID: "user_joe"))
+        let map = try await repository.liveMapActivity(audience: .everyone, query: query, before: nil, limit: 50)
+        XCTAssertTrue(map.activity.isEmpty)
+        XCTAssertTrue(map.featuredPlaces.isEmpty)
+        XCTAssertNil(map.nextCursor)
+        await assertRejected {
+            _ = try await repository.liveFeed(audience: .everyone, query: self.query,
+                before: LiveManualPaginationUITestRepository.nextCursor, limit: 20) { _ in XCTFail("Unexpected content") }
+        }
+
+        let first = try await repository.liveFeed(audience: .everyone, query: query, before: nil, limit: 20) { _ in }
+        let differentMapQuery = LiveFeedQuery(activityType: .wannas)
+        let refreshedMap = try await repository.liveMapActivity(
+            audience: .everyone, query: differentMapQuery, before: nil, limit: 50)
+        XCTAssertTrue(refreshedMap.activity.isEmpty)
+        XCTAssertNil(refreshedMap.nextCursor)
+        var callbackIDs: [String] = []
+        let second = try await repository.liveFeed(audience: .everyone, query: query,
+            before: first.nextCursor, limit: 20) { callbackIDs = $0.activity.map(\.id) }
+        XCTAssertEqual(second.activity.map(\.id), [LiveManualPaginationUITestRepository.activityID])
+        XCTAssertEqual(callbackIDs, second.activity.map(\.id))
+        XCTAssertNil(second.nextCursor)
+        XCTAssertNil(second.activity.first?.place)
+        await assertRejected {
+            _ = try await repository.liveFeed(audience: .everyone, query: self.query,
+                before: nil, limit: 50) { _ in XCTFail("Map's limit must not be accepted by Feed") }
+        }
+    }
+
+    func testViewportPolygonContinuesThroughProductionStoreAndDeduplicatesAllExpansionStages() async throws {
+        let boundedQuery = LiveFeedQuery(occurredAfter: query.occurredAfter, occurredBefore: query.occurredBefore,
+            polygon: [
+                .init(latitude: 34.0, longitude: -118.4), .init(latitude: 34.1, longitude: -118.4),
+                .init(latitude: 34.1, longitude: -118.2), .init(latitude: 34.0, longitude: -118.2)
+            ])
+        XCTAssertTrue(boundedQuery.isValid)
+        let repository = try XCTUnwrap(LiveManualPaginationUITestRepository.make(
+            arguments: arguments, authenticatedUserID: "user_joe"))
+        let backend = WanderBackend(feedRepository: repository)
+        let store = WanderStore(fixtures: .seed())
+        store.selectLiveFeedQuery(boundedQuery)
+        let refreshed = await store.refreshFollowedFeed(backend: backend)
+        XCTAssertTrue(refreshed)
+        XCTAssertEqual(store.feedLoadState, .loaded)
+        XCTAssertTrue(try XCTUnwrap(store.followedFeedPage).activity.isEmpty)
+        XCTAssertEqual(store.followedFeedPage?.nextCursor, LiveManualPaginationUITestRepository.nextCursor)
+        XCTAssertTrue(store.hasMoreFeed)
+
+        let map = try await repository.liveMapActivity(audience: .everyone,
+            query: LiveFeedQuery(activityType: .wannas), before: nil, limit: 50)
+        XCTAssertTrue(map.activity.isEmpty)
+        XCTAssertNil(map.nextCursor)
+        await assertRejected {
+            _ = try await repository.liveFeed(audience: .everyone, query: self.query,
+                before: LiveManualPaginationUITestRepository.nextCursor, limit: 20) { _ in XCTFail("Mismatched query must fail") }
+        }
+        let continued = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(continued)
+        let activity = try XCTUnwrap(store.followedFeedPage?.activity.first)
+        XCTAssertEqual(activity.id, LiveManualPaginationUITestRepository.activityID)
+        XCTAssertEqual(activity.kind, .listItemAdded)
+        XCTAssertEqual(activity.list?.id, "fixture-live-manual-list")
+        XCTAssertEqual(activity.actor.id, store.currentUser.id)
+        XCTAssertEqual(activity.place?.userPlace.userID, store.currentUser.id)
+        XCTAssertTrue(boundedQuery.includes(activity))
+
+        var visitedStages: Set<LiveFeedExpansionStage> = [store.liveFeedExpansionStage]
+        for _ in 0..<6 where store.hasMoreFeed {
+            let loaded = await store.loadMoreFeed(backend: backend)
+            XCTAssertTrue(loaded)
+            XCTAssertFalse(store.feedPaginationFailed)
+            visitedStages.insert(store.liveFeedExpansionStage)
+            XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [LiveManualPaginationUITestRepository.activityID])
+            XCTAssertEqual(store.visibleLiveFeedSections.flatMap(\.groups).flatMap(\.activities).map(\.id),
+                           [LiveManualPaginationUITestRepository.activityID])
+        }
+        XCTAssertEqual(visitedStages, [.selected, .older, .allActivity])
+        XCTAssertEqual(store.liveFeedExpansionStage, .allActivity)
+        XCTAssertFalse(store.hasMoreFeed)
+        XCTAssertNil(store.followedFeedPage?.nextCursor)
+        XCTAssertEqual(store.followedFeedPage?.activity.first?.kind, .listItemAdded,
+                       "Overlapping later copies must not replace the authorized original activity.")
+    }
+
+    func testIndependentMapRouteRejectsUnexpectedCursorAudienceAndLimit() async throws {
+        let repository = try XCTUnwrap(LiveManualPaginationUITestRepository.make(
+            arguments: arguments, authenticatedUserID: "user_joe"))
+        await assertRejected {
+            _ = try await repository.liveMapActivity(audience: .everyone, query: self.query,
+                before: LiveManualPaginationUITestRepository.nextCursor, limit: 50)
+        }
+        await assertRejected {
+            _ = try await repository.liveMapActivity(audience: .onlyFriends, query: self.query, before: nil, limit: 50)
+        }
+        await assertRejected {
+            _ = try await repository.liveMapActivity(audience: .everyone, query: self.query, before: nil, limit: 20)
+        }
+    }
+
     func testUnexpectedCursorQueryAudienceAndLimitFailWithoutContentCallback() async throws {
         let repository = try XCTUnwrap(LiveManualPaginationUITestRepository.make(arguments: arguments, authenticatedUserID: "user_joe"))
         await assertRejected {

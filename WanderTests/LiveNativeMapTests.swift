@@ -5,6 +5,204 @@ import XCTest
 
 @MainActor
 final class LiveNativeMapTests: XCTestCase {
+    func testStablePinConfigurationsSkipNativeWritesWhileSemanticChangesApply() throws {
+        let original = try fixturePin()
+        let view = NativePropertyRecordingPinView(annotation: nil, reuseIdentifier: LiveNativePinView.reuseIdentifier)
+        view.configure(pin: original, selected: false, viewed: false, compact: false, brand: .editorialLight)
+        let ownedTraits: UIAccessibilityTraits = [.button, .selected]
+        let nativeTraits = view.accessibilityTraits.subtracting(ownedTraits)
+        view.recordedWrites.removeAll()
+        // A fixture-only suffix must not turn an unchanged semantic value into
+        // a write on every refresh. The subclass models that exported getter.
+        view.appendsCameraMetadata = true
+        for _ in 0..<30 {
+            view.configure(pin: original, selected: false, viewed: false, compact: false, brand: .editorialLight)
+            view.setAccessibilityVisibility(true)
+        }
+        XCTAssertTrue(view.recordedWrites.isEmpty, "Unchanged refreshes must not rewrite native annotation properties")
+        view.appendsCameraMetadata = false
+
+        original.place.place.canonicalName = "Renamed fixture venue"
+        view.configure(pin: original, selected: false, viewed: false, compact: false, brand: .editorialLight)
+        XCTAssertEqual(view.accessibilityLabel, original.accessibilityLabel)
+        XCTAssertEqual(view.recordedWrites["label"], 1, "Mutable place copy refreshes even when the visual signature matches")
+
+        let state = LiveTotemState(rails: [MapPinOutline(ownership: .social, status: .wannaGo)],
+            hasListMembership: true, hasSavedStatus: true, isFeatured: false)
+        let changed = LivePlacePin(id: original.id, place: original.place, activities: [], totemState: state)
+        view.configure(pin: changed, selected: false, viewed: true, compact: true, brand: .editorialLight)
+        XCTAssertEqual(view.accessibilityLabel, changed.accessibilityLabel)
+        XCTAssertEqual(view.accessibilityValue, "Map dot")
+        let host = try XCTUnwrap(view.subviews.compactMap { $0.next as? UIHostingController<LiveNativeHostedPin> }.first)
+        XCTAssertEqual(host.rootView.state, state)
+        XCTAssertTrue(host.rootView.viewed, "Viewed presentation is still recomputed and applied")
+
+        view.configure(pin: changed, selected: true, viewed: true, compact: true, brand: .editorialLight)
+        XCTAssertEqual(view.accessibilityValue, "Category pin")
+        XCTAssertEqual(view.accessibilityTraits.intersection(ownedTraits), [.button, .selected])
+        XCTAssertEqual(view.accessibilityTraits.subtracting(ownedTraits), nativeTraits)
+        XCTAssertEqual(view.zPriority, .max)
+        view.configure(pin: changed, selected: false, viewed: false, compact: true, brand: .editorialLight)
+        XCTAssertEqual(view.accessibilityValue, "Map dot")
+        XCTAssertEqual(view.accessibilityTraits.intersection(ownedTraits), .button)
+        XCTAssertEqual(view.accessibilityTraits.subtracting(ownedTraits), nativeTraits)
+        XCTAssertEqual(view.zPriority, .defaultUnselected)
+        XCTAssertFalse(host.rootView.viewed)
+
+        view.recordedWrites.removeAll()
+        view.setAccessibilityVisibility(false)
+        for _ in 0..<30 { view.setAccessibilityVisibility(false) }
+        XCTAssertFalse(view.isAccessibilityElement)
+        XCTAssertEqual(view.recordedWrites["visible"], 1)
+        view.setAccessibilityVisibility(true)
+        XCTAssertTrue(view.isAccessibilityElement)
+        XCTAssertEqual(view.recordedWrites["visible"], 2)
+        XCTAssertEqual(view.bounds.size, CGSize(width: 44, height: 44))
+    }
+
+    func testPinActivityTimestampCopyRefreshesWithoutVisualSignatureChange() throws {
+        let original = try fixturePin()
+        let actor = ProfileShell(id: "fixture-actor", handle: "fixture", displayName: "Fixture", avatarURL: nil,
+                                 bio: nil, relationship: .mutual)
+        let view = NativePropertyRecordingPinView(annotation: nil, reuseIdentifier: LiveNativePinView.reuseIdentifier)
+        let now = Date.now
+        let older = FeedActivity(id: "fixture-event", kind: .placeBeen, actor: actor, place: original.place,
+                                 occurredAt: now.addingTimeInterval(-7_200))
+        let recent = FeedActivity(id: older.id, kind: older.kind, actor: actor, place: original.place,
+                                  occurredAt: now.addingTimeInterval(-10))
+        let before = LivePlacePin(id: original.id, place: original.place, activities: [older], totemState: original.totemState)
+        let after = LivePlacePin(id: original.id, place: original.place, activities: [recent], totemState: original.totemState)
+        view.configure(pin: before, selected: false, viewed: false, compact: false, brand: .editorialLight)
+        let priorLabel = view.accessibilityLabel
+        view.recordedWrites.removeAll()
+        view.configure(pin: after, selected: false, viewed: false, compact: false, brand: .editorialLight)
+        XCTAssertNotEqual(view.accessibilityLabel, priorLabel)
+        XCTAssertEqual(view.accessibilityLabel, after.accessibilityLabel)
+        XCTAssertEqual(view.recordedWrites, ["label": 1])
+    }
+
+    func testStableUpdatesPreserveNativeInteractionConfigurationAndCamera() throws {
+        let map = NativeConfigurationRecordingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let proxy = LiveNativeMapProxy()
+        let revision = UUID()
+        var interactions = 0
+        let parent = makeParent(proxy: proxy, pinsRevision: revision, onInteraction: { interactions += 1 })
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        map.layoutIfNeeded()
+        map.clearRecordedWrites()
+
+        let observer = try XCTUnwrap(map.gestureRecognizers?.compactMap { $0 as? LiveMapInteractionRecognizer }.first)
+        XCTAssertTrue(observer.observeInteraction(tapCount: 1, activeTouchCount: 1, movement: 12))
+        XCTAssertEqual(interactions, 1)
+        XCTAssertTrue(proxy.positionedByUser)
+        for _ in 0..<30 { coordinator.update(parent: parent, map: map, animated: false) }
+        XCTAssertTrue(map.interactionWrites.isEmpty)
+        XCTAssertTrue(map.featureWrites.isEmpty)
+        XCTAssertTrue(map.locationWrites.isEmpty)
+        XCTAssertEqual(map.cameraCommandCount, 0)
+        XCTAssertTrue(proxy.positionedByUser, "An ordinary interaction redraw must not reapply a camera command")
+
+        let drawing = makeParent(proxy: proxy, pinsRevision: revision, drawing: true, showsUserLocation: true)
+        coordinator.update(parent: drawing, map: map, animated: false)
+        XCTAssertEqual(map.interactionWrites, [false])
+        XCTAssertEqual(map.featureWrites, [MKMapFeatureOptions()])
+        XCTAssertEqual(map.locationWrites, [true])
+        XCTAssertFalse(map.isUserInteractionEnabled)
+        XCTAssertTrue(map.selectableMapFeatures.isEmpty)
+        XCTAssertTrue(map.showsUserLocation)
+        coordinator.update(parent: drawing, map: map, animated: false)
+        XCTAssertEqual(map.interactionWrites.count, 1)
+        XCTAssertEqual(map.featureWrites.count, 1)
+        XCTAssertEqual(map.locationWrites.count, 1)
+
+        coordinator.update(parent: parent, map: map, animated: false)
+        XCTAssertEqual(map.interactionWrites, [false, true])
+        XCTAssertEqual(map.featureWrites, [MKMapFeatureOptions(), [.pointsOfInterest]])
+        XCTAssertEqual(map.locationWrites, [true, false])
+        XCTAssertTrue(map.isUserInteractionEnabled)
+        XCTAssertEqual(map.selectableMapFeatures, [.pointsOfInterest])
+        XCTAssertFalse(map.showsUserLocation)
+        XCTAssertEqual(map.cameraCommandCount, 0)
+    }
+
+    func testStableProjectionSkipsDensityButSelectionCameraAndMountedViewsRefresh() throws {
+        let map = DensityCountingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let pin = try fixturePin()
+        let revision = UUID()
+        var parent = makeParent(pins: [pin], pinsRevision: revision)
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        map.layoutIfNeeded()
+        let initial = map.densityQueries
+        for _ in 0..<30 { coordinator.update(parent: parent, map: map, animated: false) }
+        XCTAssertEqual(map.densityQueries, initial, "Drawer/modal redraws must not requery stable pin geometry")
+
+        parent = makeParent(pins: [pin], pinsRevision: revision, selectedID: pin.id)
+        coordinator.update(parent: parent, map: map, animated: false)
+        XCTAssertGreaterThan(map.densityQueries, initial, "Selection changes density priority")
+        var prior = map.densityQueries
+        coordinator.mapView(map, didAdd: [])
+        XCTAssertGreaterThan(map.densityQueries, prior, "New MapKit views need configuration at the same pose")
+        prior = map.densityQueries
+        map.setCamera(MKMapCamera(lookingAtCenter: region.center, fromDistance: 1_800,
+                                 pitch: 40, heading: 25), animated: false)
+        coordinator.mapView(map, regionDidChangeAnimated: false)
+        XCTAssertGreaterThan(map.densityQueries, prior)
+        prior = map.densityQueries
+        map.frame.size.width = 320
+        map.setNeedsLayout(); map.layoutIfNeeded()
+        XCTAssertGreaterThan(map.densityQueries, prior, "Rotation and resized layouts need a fresh footprint")
+    }
+
+    func testProjectionGenerationRefreshesSameIDPayloadAndRemoval() throws {
+        let map = DensityCountingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        let original = try fixturePin()
+        var selectedNames: [String] = []
+        let parent = makeParent(pins: [original], pinsRevision: UUID(),
+            onSelectPin: { selectedNames.append($0.place.place.canonicalName) })
+        let coordinator = parent.makeCoordinator()
+        coordinator.attach(to: map)
+        defer { coordinator.detach(from: map) }
+        coordinator.update(parent: parent, map: map, animated: false)
+        let annotation = try XCTUnwrap(map.annotations.first { !($0 is MKUserLocation) })
+        let replacement = LocalPlace(localID: original.place.place.id, canonicalName: "Updated park",
+            category: "park", latitude: original.place.place.latitude, longitude: original.place.place.longitude)
+        let visible = VisiblePlace(id: original.place.id, place: replacement,
+            userPlace: original.place.userPlace, owner: original.place.owner)
+        let updated = LivePlacePin(id: original.id, place: visible, activities: [],
+            totemState: LiveTotemState(rails: [], hasListMembership: true, hasSavedStatus: true, isFeatured: false))
+        coordinator.update(parent: makeParent(pins: [updated], pinsRevision: UUID(),
+            onSelectPin: { selectedNames.append($0.place.place.canonicalName) }), map: map, animated: false)
+        XCTAssertTrue(map.annotations.contains { $0 === annotation })
+        XCTAssertEqual(annotation.title ?? nil, "Updated park")
+        let view = try XCTUnwrap(coordinator.mapView(map, viewFor: annotation))
+        XCTAssertEqual(view.accessibilityLabel, updated.accessibilityLabel)
+        XCTAssertTrue(view.accessibilityActivate())
+        XCTAssertEqual(selectedNames, ["Updated park"])
+        coordinator.update(parent: makeParent(pins: [], pinsRevision: UUID()), map: map, animated: false)
+        XCTAssertTrue(map.annotations.filter { !($0 is MKUserLocation) }.isEmpty)
+    }
+
+    func testDisplayProjectionReplacesAllDerivedCollectionsTogether() throws {
+        let pin = try fixturePin()
+        let first = LiveMapDisplayProjection(pins: [pin])
+        XCTAssertEqual(first.pinIDs, [pin.id])
+        XCTAssertEqual(first.pin(id: pin.id)?.id, pin.id)
+        XCTAssertEqual(first.persistedPlaceIDs, pin.identity.persistedPlaceIDs)
+        XCTAssertNil(first.pin(id: nil))
+        let cleared = LiveMapDisplayProjection()
+        XCTAssertNotEqual(first.revision, cleared.revision)
+        XCTAssertTrue(cleared.pinIDs.isEmpty)
+        XCTAssertTrue(cleared.persistedPlaceIDs.isEmpty)
+        XCTAssertTrue(cleared.activityIDs.isEmpty)
+        XCTAssertNil(cleared.pin(id: pin.id))
+    }
+
     func testCameraCommandWaitsForNonzeroMapLayout() {
         let map = RecordingMapView(frame: .zero)
         let parent = makeParent()
@@ -438,8 +636,18 @@ final class LiveNativeMapTests: XCTestCase {
         for compact in [false, true, false, true] {
             view.configure(pin: pin, selected: false, viewed: false, compact: compact, brand: .editorialLight)
             let hosts = view.subviews.compactMap { $0.next as? UIHostingController<LiveNativeHostedPin> }
-            XCTAssertEqual(hosts.count, 1, "Density changes replace the marker, never add another.")
-            XCTAssertEqual(hosts.first?.rootView.compact, compact)
+            let images = view.subviews.compactMap { $0 as? UIImageView }
+            XCTAssertEqual(hosts.count + images.count, 1, "Density changes replace the marker, never add another.")
+            if compact {
+                XCTAssertEqual(images.count, 1)
+                XCTAssertNotNil(images.first?.image)
+            } else {
+                XCTAssertEqual(hosts.count, 1)
+                XCTAssertEqual(hosts.first?.rootView.compact, false)
+            }
+            XCTAssertEqual(view.bounds.size, CGSize(width: 44, height: 44))
+            XCTAssertEqual(view.accessibilityLabel, pin.accessibilityLabel)
+            XCTAssertEqual(view.accessibilityValue, compact ? "Map dot" : "Category pin")
         }
     }
 
@@ -467,8 +675,8 @@ final class LiveNativeMapTests: XCTestCase {
         controller.view.addSubview(view)
         view.center = CGPoint(x: window.bounds.midX, y: window.bounds.midY)
 
-        // Exercise the actual retained hosting view, including its removal and
-        // reuse. ImageRenderer alone cannot catch a hosted Canvas losing color.
+        // Exercise the actual mounted image/hosting paths through density and
+        // reuse. Offscreen ImageRenderer alone cannot prove mounted color parity.
         let stages = [("full", false, false), ("dense", true, false),
                       ("full-again", false, false), ("reused-dense", true, true),
                       ("reused-full", false, false)]
@@ -616,18 +824,99 @@ final class LiveNativeMapTests: XCTestCase {
         proxy: LiveNativeMapProxy? = nil, positionRevision: UInt64 = 0,
         commandRegion: MKCoordinateRegion? = nil,
         commandPosition: MapCameraPosition? = nil,
-        pins: [LivePlacePin] = [], coloredMap: Bool = false, brand: AstirBrandMode = .editorialLight,
+        pins: [LivePlacePin] = [], pinsRevision: UUID? = nil, selectedID: String? = nil,
+        coloredMap: Bool = false, brand: AstirBrandMode = .editorialLight,
+        drawing: Bool = false, showsUserLocation: Bool = false,
         contentInsets: EdgeInsets = EdgeInsets(),
         boundary: LiveDrawnArea? = nil, nearbyRadius: Double? = nil,
         onSelectPin: @escaping (LivePlacePin) -> Void = { _ in },
-        onCameraEnd: @escaping (MKCoordinateRegion, MapCamera, Bool) -> Void = { _, _, _ in }
+        onCameraEnd: @escaping (MKCoordinateRegion, MapCamera, Bool) -> Void = { _, _, _ in },
+        onInteraction: @escaping () -> Void = {}
     ) -> LiveNativeMap {
         LiveNativeMap(position: .constant(commandPosition ?? .region(commandRegion ?? region)), positionRevision: positionRevision,
-            proxy: proxy ?? LiveNativeMapProxy(), pins: pins, selectedID: nil, viewedPins: [:],
-            brand: brand, coloredMap: coloredMap, drawing: false, contentInsets: contentInsets, showsUserLocation: false,
+            proxy: proxy ?? LiveNativeMapProxy(), pins: pins, pinsRevision: pinsRevision, selectedID: selectedID, viewedPins: [:],
+            brand: brand, coloredMap: coloredMap, drawing: drawing, contentInsets: contentInsets, showsUserLocation: showsUserLocation,
             boundary: boundary, nearbyCenter: nearbyRadius == nil ? nil : region.center,
             nearbyRadius: nearbyRadius, nativeSelectionRevision: UUID(), onSelectPin: onSelectPin,
-            onNativeFeature: { _ in }, onCameraEnd: onCameraEnd, onInteraction: {})
+            onNativeFeature: { _ in }, onCameraEnd: onCameraEnd, onInteraction: onInteraction)
+    }
+}
+
+@MainActor
+private final class NativePropertyRecordingPinView: LiveNativePinView {
+    var recordedWrites: [String: Int] = [:]
+    var appendsCameraMetadata = false
+
+    override var accessibilityIdentifier: String? {
+        didSet { recordedWrites["identifier", default: 0] += 1 }
+    }
+    override var accessibilityLabel: String? {
+        didSet { recordedWrites["label", default: 0] += 1 }
+    }
+    override var accessibilityValue: String? {
+        get {
+            let base = super.accessibilityValue
+            return appendsCameraMetadata ? "\(base ?? "")|live.performance.cameraDistanceMeters=1000" : base
+        }
+        set { recordedWrites["value", default: 0] += 1; super.accessibilityValue = newValue }
+    }
+    override var accessibilityTraits: UIAccessibilityTraits {
+        didSet { recordedWrites["traits", default: 0] += 1 }
+    }
+    override var zPriority: MKAnnotationViewZPriority {
+        didSet { recordedWrites["priority", default: 0] += 1 }
+    }
+    override var isAccessibilityElement: Bool {
+        didSet { recordedWrites["visible", default: 0] += 1 }
+    }
+}
+
+@MainActor
+private final class NativeConfigurationRecordingMapView: LiveNativeMapView {
+    var interactionWrites: [Bool] = []
+    var featureWrites: [MKMapFeatureOptions] = []
+    var locationWrites: [Bool] = []
+    var cameraCommandCount = 0
+    private var requestedUserLocation = false
+
+    override var isUserInteractionEnabled: Bool {
+        didSet { interactionWrites.append(isUserInteractionEnabled) }
+    }
+    override var selectableMapFeatures: MKMapFeatureOptions {
+        didSet { featureWrites.append(selectableMapFeatures) }
+    }
+    // Record the configuration contract without starting CoreLocation in this
+    // unit test. The interaction/feature setters use the real MapKit behavior.
+    override var showsUserLocation: Bool {
+        get { requestedUserLocation }
+        set { locationWrites.append(newValue); requestedUserLocation = newValue }
+    }
+    override func setCamera(_ camera: MKMapCamera, animated: Bool) {
+        cameraCommandCount += 1
+        super.setCamera(camera, animated: animated)
+    }
+    override func setRegion(_ region: MKCoordinateRegion, animated: Bool) {
+        cameraCommandCount += 1
+        super.setRegion(region, animated: animated)
+    }
+    override func setVisibleMapRect(_ mapRect: MKMapRect, animated: Bool) {
+        cameraCommandCount += 1
+        super.setVisibleMapRect(mapRect, animated: animated)
+    }
+    func clearRecordedWrites() {
+        interactionWrites.removeAll()
+        featureWrites.removeAll()
+        locationWrites.removeAll()
+        cameraCommandCount = 0
+    }
+}
+
+@MainActor
+private final class DensityCountingMapView: LiveNativeMapView {
+    private(set) var densityQueries = 0
+    override func annotations(in mapRect: MKMapRect) -> Set<AnyHashable> {
+        densityQueries += 1
+        return super.annotations(in: mapRect)
     }
 }
 

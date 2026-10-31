@@ -754,14 +754,10 @@ enum DiscoverLatestActivityPresentation {
     }
 
     private static func absoluteDateText(for savedAt: Date, relativeTo now: Date, calendar: Calendar) -> String {
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = calendar.isDate(savedAt, equalTo: now, toGranularity: .year)
+        let format = calendar.isDate(savedAt, equalTo: now, toGranularity: .year)
             ? "MMM d"
             : "MMM d, yyyy"
-        return formatter.string(from: savedAt)
+        return ActivityDateFormatterCache.shared.string(from: savedAt, calendar: calendar, format: format)
     }
 }
 
@@ -1157,7 +1153,7 @@ enum VisiblePlaceGrouping {
         return normalized
     }
 
-    private static func normalizedIdentifier(_ value: String?) -> String {
+    static func normalizedIdentifier(_ value: String?) -> String {
         let source = value ?? ""
         // Provider and local IDs normally contain only non-whitespace ASCII.
         // Avoid splitting and rebuilding each ID during dense place grouping.

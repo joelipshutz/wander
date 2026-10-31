@@ -43,10 +43,7 @@ struct LivePlaceFullProfileScreen: View {
         PlaceProfileFullScreen(
             place: sheetPlace,
             saves: summaries,
-            tasteSaves: store.currentUserVisiblePlaces.map {
-                PlaceSaveSummary(visiblePlace: $0, attributes: store.attributes(for: $0.userPlace.id),
-                                 viewerFollowsOwner: false)
-            },
+            tasteSaves: tasteSummaries,
             currentUserID: store.currentUser.id,
             action: PlaceSheetAction.topLevelAction(currentUserSave: currentUserSave),
             onBack: onBack, onAction: openSave
@@ -70,6 +67,15 @@ struct LivePlaceFullProfileScreen: View {
         store.saveFlowDidPresent(.saveSheet)
     }
 
+    private var tasteSummaries: [PlaceSaveSummary] {
+        let visiblePlaces = store.currentUserVisiblePlaces
+        let attributesByID = store.attributesByUserPlaceID(for: visiblePlaces.map { $0.userPlace.id })
+        return visiblePlaces.map {
+            PlaceSaveSummary(visiblePlace: $0, attributes: attributesByID[$0.userPlace.id] ?? [],
+                             viewerFollowsOwner: false)
+        }
+    }
+
     private var summaries: [PlaceSaveSummary] {
         let visible = (store.visiblePlaces() + activities.compactMap(\.place)
             + [visiblePlace].compactMap { $0 }).filter {
@@ -83,8 +89,9 @@ struct LivePlaceFullProfileScreen: View {
             matching = LivePlaceFullProfilePresentation.matchingSaves(candidate: candidate,
                 authorizedPlaces: visible, viewerID: store.currentUser.id)
         }
+        let attributesByID = store.attributesByUserPlaceID(for: matching.map { $0.userPlace.id })
         return matching.map { visible in
-            let attributes = store.attributes(for: visible.userPlace.id)
+            let attributes = attributesByID[visible.userPlace.id] ?? []
             return PlaceSaveSummary(visiblePlace: visible,
                 attributes: attributes.isEmpty ? visible.attributes : attributes,
                 viewerFollowsOwner: store.viewerFollows(visible.owner.id))

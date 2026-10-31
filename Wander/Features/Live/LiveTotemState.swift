@@ -232,13 +232,15 @@ extension WanderStore {
     func liveTotemContext(query: LiveFeedQuery, currentStateIsComplete: Bool = false,
                           authoritativeState: LiveMapPinStateSnapshot? = nil,
                           allowsCachedAssociations: Bool = true) -> LiveTotemContext {
+        let currentUserID = currentUser.id
+        let audience = feedAudience
         let items = liveReadableListItems()
         let placeIDs = Set(items.map(\.placeID))
         // Only this viewer's current readable, active local writes may survive
         // a remote absence result. Collapse/removal precedence is owned by the
         // store's list resolver; no event or another user's cache is proof.
         let pendingOwnPlaceIDs = Set(items.filter { item in
-            guard item.deletedAt == nil, item.addedByUserID == currentUser.id else { return false }
+            guard item.deletedAt == nil, item.addedByUserID == currentUserID else { return false }
             switch item.syncState {
             case .localOnly, .pendingCreate, .pendingUpdate, .failed: return true
             case .synced, .pendingDelete, .serverDenied, .tombstoned: return false
@@ -257,7 +259,7 @@ extension WanderStore {
             // every flagged parent. Explicit Feed events remain separate proof.
             if parent.isPrivateListCompanion, parent.visitedAt == nil, parent.recommendedCount == 0,
                wannaSaves(for: parent).isEmpty,
-               (place.owner.id != currentUser.id || visits(for: parent.id).isEmpty) {
+               (place.owner.id != currentUserID || visits(for: parent.id).isEmpty) {
                 return false
             }
             let ids = Set([parent.id, parent.localID, parent.serverID].compactMap { $0 })
@@ -269,9 +271,11 @@ extension WanderStore {
             return originals.isEmpty || originals.contains { $0.deletedAt == nil }
                 || !wannaSaves(for: parent).isEmpty || !visits(for: parent.id).isEmpty
         }
-        return LiveTotemContext(currentUserID: currentUser.id, query: query,
+        let friendIDs: Set<String> = audience == .onlyFriends
+            ? Set(profiles.filter { relationship(to: $0.id) == .mutual }.map(\.id)) : []
+        return LiveTotemContext(currentUserID: currentUserID, query: query,
             currentSavedPlaces: saved, currentListPlaces: listPlaces, currentListPlaceIDs: placeIDs,
-            audience: feedAudience, friendIDs: Set(profiles.filter { relationship(to: $0.id) == .mutual }.map(\.id)),
+            audience: audience, friendIDs: friendIDs,
             currentStateIsComplete: currentStateIsComplete, authoritativeState: authoritativeState,
             allowsCachedAssociations: allowsCachedAssociations, pendingOwnListPlaceIDs: pendingOwnPlaceIDs)
     }

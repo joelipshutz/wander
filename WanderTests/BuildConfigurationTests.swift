@@ -1,6 +1,9 @@
 import XCTest
 import UIKit
 @testable import Wander
+#if canImport(PostHog)
+@preconcurrency import PostHog
+#endif
 
 final class BuildConfigurationTests: XCTestCase {
     func testTrackedAuthConfigProvidesReleaseClientKeys() throws {
@@ -474,6 +477,25 @@ final class BuildConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.projectToken, "phc_recme_project")
         XCTAssertEqual(configuration.host, "https://eu.i.posthog.com")
         XCTAssertTrue(configuration.isConfigured)
+    }
+
+    func testPostHogPinsReviewedReplaySchedulingFix() throws {
+        #if canImport(PostHog)
+        let project = try String(contentsOf: projectRoot.appendingPathComponent("project.yml"))
+        XCTAssertNotNil(project.range(
+            of: #"posthog-ios:\s+url: https://github\.com/PostHog/posthog-ios\.git\s+exactVersion: 3\.68\.3"#,
+            options: .regularExpression
+        ))
+        let resolved = try Data(contentsOf: projectRoot.appendingPathComponent(
+            "Wander.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: resolved) as? [String: Any])
+        let pins = try XCTUnwrap(object["pins"] as? [[String: Any]])
+        let pin = try XCTUnwrap(pins.first { $0["identity"] as? String == "posthog-ios" })
+        let state = try XCTUnwrap(pin["state"] as? [String: Any])
+        XCTAssertEqual(state["version"] as? String, "3.68.3")
+        XCTAssertEqual(state["revision"] as? String, "a1315e06f91933e111c3a3a829ca13366657853d")
+        XCTAssertEqual(postHogVersion, "3.68.3", "The linked SDK must include the reviewed replay fix")
+        #endif
     }
 
     func testPostHogDisablesUnusedAutomaticCaptureSurfaces() {

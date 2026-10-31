@@ -2011,8 +2011,7 @@ struct PlaceImportAdaptiveReviewScreen: View {
         guard batch.source == .googleMaps,
               let sourceListName = batch.sourceListName
         else { return nil }
-        if let listID = batch.destinationListID,
-           let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
+        if let existing = store.existingImportDestinationList(for: batch) {
             return existing
         }
         let existingNames = Set(
@@ -2814,8 +2813,7 @@ struct PlaceImportInboxScreen: View {
         guard batch.source == .googleMaps,
               let sourceListName = batch.sourceListName
         else { return nil }
-        if let destinationListID = batch.destinationListID,
-           let existing = store.visiblePlaceLists.first(where: { $0.id == destinationListID }) {
+        if let existing = store.existingImportDestinationList(for: batch) {
             return existing
         }
         let existingNames = Set(
@@ -3797,10 +3795,12 @@ private struct PlaceImportCandidatePicker: View {
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
-        store.currentUserVisiblePlaces.map { visiblePlace in
+        let ownPlaces = store.currentUserVisiblePlaces
+        let attributesByID = store.attributesByUserPlaceID(for: ownPlaces.map { $0.userPlace.id })
+        return ownPlaces.map { visiblePlace in
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                attributes: attributesByID[visiblePlace.userPlace.id] ?? [],
                 viewerFollowsOwner: false
             )
         }

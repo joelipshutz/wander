@@ -99,8 +99,22 @@ class ReplayIsolationTests(unittest.TestCase):
                     for name in xctest_method_names(source, "ReplayMaskingTests")]
         selected = [identifier for suite in regression.REPLAY_METHODS
                     for identifier in self.selection(suite)["identifiers"]]
-        self.assertEqual(Counter(selected), Counter(original))
-        self.assertEqual(len(selected), 2)
+        extra = [
+            "WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay",
+            "WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll",
+        ]
+        for identifier in extra:
+            _, case, method = identifier.split("/")
+            source = (root / "WanderTests" / (case + ".swift")).read_text()
+            self.assertIn(method, xctest_method_names(source, case))
+        self.assertEqual(Counter(selected), Counter(original + extra))
+        self.assertEqual(len(selected), 4)
+        isolated = self.selection("unit")["isolatedTestSuites"]
+        for suite, identifier in regression.REPLAY_METHODS.items():
+            if identifier in extra:
+                self.assertEqual(isolated[identifier], suite)
+        self.assertNotIn("WanderTests/FeedScreenScrollingPerformanceTests", isolated)
+        self.assertNotIn("WanderTests/PostHogReplayPerformanceTests", isolated)
         self.assertEqual(self.selection("replay")["identifiers"], ["WanderTests/ReplayMaskingTests"])
         self.assertEqual(self.selection("unit")["isolatedTestSuites"]["WanderTests/ReplayMaskingTests"], "replay")
 
@@ -156,11 +170,13 @@ class ReplayIsolationTests(unittest.TestCase):
         block = workflow.split("      - name: " + name + "\n", 1)[1]
         return block.split("\n      - ", 1)[0]
 
-    def test_workflow_requires_both_once_after_units_and_retains_both_results(self):
+    def test_workflow_requires_all_four_once_after_units_and_retains_all_results(self):
         workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/app-clip-validation.yml").read_text()
         prior = workflow.index("- name: Run complete parent suite")
         for suite, name in [("replay-private", "Run private replay proof after parent units"),
-                            ("replay-credentials", "Run credential replay proof after parent units")]:
+                            ("replay-credentials", "Run credential replay proof after parent units"),
+                            ("replay-feed", "Run mounted Feed replay proof after parent units"),
+                            ("replay-masked-scroll", "Run masked scrolling replay proof after parent units")]:
             self.assertLess(prior, workflow.index("- name: " + name))
             prior = workflow.index("- name: " + name)
             block = self.workflow_step(name)
@@ -168,7 +184,7 @@ class ReplayIsolationTests(unittest.TestCase):
             self.assertEqual(block.count("--suite " + suite), 1)
             self.assertNotIn("continue-on-error", block)
             self.assertNotIn("--suite replay\n", block)
-        gate = self.workflow_step("Summarize and require both replay proofs")
+        gate = self.workflow_step("Summarize and require all replay proofs")
         self.assertIn("always() && matrix.suite == 'unit'", gate)
         self.assertIn("regression.validate_replay_result", gate)
         retained = self.workflow_step("Retain regression evidence")
@@ -179,12 +195,12 @@ class ReplayIsolationTests(unittest.TestCase):
             self.assertIn("${{ runner.temp }}/" + name, retained)
 
     def test_workflow_still_exports_second_result_when_first_fails_or_is_missing(self):
-        block = self.workflow_step("Summarize and require both replay proofs")
+        block = self.workflow_step("Summarize and require all replay proofs")
         code = textwrap.dedent(block.split("python3 - <<'PY'\n", 1)[1].rsplit("\n          PY", 1)[0])
         for first in ["passed", "failed", "missing", "export-failed"]:
             with self.subTest(first=first), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                for name in ["ParentReplayPrivate", "ParentReplayCredentials"]:
+                for name in ["ParentReplayPrivate", "ParentReplayCredentials", "ParentReplayFeed", "ParentReplayMaskedScroll"]:
                     if name == "ParentReplayPrivate" and first == "missing":
                         continue
                     (root / (name + ".xcresult")).mkdir()
@@ -195,8 +211,10 @@ class ReplayIsolationTests(unittest.TestCase):
                     self.assertEqual(timeout, 120)
                     self.assertEqual(command[:4], ["xcrun", "xcresulttool", "get", "test-results"])
                     kind = command[4]
-                    private = "ParentReplayPrivate.xcresult" in command[command.index("--path") + 1]
-                    suite = "replay-private" if private else "replay-credentials"
+                    bundle = Path(command[command.index("--path") + 1]).stem
+                    suite = {"ParentReplayPrivate": "replay-private", "ParentReplayCredentials": "replay-credentials",
+                             "ParentReplayFeed": "replay-feed", "ParentReplayMaskedScroll": "replay-masked-scroll"}[bundle]
+                    private = suite == "replay-private"
                     calls.append((suite, kind))
                     summary, tests = self.result_fixture(suite)
                     if private and first == "failed":
@@ -216,6 +234,10 @@ class ReplayIsolationTests(unittest.TestCase):
                 self.assertEqual(Counter(calls)[("replay-credentials", "tests")], 1)
                 self.assertTrue((root / "replay-credentials-summary.json").is_file())
                 self.assertTrue((root / "replay-credentials-tests.json").is_file())
+                for suite in ["replay-feed", "replay-masked-scroll"]:
+                    self.assertEqual(Counter(calls)[(suite, "summary")], 1)
+                    self.assertEqual(Counter(calls)[(suite, "tests")], 1)
+                    self.assertTrue((root / (suite + "-tests.json")).is_file())
 
 
 class PhotoFixturePreparationTests(unittest.TestCase):

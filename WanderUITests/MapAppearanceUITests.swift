@@ -317,10 +317,23 @@ final class MapAppearanceUITests: XCTestCase {
     }
 
     private func cameraGeometry(in app: XCUIApplication) throws -> [String: Any] {
-        let mapFrame = try map(in: app).snapshot().frame
-        let annotations = try app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
-            .allElementsBoundByIndex.map { element -> [String: Any] in
-                let frame = try element.snapshot().frame
+        // One native AX read keeps every diagnostic frame in the same sample.
+        // Traverse all children without deduplicating MapKit's repeated pins.
+        let appSnapshot = try app.snapshot()
+        var descendants: [XCUIElementSnapshot] = []
+        @MainActor
+        func visit(_ node: XCUIElementSnapshot) {
+            descendants.append(node)
+            for child in node.children { visit(child) }
+        }
+        for child in appSnapshot.children { visit(child) }
+        let mapSnapshot = try XCTUnwrap(descendants.first { $0.elementType == .map },
+                                       "Camera geometry requires the native map in the app snapshot.")
+        let mapFrame = mapSnapshot.frame
+        let buttons = descendants.filter { $0.elementType == .button }
+        let annotations = buttons.filter { $0.identifier.hasPrefix("live.pin.") }
+            .map { element -> [String: Any] in
+                let frame = element.frame
                 let center = point(frame)
                 var entry: [String: Any] = ["identifier": element.identifier, "frame": frameJSON(frame),
                                             "center": ["x": Double(center.x), "y": Double(center.y)]]
@@ -330,12 +343,27 @@ final class MapAppearanceUITests: XCTestCase {
                 }
                 return entry
             }
-        let controls = [drawer(in: app), app.buttons["live.draw"], app.buttons["Filters"],
-                        app.buttons["Add a place"], app.buttons["live.searchArea"], app.tabBars.firstMatch]
-        let controlFrames = try controls.filter(\.exists).map { element -> [String: Any] in
-            ["identifier": element.identifier, "label": element.label, "frame": frameJSON(try element.snapshot().frame)]
+        @MainActor
+        func matches(_ element: XCUIElementSnapshot, _ identifier: String) -> Bool {
+            element.identifier == identifier || element.label == identifier
         }
-        return ["mapFrame": frameJSON(mapFrame), "appFrame": frameJSON(app.frame),
+        @MainActor
+        func uniqueButton(_ identifier: String) throws -> XCUIElementSnapshot? {
+            let matchingButtons = buttons.filter { matches($0, identifier) }
+            guard !matchingButtons.isEmpty else { return nil }
+            return try XCTUnwrap(matchingButtons.count == 1 ? matchingButtons.first : nil,
+                                 "Expected one native button matching \(identifier).")
+        }
+        let controls: [XCUIElementSnapshot?] = [
+            descendants.first { matches($0, "live.drawerHandle") },
+            try uniqueButton("live.draw"), try uniqueButton("Filters"),
+            try uniqueButton("Add a place"), try uniqueButton("live.searchArea"),
+            descendants.first { $0.elementType == .tabBar }
+        ]
+        let controlFrames = controls.compactMap { $0 }.map { element -> [String: Any] in
+            ["identifier": element.identifier, "label": element.label, "frame": frameJSON(element.frame)]
+        }
+        return ["mapFrame": frameJSON(mapFrame), "appFrame": frameJSON(appSnapshot.frame),
                 "pins": annotations, "controls": controlFrames]
     }
 

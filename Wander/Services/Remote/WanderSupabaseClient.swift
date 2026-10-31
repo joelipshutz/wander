@@ -11,7 +11,7 @@ enum WanderRemoteError: Error, Equatable {
     case invalidResponse(String)
 }
 
-struct EmptyRPCResponse: Codable, Equatable {}
+struct EmptyRPCResponse: Codable, Equatable, Sendable {}
 
 @MainActor
 protocol RemoteProcedureCalling {
@@ -20,10 +20,22 @@ protocol RemoteProcedureCalling {
         params: Params,
         decoder: JSONDecoder
     ) async throws -> Value
+
+    func callSnapshot<Value: Decodable & Sendable, Params: Encodable>(
+        _ name: String,
+        params: Params
+    ) async throws -> Value
 }
 
 extension RemoteProcedureCalling {
     func call<Value: Decodable, Params: Encodable>(_ name: String, params: Params) async throws -> Value {
+        try await call(name, params: params, decoder: RemoteDecoding.decoder)
+    }
+
+    func callSnapshot<Value: Decodable & Sendable, Params: Encodable>(
+        _ name: String,
+        params: Params
+    ) async throws -> Value {
         try await call(name, params: params, decoder: RemoteDecoding.decoder)
     }
 }
@@ -191,13 +203,20 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
     let configuration: WanderBackendConfiguration
     private let authSession: AuthSessionProviding
     private let urlSession: URLSession
+    private let snapshotDecoder: any RemoteSnapshotDecoding
     private var inFlightTokenRefreshes: [RejectedTokenKey: InFlightTokenRefresh] = [:]
     private var replacementTokens: [RejectedTokenKey: String] = [:]
 
-    init(configuration: WanderBackendConfiguration, authSession: AuthSessionProviding, urlSession: URLSession = .shared) {
+    init(
+        configuration: WanderBackendConfiguration,
+        authSession: AuthSessionProviding,
+        urlSession: URLSession = .shared,
+        snapshotDecoder: any RemoteSnapshotDecoding = RemoteSnapshotDecoder()
+    ) {
         self.configuration = configuration
         self.authSession = authSession
         self.urlSession = urlSession
+        self.snapshotDecoder = snapshotDecoder
     }
 
     var isConfigured: Bool {
@@ -399,6 +418,55 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
         )
     }
 
+    /// Opt-in for immutable snapshot DTOs only. The legacy/custom-decoder path
+    /// remains main-actor isolated and never transfers its decoder or result.
+    func callSnapshot<Value: Decodable & Sendable, Params: Encodable>(
+        _ name: String,
+        params: Params
+    ) async throws -> Value {
+        let rpcSignpostID = OSSignpostID(log: WanderDebugLog.pointsOfInterest)
+        os_signpost(.begin, log: WanderDebugLog.pointsOfInterest, name: "Remote RPC",
+                    signpostID: rpcSignpostID, "name=%{public}@", name as NSString)
+        defer {
+            os_signpost(.end, log: WanderDebugLog.pointsOfInterest, name: "Remote RPC",
+                        signpostID: rpcSignpostID, "name=%{public}@", name as NSString)
+        }
+        let expectedUserID = try configuredAuthenticatedUserID()
+        var result = try await rpcResponse(name, params: params, expectedUserID: expectedUserID)
+        if Self.requiresFreshToken(after: result.response.statusCode) {
+            try Task.checkCancellation()
+            result = try await rpcResponse(
+                name, params: params, expectedUserID: expectedUserID, rejectedToken: result.requestToken
+            )
+        }
+        try validateAuthenticatedUser(expectedUserID)
+        try Task.checkCancellation()
+
+        let decodeSignpostID = OSSignpostID(log: WanderDebugLog.pointsOfInterest)
+        os_signpost(.begin, log: WanderDebugLog.pointsOfInterest, name: "RPC Decode",
+                    signpostID: decodeSignpostID, "name=%{public}@ bytes=%{public}d", name as NSString, result.data.count)
+        defer {
+            os_signpost(.end, log: WanderDebugLog.pointsOfInterest, name: "RPC Decode",
+                        signpostID: decodeSignpostID, "name=%{public}@ bytes=%{public}d", name as NSString, result.data.count)
+        }
+        if let empty: Value = try validatedRPCResponseValue(
+            Value.self, data: result.data, response: result.response, name: name
+        ) { return empty }
+
+        do {
+            let value = try await snapshotDecoder.decode(Value.self, from: result.data)
+            try validateAuthenticatedUser(expectedUserID)
+            try Task.checkCancellation()
+            return value
+        } catch {
+            // A decode failure is also a suspension outcome: never publish an
+            // old account's error, or turn cancellation into a response error.
+            try validateAuthenticatedUser(expectedUserID)
+            try Task.checkCancellation()
+            throw rpcDecodingError(error, name: name)
+        }
+    }
+
     nonisolated static func requiresFreshToken(after statusCode: Int) -> Bool {
         statusCode == 401 || statusCode == 403
     }
@@ -527,6 +595,20 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
                 data.count
             )
         }
+        if let empty: Value = try validatedRPCResponseValue(
+            Value.self, data: data, response: response, name: name
+        ) { return empty }
+
+        do {
+            return try decoder.decode(Value.self, from: data)
+        } catch {
+            throw rpcDecodingError(error, name: name)
+        }
+    }
+
+    private func validatedRPCResponseValue<Value: Decodable>(
+        _: Value.Type, data: Data, response: HTTPURLResponse, name: String
+    ) throws -> Value? {
         guard (200..<300).contains(response.statusCode) else {
             // Database errors can echo row contents. Never log or propagate a
             // phone-bearing response from the private account-details endpoints.
@@ -557,17 +639,17 @@ final class WanderSupabaseClient: RemoteProcedureCalling, RemoteFunctionCalling,
             throw WanderRemoteError.invalidResponse("RPC \(name) returned no data")
         }
 
-        do {
-            return try decoder.decode(Value.self, from: data)
-        } catch {
-            if Self.redactsAccountDetailsResponse(for: name) {
-                throw WanderRemoteError.invalidResponse("Invalid private account details response")
-            }
-            #if DEBUG
-            WanderDebugLog.remote.error("rpc decode failed name=\(name, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
-            #endif
-            throw error
+        return nil
+    }
+
+    private func rpcDecodingError(_ error: Error, name: String) -> Error {
+        if Self.redactsAccountDetailsResponse(for: name) {
+            return WanderRemoteError.invalidResponse("Invalid private account details response")
         }
+        #if DEBUG
+        WanderDebugLog.remote.error("rpc decode failed name=\(name, privacy: .public) error=\(WanderDebugLog.clean(String(describing: error)), privacy: .public)")
+        #endif
+        return error
     }
 
     func invoke<Value: Decodable, Body: Encodable>(

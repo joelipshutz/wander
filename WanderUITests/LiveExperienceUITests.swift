@@ -247,7 +247,10 @@ final class LiveExperienceUITests: XCTestCase {
         let app = launch()
         let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         XCTAssertTrue(handle.waitForExistence(timeout: 30))
-        XCTAssertTrue((handle.value as? String)?.contains("loaded updates") == true,
+        XCTAssertTrue((handle.value as? String)?.range(
+            of: #"^(?:1 activity|[0-9]+\+? activities)\. "#,
+            options: .regularExpression
+        ) != nil,
                       "The combined drawer element must retain its loaded count for VoiceOver.")
         let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
@@ -336,10 +339,26 @@ final class LiveExperienceUITests: XCTestCase {
         app.activate()
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertEqual(composer.value as? String, "Let’s go Saturday.")
+        XCTAssertTrue(app.navigationBars["Private reply"].exists,
+                      "Foreground return must preserve the original private-message route.")
         app.buttons["messaging.send"].tap()
         XCTAssertTrue(app.staticTexts["Let’s go Saturday."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Simulated"].exists)
         capture("private-demo-reply")
+
+        let inboxBack = app.navigationBars.buttons["Messages"]
+        XCTAssertTrue(inboxBack.waitForExistence(timeout: 10))
+        inboxBack.tap()
+        let done = app.navigationBars.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        done.tap()
+        XCTAssertTrue(messages.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Profile"].isSelected)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        waitForCondition(timeout: 10) { app.tabBars.buttons["Live"].isSelected }
+        XCTAssertFalse(composer.exists,
+                       "Dismissing Messages must release its foreground protection.")
     }
 
     func testActivityMenuOpensPrivateReplyForSelectedActivity() {
@@ -878,13 +897,14 @@ final class LiveExperienceUITests: XCTestCase {
         executionTimeAllowance = 300
         let app = launch(extraArguments: ["-WanderFeedPaginationUITest"])
         setDrawer("expanded", in: app)
-        waitLiveCount(20, in: app)
+        // Map enumeration is independent of the Feed's visible tile window.
+        waitLiveCount(44, in: app)
         waitFeedCount(20, in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         for (current, next) in [(20, 40), (40, 44)] {
             scrollToAutomaticPage(in: app, feed: feed, previousCount: current)
             waitFeedCount(next, in: app, timeout: 15)
-            waitLiveCount(next, in: app)
+            waitLiveCount(44, in: app)
             capture("live-buffered-page-\(next)")
         }
         // The fixture creates 45 events, but event 0 is newer than the fixed
@@ -903,9 +923,27 @@ final class LiveExperienceUITests: XCTestCase {
     func testLiveManualLoadMoreContinuesAnEmptyAuthorizedPage() throws {
         executionTimeAllowance = 300
         let app = launch(extraArguments: ["-WanderFeedPaginationUITest", "-WanderLiveManualPaginationUITest"])
+        // All time deliberately skips the older stage. Select a bounded window
+        // through the real filter UI so this test exercises every expansion.
+        openCategoryFilters(in: app)
+        let timeFilter = app.buttons["live.filter.time"]
+        timeFilter.tap()
+        let day = app.collectionViews.cells.buttons.matching(
+            NSPredicate(format: "label == %@", "Past 24 hours")).firstMatch
+        XCTAssertTrue(day.waitForExistence(timeout: 5))
+        day.tap()
+        XCTAssertEqual(timeFilter.label, "When, Past 24 hours")
+        app.buttons["live.applyFilters"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForNonExistence(timeout: 5))
         setDrawer("expanded", in: app)
+        // The independent map fixture stays empty while the authorized Feed pages.
         waitLiveCount(0, in: app)
         waitFeedCount(0, in: app)
+        XCTAssertFalse(app.staticTexts["Couldn’t load Feed"].exists,
+                       "The empty page must be authorized content, not a failed fixture request.")
+        XCTAssertFalse(app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@", "Feed couldn't load. Retry to reload updates.")
+        ).firstMatch.exists, "A combined accessibility error must not masquerade as an authorized empty page.")
         let feed = app.scrollViews["feed.places.scroll"]
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists,
                        "An empty authorized page must continue automatically without a manual control.")
@@ -913,17 +951,21 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadMoreRetry"].firstMatch.exists)
         capture("live-empty-authorized-page-automatically-loading")
         waitFeedCount(1, in: app, timeout: 15)
-        waitLiveCount(1, in: app)
+        waitLiveCount(0, in: app)
         XCTAssertTrue(app.descendants(matching: .any)["feed.activity.fixture-live-manual-next.postcard"].firstMatch.exists)
         // The fixture's older page overlaps the same event ID. Exhausting it
         // must retain one authorized card, rather than duplicate or drop it.
         let older = app.descendants(matching: .any)["feed.olderActivity"].firstMatch
+        revealFully(older, in: feed, app: app)
         XCTAssertTrue(older.waitForExistence(timeout: 15))
         let terminal = app.descendants(matching: .any)["feed.allActivity"].firstMatch
         revealFully(terminal, in: feed, app: app)
         XCTAssertTrue(terminal.waitForExistence(timeout: 15))
+        // The divider marks the expansion stage; its duplicate-only final page
+        // must finish before asserting that pagination is idle.
+        XCTAssertTrue(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.waitForNonExistence(timeout: 15))
         waitFeedCount(1, in: app)
-        waitLiveCount(1, in: app)
+        waitLiveCount(0, in: app)
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists)
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.exists)
         XCTAssertFalse(app.descendants(matching: .any)["feed.loadMoreRetry"].firstMatch.exists)
@@ -953,9 +995,14 @@ final class LiveExperienceUITests: XCTestCase {
             XCTAssertGreaterThan(visible.width, 44)
             // Traverse the exposed Feed height: a shorter fixed fraction can
             // exhaust the gesture budget before reaching the loaded page's end.
-            // Keep the drag in content, away from the native scrollbar thumb.
-            let start = CGPoint(x: visible.midX, y: visible.maxY - 8)
+            // Match the passing position-preservation test's left content lane,
+            // clear of both the floating Map button and native scrollbar thumb.
+            let start = CGPoint(x: viewport.minX + 64, y: visible.maxY - 8)
             let end = CGPoint(x: start.x, y: visible.minY + 8)
+            XCTAssertTrue(viewport.contains(start))
+            XCTAssertTrue(viewport.contains(end))
+            let showMap = app.buttons["live.showMap"]
+            if showMap.exists { XCTAssertFalse(showMap.frame.contains(start)) }
             let origin = app.coordinate(withNormalizedOffset: .zero)
             origin.withOffset(CGVector(dx: start.x - observed.appFrame.minX, dy: start.y - observed.appFrame.minY))
                 .press(forDuration: 0.1, thenDragTo: origin.withOffset(CGVector(dx: end.x - observed.appFrame.minX, dy: end.y - observed.appFrame.minY)))
@@ -1032,20 +1079,26 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(feed.waitForExistence(timeout: timeout))
     }
 
+    private func drawerLabel(in app: XCUIApplication) -> String? {
+        // Drawer movement is observable while its activity count is loading.
+        let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
+        return try? handle.snapshot().label
+    }
+
     private func setDrawer(_ state: String, in app: XCUIApplication) {
         for _ in 0..<2 {
-            guard liveState(in: app)?.label != "Activity drawer, \(state)" else { return }
+            guard drawerLabel(in: app) != "Activity drawer, \(state)" else { return }
             let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
             XCTAssertTrue(handle.isHittable)
-            let oldLabel = liveState(in: app)?.label
+            let oldLabel = drawerLabel(in: app)
             // Traverse adjacent detents with the same deliberate gesture as
             // the drawer continuity suite; a screen-length fling can rebound.
             let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
             let end = start.withOffset(CGVector(dx: 0, dy: state == "expanded" ? -80 : 80))
             start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.1)
-            waitForCondition { self.liveState(in: app)?.label != oldLabel }
+            waitForCondition { self.drawerLabel(in: app) != oldLabel }
         }
-        XCTAssertEqual(liveState(in: app)?.label, "Activity drawer, \(state)")
+        XCTAssertEqual(drawerLabel(in: app), "Activity drawer, \(state)")
     }
 
     private func exposedMapFrame(in app: XCUIApplication) throws -> CGRect {

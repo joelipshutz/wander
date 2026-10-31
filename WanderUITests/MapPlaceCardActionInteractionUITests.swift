@@ -51,7 +51,7 @@ final class MapPlaceCardActionInteractionUITests: XCTestCase {
         let photos = app.buttons["save.photos"]
         XCTAssertTrue(photos.waitForExistence(timeout: 5))
         XCTAssertTrue(photos.isEnabled, "Existing check-ins must allow adding photos")
-        XCTAssertTrue(photos.label.contains("photos"))
+        XCTAssertTrue(photos.label.contains("Photos"))
 
     }
 

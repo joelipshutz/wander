@@ -1079,6 +1079,11 @@ final class DevicePlaceImportResolver: PlaceImportResolving {
 protocol PlaceImportPersisting {
     func load() throws -> PlaceImportSnapshot
     func save(_ snapshot: PlaceImportSnapshot) throws
+    var prefersGroupedProcessingCheckpoints: Bool { get }
+}
+
+extension PlaceImportPersisting {
+    var prefersGroupedProcessingCheckpoints: Bool { false }
 }
 
 final class EphemeralPlaceImportPersistence: PlaceImportPersisting {
@@ -1095,8 +1100,12 @@ final class EphemeralPlaceImportPersistence: PlaceImportPersisting {
 
 final class FilePlaceImportPersistence: PlaceImportPersisting {
     private let fileURL: URL
+    private let writeData: (Data, URL) throws -> Void
+    private let snapshotEncoding = PlaceImportSnapshotFileEncoding()
+    private let lock = NSLock()
 
-    init(fileURL: URL? = nil) {
+    init(fileURL: URL? = nil, writeData: ((Data, URL) throws -> Void)? = nil) {
+        self.writeData = writeData ?? { data, url in try data.write(to: url, options: .atomic) }
         if let fileURL {
             self.fileURL = fileURL
         } else {
@@ -1109,6 +1118,8 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
     }
 
     func load() throws -> PlaceImportSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return PlaceImportSnapshot()
         }
@@ -1123,17 +1134,24 @@ final class FilePlaceImportPersistence: PlaceImportPersisting {
     }
 
     func save(_ snapshot: PlaceImportSnapshot) throws {
+        lock.lock()
+        defer { lock.unlock() }
         let directory = fileURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(snapshot)
-        try data.write(to: fileURL, options: .atomic)
+        let prepared = try snapshotEncoding.prepare(snapshot)
+        try writeData(prepared.data, fileURL)
         try? FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
             ofItemAtPath: fileURL.path
         )
+        snapshotEncoding.didPersist(prepared)
+    }
+
+    /// An oversized history cannot reuse the bounded row encoding cache. Keep
+    /// the original resolver-wave checkpoint cadence instead of multiplying
+    /// full-document encoding and atomic writes for each individual result.
+    var prefersGroupedProcessingCheckpoints: Bool {
+        lock.withLock { snapshotEncoding.prefersGroupedProcessingCheckpoints }
     }
 }
 
@@ -1142,16 +1160,29 @@ final class PlaceImportStore: ObservableObject {
     private static let maximumConcurrentResolutions = 6
 
     private struct ProcessingClaim: Sendable {
+        let id: UUID
         let itemID: String
         let seed: PlaceImportSeed
         let source: PlaceImportSource
         let isManualSearch: Bool
+
+        var preservesSourceExpansionOrder: Bool {
+            source == .googleMaps && seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        }
     }
 
     private enum ProcessingAttempt: Sendable {
         case resolved(PlaceImportResolution)
         case failed(String)
         case cancelled
+    }
+    private struct ProcessingRun {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+    private struct ProcessingCompletion: Sendable {
+        let claim: ProcessingClaim
+        let attempt: ProcessingAttempt
     }
     private struct LoadedItemUpgrade {
         let items: [PlaceImportItem]
@@ -1166,7 +1197,9 @@ final class PlaceImportStore: ObservableObject {
     private let persistence: any PlaceImportPersisting
     private let resolver: any PlaceImportResolving
     private var ownerUserID: String?
-    private var processingTasks: [String: Task<Void, Never>] = [:]
+    private var processingTasks: [String: ProcessingRun] = [:]
+    private var automaticSaveLeases: [String: PlaceImportAutoSaveLease] = [:]
+    private var activeProcessingClaimIDs: [String: UUID] = [:]
     private var replacedSocialItemsByPlaceholderID: [String: [PlaceImportItem]]
     private var persistenceDeferralDepth = 0
     private var persistenceRequestedWhileDeferred = false
@@ -1561,7 +1594,8 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func resumePendingImports() {
-        for index in items.indices where items[index].state == .resolving {
+        for index in items.indices where items[index].state == .resolving
+            && processingTasks[items[index].batchID]?.task.isCancelled != false {
             items[index].state = .queued
         }
         for batch in batches where items(for: batch.id).contains(where: { $0.state == .queued }) {
@@ -1576,12 +1610,14 @@ final class PlaceImportStore: ObservableObject {
         let ids = Set(batchIDs)
         guard !ids.isEmpty else { return }
         for batchID in ids {
-            processingTasks[batchID]?.cancel()
+            automaticSaveLeases[batchID] = nil
+            processingTasks[batchID]?.task.cancel()
         }
         var didChange = false
         for index in items.indices
         where ids.contains(items[index].batchID) && items[index].state == .resolving {
             matchingProgressByItemID[items[index].id] = nil
+            activeProcessingClaimIDs[items[index].id] = nil
             items[index].state = .queued
             items[index].updatedAt = .now
             didChange = true
@@ -1614,6 +1650,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               items[index].candidates.contains(where: { $0.id == candidateID })
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].selectedCandidateID = candidateID
         items[index].selectedCandidateIDsRaw = [candidateID]
@@ -1646,6 +1683,7 @@ final class PlaceImportStore: ObservableObject {
             changedBatchIDs.insert(items[index].batchID)
         }
         for batchID in changedBatchIDs {
+            automaticSaveLeases[batchID] = nil
             synchronizeBatch(batchID, persist: false)
         }
         if !changedBatchIDs.isEmpty { persist() }
@@ -1660,6 +1698,7 @@ final class PlaceImportStore: ObservableObject {
               ![.duplicate, .saved, .dismissed].contains(items[index].state)
         else { return }
 
+        automaticSaveLeases[items[index].batchID] = nil
         var selectedIDs = items[index].selectedCandidateIDs
         if let selectedIndex = selectedIDs.firstIndex(of: candidateID) {
             selectedIDs.remove(at: selectedIndex)
@@ -1687,6 +1726,7 @@ final class PlaceImportStore: ObservableObject {
         var didChange = false
         for index in items.indices
         where ids.contains(items[index].id) && [.ready, .saved].contains(items[index].state) {
+            automaticSaveLeases[items[index].batchID] = nil
             items[index].stagedStatus = status
             items[index].updatedAt = .now
             didChange = true
@@ -1706,6 +1746,7 @@ final class PlaceImportStore: ObservableObject {
         where ids.contains(items[index].id)
             && items[index].state != .dismissed
             && !items[index].isSourceRetry {
+            automaticSaveLeases[items[index].batchID] = nil
             items[index].isSelectedForImport = isIncluded
             items[index].updatedAt = .now
             didChange = true
@@ -1717,8 +1758,10 @@ final class PlaceImportStore: ObservableObject {
     /// owned by another account is cleared before any capture can be reviewed or saved.
     func bind(to userID: String) {
         guard ownerUserID != userID else { return }
-        processingTasks.values.forEach { $0.cancel() }
+        automaticSaveLeases.removeAll()
+        processingTasks.values.forEach { $0.task.cancel() }
         processingTasks.removeAll()
+        activeProcessingClaimIDs.removeAll()
         batches = []
         items = []
         replacedSocialItemsByPlaceholderID = [:]
@@ -1731,6 +1774,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }),
               [.ready, .saved].contains(items[index].state)
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         items[index].stagedNote = trimmed?.isEmpty == false ? trimmed : nil
         items[index].updatedAt = .now
@@ -1742,6 +1786,7 @@ final class PlaceImportStore: ObservableObject {
               [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].stagedRatingScore = score
         items[index].updatedAt = .now
         persist()
@@ -1752,6 +1797,7 @@ final class PlaceImportStore: ObservableObject {
               [.ready, .saved].contains(items[index].state),
               items[index].stagedStatus == .been
         else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].stagedVisitedAt = date
         items[index].updatedAt = .now
         persist()
@@ -1762,6 +1808,7 @@ final class PlaceImportStore: ObservableObject {
         for index in items.indices where items[index].state == .ready {
             guard batchID == nil || items[index].batchID == batchID else { continue }
             if items[index].stagedStatus != status {
+                automaticSaveLeases[items[index].batchID] = nil
                 items[index].stagedStatus = status
                 items[index].updatedAt = .now
                 changed = true
@@ -1774,6 +1821,7 @@ final class PlaceImportStore: ObservableObject {
 
     func retry(itemID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingName = items[index].seed.nameHint?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let hasNameHint = existingName?.isEmpty == false
@@ -1904,6 +1952,7 @@ final class PlaceImportStore: ObservableObject {
         else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -1939,6 +1988,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return nil }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { return nil }
+        automaticSaveLeases[items[index].batchID] = nil
         let existingSeed = items[index].seed
         items[index].seed = PlaceImportSeed(
             id: existingSeed.id,
@@ -1972,6 +2022,7 @@ final class PlaceImportStore: ObservableObject {
 
     func markSaved(itemID: String, userPlaceID: String) {
         guard let index = items.firstIndex(where: { $0.id == itemID }) else { return }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].state = .saved
         items[index].savedUserPlaceID = userPlaceID
@@ -1979,6 +2030,32 @@ final class PlaceImportStore: ObservableObject {
         items[index].helpMessage = nil
         items[index].updatedAt = .now
         synchronizeBatch(items[index].batchID)
+    }
+
+    /// Complete the rows of one synchronous save transaction in a single pass.
+    /// Individual edits retain markSaved's immediate summary semantics.
+    func markSavedItems(_ userPlaceIDsByItemID: [String: String]) {
+        guard !userPlaceIDsByItemID.isEmpty else { return }
+        var updatedItems = items
+        var updatedIDs = Set<String>()
+        var batchIDs = Set<String>()
+        let now = Date.now
+        for index in updatedItems.indices {
+            let itemID = updatedItems[index].id
+            guard let userPlaceID = userPlaceIDsByItemID[itemID],
+                  updatedIDs.insert(itemID).inserted else { continue }
+            updatedItems[index].pendingManualSearch = nil
+            updatedItems[index].state = .saved
+            updatedItems[index].savedUserPlaceID = userPlaceID
+            updatedItems[index].duplicateUserPlaceID = nil
+            updatedItems[index].helpMessage = nil
+            updatedItems[index].updatedAt = now
+            batchIDs.insert(updatedItems[index].batchID)
+        }
+        guard !updatedIDs.isEmpty else { return }
+        items = updatedItems
+        for batchID in batchIDs { synchronizeBatch(batchID, persist: false) }
+        persist()
     }
 
     /// Coalesces a synchronous import mutation batch into one durable snapshot.
@@ -1996,21 +2073,161 @@ final class PlaceImportStore: ObservableObject {
         return try operation()
     }
 
+    func beginAutomaticSaveLease(batchID: String, ownerUserID expectedOwner: String) -> PlaceImportAutoSaveLease? {
+        guard ownerUserID == expectedOwner,
+              let batch = batches.first(where: { $0.id == batchID }),
+              batch.shouldSaveAutomatically, batch.state != .cancelled,
+              !items.contains(where: { $0.batchID == batchID && [.queued, .resolving].contains($0.state) })
+        else { return nil }
+        let lease = PlaceImportAutoSaveLease(id: UUID(), ownerUserID: expectedOwner,
+            batchID: batchID, batchCreatedAt: batch.createdAt)
+        automaticSaveLeases[batchID] = lease
+        return lease
+    }
+
+    func ownsAutomaticSaveLease(_ lease: PlaceImportAutoSaveLease) -> Bool {
+        ownerUserID == lease.ownerUserID && automaticSaveLeases[lease.batchID] == lease
+            && batches.contains { $0.id == lease.batchID && $0.createdAt == lease.batchCreatedAt
+                && $0.shouldSaveAutomatically && $0.state != .cancelled }
+    }
+
+    func endAutomaticSaveLease(_ lease: PlaceImportAutoSaveLease) {
+        if automaticSaveLeases[lease.batchID] == lease { automaticSaveLeases[lease.batchID] = nil }
+    }
+
+    /// A foreground review can invalidate captured inputs while its durable
+    /// library write is pending. Re-enter with fresh inputs, without stealing a
+    /// replacement run or retrying a failed checkpoint in a busy loop.
+    func canRetryAutomaticSave(after lease: PlaceImportAutoSaveLease) -> Bool {
+        persistenceError == nil && ownerUserID == lease.ownerUserID
+            && automaticSaveLeases[lease.batchID] == nil
+            && batches.contains { $0.id == lease.batchID && $0.createdAt == lease.batchCreatedAt
+                && $0.shouldSaveAutomatically && $0.state != .cancelled }
+    }
+
+    func invalidateAutomaticSaveLeases(batchIDs: [String]) {
+        for batchID in batchIDs { automaticSaveLeases[batchID] = nil }
+    }
+
+    func reportAutomaticSaveCheckpointFailure() {
+        persistenceError = "Import progress could not be saved. Keep Astir open and try again."
+    }
+
+    /// Call only after the matching library checkpoint has succeeded. Its
+    /// immutable outcomes repair the two-file crash window without re-saving.
+    @discardableResult
+    func applyAutomaticSaveCheckpoint(_ checkpoint: PlaceImportAutoSaveCheckpoint,
+                                      lease: PlaceImportAutoSaveLease) -> Bool {
+        guard persistenceDeferralDepth == 0, ownsAutomaticSaveLease(lease),
+              let batchIndex = batches.firstIndex(where: { $0.id == lease.batchID }),
+              checkpoint.belongs(to: batches[batchIndex], ownerUserID: lease.ownerUserID)
+        else { return false }
+        let previousBatches = batches
+        let previousItems = items
+        let oldReceipt = batches[batchIndex].receipt
+        let destinationListID = batches[batchIndex].automaticSaveDestinationOverrideID ?? checkpoint.destinationListID
+        let manualItemIDs = Set(batches[batchIndex].automaticSaveReceiptOverrideItemIDs ?? [])
+        let oldEntries = Dictionary((oldReceipt?.entries ?? []).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let plannedInputs = Dictionary(checkpoint.plannedItems.map { ($0.itemID, $0) },
+            uniquingKeysWith: { first, _ in first })
+        let currentItems = Dictionary(items.filter { $0.batchID == lease.batchID }.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
+        performBatchedMutations {
+            var savedIDs: [String: String] = [:]
+            for completed in checkpoint.completedItems {
+                guard !manualItemIDs.contains(completed.itemID),
+                      let item = currentItems[completed.itemID],
+                      item.seed.id == completed.seedID, let saveID = completed.entry.userPlaceID else { continue }
+                // A retry or explicit edit after a prior checkpoint owns its
+                // current row. Recovery may only advance the original version.
+                if item.state != .saved, plannedInputs[item.id]?.matches(item) == true {
+                    savedIDs[item.id] = saveID
+                }
+            }
+            markSavedItems(savedIDs)
+            var entries = checkpoint.completedItems
+                .filter { !manualItemIDs.contains($0.itemID) }
+                .map { oldEntries[$0.entry.id] ?? $0.entry }
+            entries.append(contentsOf: (oldReceipt?.entries ?? []).filter { manualItemIDs.contains($0.itemID) })
+            if checkpoint.isComplete {
+                entries.append(contentsOf: items(for: lease.batchID).filter {
+                    !$0.isSourceRetry && !manualItemIDs.contains($0.id)
+                        && ![.saved, .dismissed].contains($0.state)
+                }.map { item in
+                    PlaceImportReceiptEntry(itemID: item.id, displayName: item.displayName,
+                        displayArea: item.displayArea, status: item.state == .ready ? item.stagedStatus : nil,
+                        outcome: .needsReview, userPlaceID: item.duplicateUserPlaceID)
+                })
+            }
+            if !manualItemIDs.isEmpty {
+                // Keep every manual entry verbatim, including multiple matches
+                // for an item, while interleaving new automatic cards by source.
+                let sourceOrder = Dictionary(items.enumerated().filter { $0.element.batchID == lease.batchID }
+                    .map { ($0.element.id, ($0.element.seed.sourceLine, $0.offset)) },
+                    uniquingKeysWith: { first, _ in first })
+                entries = entries.enumerated().sorted { lhs, rhs in
+                    let left = sourceOrder[lhs.element.itemID] ?? (Int.max, Int.max)
+                    let right = sourceOrder[rhs.element.itemID] ?? (Int.max, Int.max)
+                    if left.0 != right.0 { return left.0 < right.0 }
+                    if left.1 != right.1 { return left.1 < right.1 }
+                    return lhs.offset < rhs.offset
+                }.map(\.element)
+            }
+            let retries = items.filter { $0.batchID == lease.batchID && $0.isSourceRetry
+                && ![.saved, .dismissed].contains($0.state) }.count
+            batches[batchIndex].destinationListID = destinationListID
+            let retainedManualReceipt = manualItemIDs.isEmpty ? nil : oldReceipt
+            batches[batchIndex].receipt = PlaceImportReceipt(id: retainedManualReceipt?.id ?? checkpoint.receiptID, batchID: lease.batchID,
+                sourceName: batches[batchIndex].sourceName, createdAt: retainedManualReceipt?.createdAt ?? checkpoint.receiptCreatedAt,
+                entries: entries, destinationListID: destinationListID, sourceRetryCount: retries,
+                presentedAt: retainedManualReceipt?.presentedAt
+                    ?? (oldReceipt?.id == checkpoint.receiptID ? oldReceipt?.presentedAt : nil))
+            if checkpoint.isComplete { batches[batchIndex].automaticSaveCompletedAt = .now }
+            batches[batchIndex].updatedAt = .now
+            persist()
+        }
+        guard persistenceError == nil else {
+            // Library rows and journal remain durable. Keep import progress at
+            // its last durable state so the next run can retry this projection.
+            items = previousItems
+            batches = previousBatches
+            return false
+        }
+        return true
+    }
+
     func recordReceipt(
         batchID: String,
         entries: [PlaceImportReceiptEntry],
         destinationListID: String?
     ) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        automaticSaveLeases[batchID] = nil
         let sourceRetryItems = items.filter { $0.batchID == batchID && $0.isSourceRetry }
         let sourceRetryItemIDs = Set(sourceRetryItems.map(\.id))
         let activeSourceRetryCount = sourceRetryItems.filter {
             ![.saved, .dismissed].contains($0.state)
         }.count
+        let nextEntries = entries.filter { !sourceRetryItemIDs.contains($0.itemID) }
+        if batches[index].automaticSaveRequested == true {
+            let previousByItem = Dictionary(grouping: batches[index].receipt?.entries ?? [], by: \.itemID)
+            let nextByItem = Dictionary(grouping: nextEntries, by: \.itemID)
+            let changedItemIDs = Set(previousByItem.keys).union(nextByItem.keys).filter {
+                previousByItem[$0] != nextByItem[$0]
+            }
+            if !changedItemIDs.isEmpty {
+                // recordReceipt is the explicit review path. Checkpoint replay
+                // writes its projection directly and never takes manual ownership.
+                batches[index].automaticSaveReceiptOverrideItemIDs = Array(
+                    Set(batches[index].automaticSaveReceiptOverrideItemIDs ?? []).union(changedItemIDs)
+                ).sorted()
+            }
+        }
         let receipt = PlaceImportReceipt(
             batchID: batchID,
             sourceName: batches[index].sourceName,
-            entries: entries.filter { !sourceRetryItemIDs.contains($0.itemID) },
+            entries: nextEntries,
             destinationListID: destinationListID,
             sourceRetryCount: activeSourceRetryCount
         )
@@ -2062,6 +2279,10 @@ final class PlaceImportStore: ObservableObject {
 
     func setDestinationListID(_ destinationListID: String, batchID: String) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
+        automaticSaveLeases[batchID] = nil
+        if batches[index].automaticSaveRequested == true {
+            batches[index].automaticSaveDestinationOverrideID = destinationListID
+        }
         batches[index].destinationListID = destinationListID
         batches[index].updatedAt = .now
         persist()
@@ -2078,6 +2299,7 @@ final class PlaceImportStore: ObservableObject {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].state != .saved else {
             return
         }
+        automaticSaveLeases[items[index].batchID] = nil
         items[index].pendingManualSearch = nil
         items[index].state = .dismissed
         items[index].updatedAt = .now
@@ -2085,8 +2307,13 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func cancel(batchID: String) {
-        processingTasks[batchID]?.cancel()
+        automaticSaveLeases[batchID] = nil
+        processingTasks[batchID]?.task.cancel()
         processingTasks[batchID] = nil
+        for item in items where item.batchID == batchID {
+            activeProcessingClaimIDs[item.id] = nil
+            matchingProgressByItemID[item.id] = nil
+        }
         let upgradePlaceholderIDs = replacedSocialItemsByPlaceholderID.compactMap { placeholderID, oldItems in
             oldItems.first?.batchID == batchID ? placeholderID : nil
         }
@@ -2107,13 +2334,15 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func deleteBatch(batchID: String) {
-        processingTasks[batchID]?.cancel()
+        automaticSaveLeases[batchID] = nil
+        processingTasks[batchID]?.task.cancel()
         processingTasks[batchID] = nil
         replacedSocialItemsByPlaceholderID = replacedSocialItemsByPlaceholderID.filter {
             $0.value.first?.batchID != batchID
         }
         for item in items where item.batchID == batchID {
             matchingProgressByItemID[item.id] = nil
+            activeProcessingClaimIDs[item.id] = nil
         }
         items.removeAll(where: { $0.batchID == batchID })
         batches.removeAll(where: { $0.id == batchID })
@@ -2121,10 +2350,12 @@ final class PlaceImportStore: ObservableObject {
     }
 
     func clearAll() {
+        automaticSaveLeases.removeAll()
         for task in processingTasks.values {
-            task.cancel()
+            task.task.cancel()
         }
         processingTasks.removeAll()
+        activeProcessingClaimIDs.removeAll()
         replacedSocialItemsByPlaceholderID.removeAll()
         matchingProgressByItemID.removeAll()
         items.removeAll()
@@ -2192,8 +2423,8 @@ final class PlaceImportStore: ObservableObject {
             if processingTasks[batchID] == nil {
                 startProcessing(batchID: batchID)
             }
-            guard let task = processingTasks[batchID] else { return }
-            await task.value
+            guard let run = processingTasks[batchID] else { return }
+            await run.task.value
             guard !Task.isCancelled else { return }
             if !items.contains(where: { $0.batchID == batchID && $0.state == .queued }) {
                 return
@@ -2214,88 +2445,169 @@ final class PlaceImportStore: ObservableObject {
               items.contains(where: { $0.batchID == batchID && $0.state == .queued })
         else { return }
 
-        processingTasks[batchID] = Task { [weak self] in
-            await self?.process(batchID: batchID)
+        automaticSaveLeases[batchID] = nil
+        let runID = UUID()
+        let task = Task<Void, Never> { [weak self] in
+            await self?.process(batchID: batchID, runID: runID)
         }
+        processingTasks[batchID] = ProcessingRun(id: runID, task: task)
     }
 
-    private func process(batchID: String) async {
-        while !Task.isCancelled {
-            let claims = claimQueuedItems(
-                batchID: batchID,
-                limit: resolutionConcurrencyLimit(for: batchID)
-            )
-            guard !claims.isEmpty else { break }
+    private func isCurrentProcessingRun(batchID: String, runID: UUID) -> Bool {
+        guard let run = processingTasks[batchID] else { return false }
+        return run.id == runID && !run.task.isCancelled
+    }
 
-            let tasks = claims.map { claim in
-                Task { @MainActor [weak self, resolver] in
-                    do {
-                        let resolution = if claim.isManualSearch {
-                            try await resolver.resolveManualSearch(seed: claim.seed, source: claim.source)
+    private func process(batchID: String, runID: UUID) async {
+        var ownedClaimIDs: [String: UUID] = [:]
+        defer {
+            for (itemID, claimID) in ownedClaimIDs where activeProcessingClaimIDs[itemID] == claimID {
+                activeProcessingClaimIDs[itemID] = nil
+                matchingProgressByItemID[itemID] = nil
+            }
+            // Cancellation may already have installed a replacement run. An
+            // older provider completion must never clear that run's task.
+            if processingTasks[batchID]?.id == runID {
+                processingTasks[batchID] = nil
+                synchronizeBatch(batchID)
+            }
+        }
+
+        await withTaskGroup(of: ProcessingCompletion.self) { group in
+            var activeCount = 0
+            var completed: [ProcessingCompletion] = []
+            var claimOrder: [UUID: Int] = [:]
+            var nextClaimOrder = 0
+            var sourceClaimOrder: [UUID] = []
+            var completedSources: [UUID: ProcessingCompletion] = [:]
+            while !Task.isCancelled, isCurrentProcessingRun(batchID: batchID, runID: runID) {
+                let claims = performBatchedMutations {
+                    for completion in completed {
+                        claimOrder[completion.claim.id] = nil
+                        if completion.claim.preservesSourceExpansionOrder {
+                            completedSources[completion.claim.id] = completion
                         } else {
-                            try await resolver.resolve(seed: claim.seed, source: claim.source) { [weak self] progress in
-                                guard !Task.isCancelled,
-                                      let item = self?.item(id: claim.itemID),
-                                      item.state == .resolving, item.seed == claim.seed else { return }
-                                self?.matchingProgressByItemID[claim.itemID] = progress
-                            }
+                            apply(completion.attempt, to: completion.claim)
                         }
-                        if claim.seed.nameHint != nil, !Task.isCancelled,
-                           let item = self?.item(id: claim.itemID),
-                           item.state == .resolving, item.seed == claim.seed {
-                            let matched: Bool
-                            if case .candidates(let candidates, _) = resolution {
-                                matched = !candidates.isEmpty
-                            } else {
-                                matched = false
-                            }
-                            self?.matchingProgressByItemID[claim.itemID] = .init(
-                                totalCount: 1, completedCount: 1, resolvedCount: matched ? 1 : 0
-                            )
+                        // URL expansion may name a source list and replace its
+                        // source row. Preserve those effects in source order,
+                        // including across a persisted restart. Ordinary place
+                        // results do not enter this source ordering buffer.
+                        while let first = sourceClaimOrder.first,
+                              let source = completedSources.removeValue(forKey: first) {
+                            sourceClaimOrder.removeFirst()
+                            apply(source.attempt, to: source.claim)
                         }
-                        return ProcessingAttempt.resolved(resolution)
-                    } catch is CancellationError {
-                        return ProcessingAttempt.cancelled
-                    } catch {
-                        return ProcessingAttempt.failed(error.localizedDescription)
+                    }
+                    if !completed.isEmpty {
+                        // An expanded source can change the allowed concurrency.
+                        // Publish fresh counts before claiming its child rows.
+                        synchronizeBatch(batchID)
+                    }
+                    return claimQueuedItems(batchID: batchID,
+                        limit: max(0, resolutionConcurrencyLimit(for: batchID) - activeCount),
+                        sourceExpansionLimit: max(0, resolutionConcurrencyLimit(for: batchID) - sourceClaimOrder.count))
+                }
+                completed.removeAll(keepingCapacity: true)
+                for claim in claims {
+                    ownedClaimIDs[claim.itemID] = claim.id
+                    claimOrder[claim.id] = nextClaimOrder
+                    nextClaimOrder += 1
+                    if claim.preservesSourceExpansionOrder { sourceClaimOrder.append(claim.id) }
+                    activeCount += 1
+                    group.addTask { [weak self] in
+                        let attempt = await self?.resolveProcessingClaim(claim, batchID: batchID, runID: runID)
+                            ?? .cancelled
+                        return ProcessingCompletion(claim: claim, attempt: attempt)
                     }
                 }
-            }
-            let attempts = await withTaskCancellationHandler {
-                var values: [ProcessingAttempt] = []
-                for task in tasks {
-                    values.append(await task.value)
+                guard activeCount > 0, let next = await group.next() else { break }
+                activeCount -= 1
+                completed.append(next)
+                if persistence.prefersGroupedProcessingCheckpoints {
+                    // The first claim's durable write establishes cache capacity.
+                    // If a later result crosses that capacity, at most that one
+                    // completion was checkpointed individually before switching.
+                    while activeCount > 0, !Task.isCancelled,
+                          isCurrentProcessingRun(batchID: batchID, runID: runID),
+                          let sibling = await group.next() {
+                        activeCount -= 1
+                        completed.append(sibling)
+                    }
+                    completed.sort { (claimOrder[$0.claim.id] ?? .max) < (claimOrder[$1.claim.id] ?? .max) }
                 }
-                return values
-            } onCancel: {
-                tasks.forEach { $0.cancel() }
+                // Cacheable snapshots publish/refill each ready sibling. Large
+                // histories publish/refill the completed wave in one durable
+                // mutation, preserving the pre-optimization checkpoint cadence.
+                await Task.yield()
             }
-            guard !Task.isCancelled else { break }
-
-            for (claim, attempt) in zip(claims, attempts) {
-                apply(attempt, to: claim)
-            }
-            synchronizeBatch(batchID)
-            await Task.yield()
+            group.cancelAll()
         }
-        processingTasks[batchID] = nil
-        synchronizeBatch(batchID)
     }
 
-    private func claimQueuedItems(batchID: String, limit: Int) -> [ProcessingClaim] {
+    private func resolveProcessingClaim(
+        _ claim: ProcessingClaim, batchID: String, runID: UUID
+    ) async -> ProcessingAttempt {
+        func canPublishProgress() -> Bool {
+            guard !Task.isCancelled,
+                  isCurrentProcessingRun(batchID: batchID, runID: runID),
+                  activeProcessingClaimIDs[claim.itemID] == claim.id,
+                  let item = item(id: claim.itemID)
+            else { return false }
+            return item.state == .resolving && item.seed == claim.seed
+        }
+        guard canPublishProgress() else { return .cancelled }
+        do {
+            let resolution = if claim.isManualSearch {
+                try await resolver.resolveManualSearch(seed: claim.seed, source: claim.source)
+            } else {
+                try await resolver.resolve(seed: claim.seed, source: claim.source) { [weak self] progress in
+                    guard let self, !Task.isCancelled,
+                          self.isCurrentProcessingRun(batchID: batchID, runID: runID),
+                          self.activeProcessingClaimIDs[claim.itemID] == claim.id,
+                          let item = self.item(id: claim.itemID),
+                          item.state == .resolving, item.seed == claim.seed else { return }
+                    self.matchingProgressByItemID[claim.itemID] = progress
+                }
+            }
+            if claim.seed.nameHint != nil, canPublishProgress() {
+                let matched: Bool
+                if case .candidates(let candidates, _) = resolution {
+                    matched = !candidates.isEmpty
+                } else {
+                    matched = false
+                }
+                matchingProgressByItemID[claim.itemID] = .init(
+                    totalCount: 1, completedCount: 1, resolvedCount: matched ? 1 : 0
+                )
+            }
+            return .resolved(resolution)
+        } catch is CancellationError {
+            return .cancelled
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    private func claimQueuedItems(batchID: String, limit: Int, sourceExpansionLimit: Int) -> [ProcessingClaim] {
         var claims: [ProcessingClaim] = []
+        var availableSourceSlots = sourceExpansionLimit
         for _ in 0..<limit {
-            guard let index = nextQueuedItemIndex(batchID: batchID) else { break }
+            guard let index = nextQueuedItemIndex(batchID: batchID,
+                allowingSourceExpansion: availableSourceSlots > 0) else { break }
             items[index].state = .resolving
             items[index].updatedAt = .now
-            claims.append(
-                ProcessingClaim(
-                    itemID: items[index].id,
-                    seed: items[index].seed,
-                    source: items[index].source,
-                    isManualSearch: items[index].pendingManualSearch == true
-                )
+            let claimID = UUID()
+            activeProcessingClaimIDs[items[index].id] = claimID
+            let claim = ProcessingClaim(
+                id: claimID,
+                itemID: items[index].id,
+                seed: items[index].seed,
+                source: items[index].source,
+                isManualSearch: items[index].pendingManualSearch == true
             )
+            if claim.preservesSourceExpansionOrder { availableSourceSlots -= 1 }
+            claims.append(claim)
         }
         if !claims.isEmpty {
             // The persistence layer substitutes pre-upgrade social rows while
@@ -2314,7 +2626,11 @@ final class PlaceImportStore: ObservableObject {
     }
 
     private func apply(_ attempt: ProcessingAttempt, to claim: ProcessingClaim) {
-        defer { matchingProgressByItemID[claim.itemID] = nil }
+        guard activeProcessingClaimIDs[claim.itemID] == claim.id else { return }
+        defer {
+            activeProcessingClaimIDs[claim.itemID] = nil
+            matchingProgressByItemID[claim.itemID] = nil
+        }
         guard let index = items.firstIndex(where: { $0.id == claim.itemID }),
               items[index].state == .resolving,
               items[index].seed == claim.seed
@@ -2386,11 +2702,16 @@ final class PlaceImportStore: ObservableObject {
         }
     }
 
-    private func nextQueuedItemIndex(batchID: String) -> Int? {
-        items.firstIndex(where: {
-            $0.batchID == batchID && $0.state == .queued && $0.pendingManualSearch == true
+    private func nextQueuedItemIndex(batchID: String, allowingSourceExpansion: Bool) -> Int? {
+        func isEligible(_ item: PlaceImportItem) -> Bool {
+            guard item.batchID == batchID, item.state == .queued else { return false }
+            return allowingSourceExpansion || item.source != .googleMaps
+                || item.seed.nameHint?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        }
+        return items.firstIndex(where: {
+            isEligible($0) && $0.pendingManualSearch == true
         }) ?? items.firstIndex(where: {
-            $0.batchID == batchID && $0.state == .queued
+            isEligible($0)
         })
     }
 
@@ -2786,26 +3107,35 @@ final class PlaceImportStore: ObservableObject {
 
     private func synchronizeBatch(_ batchID: String, persist: Bool = true) {
         guard let index = batches.firstIndex(where: { $0.id == batchID }) else { return }
-        let batchItems = items(for: batchID)
-        let placeItems = batchItems.filter { !$0.isSourceRetry }
-        let pendingPlaceCount = placeItems.filter { [.queued, .resolving].contains($0.state) }.count
-        let terminalPlaceCount = placeItems.filter {
-            [.saved, .duplicate, .dismissed].contains($0.state)
-        }.count
-        let hasActiveSourceRetry = batchItems.contains {
-            $0.isSourceRetry && ![.saved, .dismissed].contains($0.state)
+        // Summary counts do not depend on source order. Avoid sorting and
+        // materializing the entire batch again after each saved import row.
+        // Keep these updates synchronous: callers can inspect batches inside
+        // performBatchedMutations even while persistence is deferred.
+        var placeCount = 0
+        var pendingPlaceCount = 0
+        var terminalPlaceCount = 0
+        var hasActiveSourceRetry = false
+        var hasPendingSourceRetry = false
+        for item in items where item.batchID == batchID {
+            let isPending = item.state == .queued || item.state == .resolving
+            let isFinished = item.state == .saved || item.state == .dismissed
+            if item.isSourceRetry {
+                hasActiveSourceRetry = hasActiveSourceRetry || !isFinished
+                hasPendingSourceRetry = hasPendingSourceRetry || isPending
+            } else {
+                placeCount += 1
+                if isPending { pendingPlaceCount += 1 }
+                if isFinished || item.state == .duplicate { terminalPlaceCount += 1 }
+            }
         }
-        let hasPendingSourceRetry = batchItems.contains {
-            $0.isSourceRetry && [.queued, .resolving].contains($0.state)
-        }
-        batches[index].totalCount = placeItems.count
-        batches[index].processedCount = placeItems.count - pendingPlaceCount
+        batches[index].totalCount = placeCount
+        batches[index].processedCount = placeCount - pendingPlaceCount
         batches[index].updatedAt = .now
 
         if batches[index].state != .cancelled {
             if pendingPlaceCount > 0 || hasPendingSourceRetry {
                 batches[index].state = .processing
-            } else if terminalPlaceCount == placeItems.count && !hasActiveSourceRetry {
+            } else if terminalPlaceCount == placeCount && !hasActiveSourceRetry {
                 batches[index].state = .complete
             } else {
                 batches[index].state = .ready

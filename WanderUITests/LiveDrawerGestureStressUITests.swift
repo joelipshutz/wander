@@ -15,8 +15,9 @@ final class LiveDrawerGestureStressUITests: XCTestCase {
         let handle = app.staticTexts.matching(identifier: "live.drawerHandle").element
         XCTAssertTrue(handle.waitForExistence(timeout: 30))
         assertDetent("half expanded", handle: handle)
-        // Actual native short flicks: left edge, count, and right edge are all
-        // part of the same full-width drag target. No tap/adjustable shortcuts.
+        // Actual native short flicks across the clear grabber strip at the left,
+        // center and right. The action buttons below it are separate controls.
+        // No tap/adjustable shortcuts replace any drawer gesture.
         for x in [0.08, 0.5, 0.92] {
             for _ in 0..<2 {
                 drag(handle, app: app, x: x, dy: 56, velocity: .fast)
@@ -52,13 +53,27 @@ final class LiveDrawerGestureStressUITests: XCTestCase {
         let start = headerCoordinate(handle, app: app, x: x)
         start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: dy)),
                     withVelocity: velocity, thenHoldForDuration: hold)
+        let events = app.staticTexts["events.comingSoon"]
+        XCTAssertFalse(events.exists && events.isHittable,
+                       "A drawer drag must not activate the Events destination")
     }
 
     private func headerCoordinate(_ handle: XCUIElement, app: XCUIApplication, x: CGFloat) -> XCUICoordinate {
-        // AX may expose only the centered label's frame; test the real drawer
-        // edges using the app width at the header's vertical center.
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
-            dx: app.frame.width * x, dy: handle.frame.midY - app.frame.minY))
+        // The header's vertical center intersects the 44pt Events/Invite
+        // buttons. Begin in the same full-width grabber strip used by a finger,
+        // above those independent controls, and keep all three horizontal lanes.
+        let frame = handle.frame
+        let point = CGPoint(x: app.frame.minX + app.frame.width * x,
+                            y: frame.minY + min(12, frame.height * 0.15))
+        XCTAssertTrue(frame.contains(point), "The gesture must begin inside the drawer header")
+        for identifier in ["live.utility.events", "live.utility.invite"] {
+            let button = app.buttons[identifier]
+            if button.exists {
+                XCTAssertFalse(button.frame.contains(point), "The drag origin must avoid \(identifier)")
+            }
+        }
+        return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: point.x - app.frame.minX, dy: point.y - app.frame.minY))
     }
 
     private func assertDetent(_ state: String, handle: XCUIElement,

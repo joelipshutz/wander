@@ -31,14 +31,16 @@ final class LiveMapPinStateLoader: ObservableObject {
     }
 
     private func clearReceipt() {
+        // Empty resets still fence pending work, but cannot change rendered facts.
+        let hadSnapshot = snapshot != nil
         receiptToken = UUID()
         receiptScope = nil
         expiryTask?.cancel()
         expiryTask = nil
         expiresAt = nil
-        snapshot = nil
+        if hadSnapshot { snapshot = nil }
         lastRequest = nil
-        revision &+= 1
+        if hadSnapshot { revision &+= 1 }
     }
 
     /// Suspension can delay a sleeping task. Revalidate synchronously before

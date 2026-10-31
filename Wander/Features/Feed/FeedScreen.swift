@@ -43,6 +43,45 @@ enum FeedEmbeddedProjection {
     }
 }
 
+/// Scroll history drives paging and focus decisions, but does not draw content.
+/// Keep every sample without publishing a new SwiftUI view state each frame.
+@MainActor
+final class FeedPagingHistory {
+    private(set) var latest: FeedScrollMetrics?
+
+    func receive(_ metrics: FeedScrollMetrics?, perform: (FeedScrollMetrics?) -> Void) {
+        defer { latest = metrics }
+        perform(latest)
+    }
+
+    func reset() { latest = nil }
+}
+
+/// One render shares its authorized rows across content and observer values.
+/// A subsequent render or action still reads the store's current lease/query.
+struct FeedActivityRenderProjection {
+    let sections: [LiveFeedActivitySection]
+    let groups: [FeedActivityGroup]
+    let activityIDs: [String]
+
+    init(sections: [LiveFeedActivitySection]) {
+        self.sections = sections
+        groups = sections.flatMap(\.groups)
+        activityIDs = groups.flatMap(\.activities).map(\.id)
+    }
+
+    init(groups: [FeedActivityGroup]) {
+        sections = []
+        self.groups = groups
+        activityIDs = groups.flatMap(\.activities).map(\.id)
+    }
+
+    func groupID(containing activityID: String?) -> String? {
+        guard let activityID else { return nil }
+        return groups.first { $0.activities.contains { $0.id == activityID } }?.id
+    }
+}
+
 struct FeedScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -75,7 +114,7 @@ struct FeedScreen: View {
     @EnvironmentObject private var activityInbox: ActivityNotificationInbox
     @State private var floatingHeaderHeight = FeedFloatingHeaderMetrics.estimatedHeight
     @State private var isFloatingHeaderHidden = false
-    @State private var previousPagingMetrics: FeedScrollMetrics?
+    @State private var pagingHistory = FeedPagingHistory()
     @State private var lastFeedScrollOffset: CGFloat?
     @State private var accumulatedFeedScrollTravel: CGFloat = 0
     @State private var isEmbeddedScrolled = false
@@ -161,6 +200,13 @@ struct FeedScreen: View {
         return FeedEmbeddedProjection.groups(
             from: store.visibleFeedActivityGroups, matching: filteredActivityIDs
         )
+    }
+
+    private var activityRenderProjection: FeedActivityRenderProjection {
+        if isEmbedded, store.liveFeedQuery != nil {
+            return FeedActivityRenderProjection(sections: store.visibleLiveFeedSections)
+        }
+        return FeedActivityRenderProjection(groups: displayedActivityGroups)
     }
 
     private var embeddedDestinationIsActive: Bool {
@@ -428,7 +474,8 @@ struct FeedScreen: View {
     }
 
     private var placesSurface: some View {
-        ScrollViewReader { proxy in
+        let activityProjection = activityRenderProjection
+        return ScrollViewReader { proxy in
             GeometryReader { viewport in
                 // Search and Notifications expand the host NavigationStack.
                 // Keep only the covered Feed viewport unchanged so UIScrollView
@@ -442,7 +489,7 @@ struct FeedScreen: View {
                     )
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
-                        content
+                        content(activityProjection)
                     }
                     .padding(.horizontal, WanderTheme.spacing4)
                     .padding(.top, feedContentTopInset)
@@ -479,19 +526,20 @@ struct FeedScreen: View {
                     }
                 }
                 .accessibilityIdentifier("feed.places.scroll")
-                .accessibilityValue("\(displayedActivityGroups.count) activities loaded")
+                .accessibilityValue("\(activityProjection.groups.count) activities loaded")
                 .onPreferenceChange(FeedPagingMetricsKey.self) { metrics in
-                    defer { previousPagingMetrics = metrics }
-                    if let metrics,
-                       metrics.contentHeight != previousPagingMetrics?.contentHeight
-                        || metrics.viewportHeight != previousPagingMetrics?.viewportHeight {
-                        scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
-                    }
-                    guard let metrics else { return }
-                    if isEmbedded, store.liveFeedQuery != nil {
-                        requestMoreLiveActivityIfNeeded(metrics)
-                    } else if metrics.reachedBottom(after: previousPagingMetrics), canAutomaticallyLoadMore {
-                        Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                    pagingHistory.receive(metrics) { previousMetrics in
+                        if let metrics,
+                           metrics.contentHeight != previousMetrics?.contentHeight
+                            || metrics.viewportHeight != previousMetrics?.viewportHeight {
+                            scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
+                        }
+                        guard let metrics else { return }
+                        if isEmbedded, store.liveFeedQuery != nil {
+                            requestMoreLiveActivityIfNeeded(metrics)
+                        } else if metrics.reachedBottom(after: previousMetrics), canAutomaticallyLoadMore {
+                            Task { await store.loadMoreFeed(backend: auth.isSignedIn ? backend : nil) }
+                        }
                     }
                 }
                 .task(id: store.feedPaginationRevision) {
@@ -499,18 +547,18 @@ struct FeedScreen: View {
                     // without changing layout. Continue only while the bottom
                     // remains visible, never by scanning inside a page request.
                     await Task.yield()
-                    if let metrics = previousPagingMetrics {
+                    if let metrics = pagingHistory.latest {
                         requestMoreLiveActivityIfNeeded(metrics)
                     }
                 }
                 .onChange(of: isEmbeddedFeedVisible) { _, visible in
                     if visible { rememberEmbeddedViewport(viewport.size) }
-                    if visible, let metrics = previousPagingMetrics {
+                    if visible, let metrics = pagingHistory.latest {
                         requestMoreLiveActivityIfNeeded(metrics)
                     }
                 }
                 .onChange(of: store.feedLoadState) { _, state in
-                    if state == .loaded, let metrics = previousPagingMetrics {
+                    if state == .loaded, let metrics = pagingHistory.latest {
                         requestMoreLiveActivityIfNeeded(metrics)
                     }
                 }
@@ -554,7 +602,7 @@ struct FeedScreen: View {
                     focusedActivityFrame = nil
                     scrollPendingActivityFocus(proxy: proxy, viewportSize: feedViewportSize)
                 }
-                .onChange(of: displayedActivityGroups.flatMap(\.activities).map(\.id)) { _, _ in
+                .onChange(of: activityProjection.activityIDs) { _, _ in
                     if pendingActivityFocus != nil, focusedGroupID == nil {
                         cancelActivityFocus()
                     }
@@ -581,7 +629,7 @@ struct FeedScreen: View {
 
     private func resetEmbeddedScroll(_ proxy: ScrollViewProxy) {
         guard isEmbedded else { return }
-        previousPagingMetrics = nil
+        pagingHistory.reset()
         isEmbeddedScrolled = false
         onEmbeddedScrollPositionChange(false)
         proxy.scrollTo("nux.feed.top", anchor: .top)
@@ -720,7 +768,8 @@ struct FeedScreen: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(_ projection: FeedActivityRenderProjection) -> some View {
+        let renderedFocusGroupID = projection.groupID(containing: pendingActivityFocus?.activityID)
         if showsInviteEntry { FeedInviteSection() }
         if !FeedPresentation.showsFeaturedPlaces {
             peopleRail
@@ -729,7 +778,7 @@ struct FeedScreen: View {
             FeedLoadingState(audience: audienceSelection)
         } else if isEmbedded, store.liveFeedQuery != nil, page != nil {
             FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
-            ForEach(store.visibleLiveFeedSections) { section in
+            ForEach(projection.sections) { section in
                 if section.stage == .older {
                     expansionDivider(title: "Showing older activity", identifier: "feed.olderActivity")
                 } else if section.stage == .allActivity {
@@ -744,7 +793,7 @@ struct FeedScreen: View {
                 if section.stage == .selected, section.groups.isEmpty {
                     filteredActivityEmptyState
                 } else {
-                    activityList(section.groups)
+                    activityList(section.groups, focusedGroupID: renderedFocusGroupID)
                 }
             }
             if !store.hasMoreFeed, store.liveFeedExpansionStage != .allActivity,
@@ -767,18 +816,18 @@ struct FeedScreen: View {
             }
 
             FeedSectionHeading(title: "Activity", detail: freshnessDetail, audience: audienceSelection)
-            if filteredActivityIDs != nil, displayedActivityGroups.isEmpty {
+            if filteredActivityIDs != nil, projection.groups.isEmpty {
                 filteredActivityEmptyState
             } else if visibleActivity.isEmpty {
                 FeedAudienceEmptyState(audience: audienceSelection)
             } else {
                 FeedActivityList(
-                    groups: displayedActivityGroups,
+                    groups: projection.groups,
                     openProfile: openProfile,
                     openPlace: openPlace,
                     openList: openList,
                     onPrivateReply: onPrivateReply,
-                    focusedGroupID: focusedGroupID,
+                    focusedGroupID: renderedFocusGroupID,
                     focusRequestID: pendingActivityFocus?.id
                 )
             }
@@ -838,7 +887,7 @@ struct FeedScreen: View {
         }
     }
 
-    private func activityList(_ groups: [FeedActivityGroup]) -> some View {
+    private func activityList(_ groups: [FeedActivityGroup], focusedGroupID: String?) -> some View {
         FeedActivityList(
             groups: groups, openProfile: openProfile, openPlace: openPlace, openList: openList,
             onPrivateReply: onPrivateReply, focusedGroupID: focusedGroupID,
@@ -1259,10 +1308,12 @@ struct FeedScreen: View {
     }
 
     private var tasteSummaries: [PlaceSaveSummary] {
-        store.currentUserVisiblePlaces.map { visiblePlace in
+        let ownPlaces = store.currentUserVisiblePlaces
+        let attributesByID = store.attributesByUserPlaceID(for: ownPlaces.map { $0.userPlace.id })
+        return ownPlaces.map { visiblePlace in
             PlaceSaveSummary(
                 visiblePlace: visiblePlace,
-                attributes: store.attributes(for: visiblePlace.userPlace.id),
+                attributes: attributesByID[visiblePlace.userPlace.id] ?? [],
                 viewerFollowsOwner: false
             )
         }
@@ -1865,12 +1916,12 @@ struct FeedResolvedPlacePhoto: View {
     @State private var photo: PlacePhoto?
     @State private var failedGooglePhotoID: String?
 
-    private var sheetPlace: PlaceSheetPlace {
-        PlaceSheetPlace(visiblePlace: place)
+    private var photoRequest: PlacePhotoRequest {
+        FeedPlacePhotoPolicy.request(for: place)
     }
 
     private var photoResolutionKey: String {
-        "\(sheetPlace.photoLookupKey)|\(failedGooglePhotoID ?? "ready")"
+        "\(photoRequest.lookupKey)|\(failedGooglePhotoID ?? "ready")"
     }
 
     var body: some View {
@@ -1878,11 +1929,11 @@ struct FeedResolvedPlacePhoto: View {
             if let photo {
                 PlaceProfilePhotoImage(
                     photo: photo,
-                    canonicalPlaceKey: sheetPlace.photoRequest.canonicalPhotoCacheKey,
+                    canonicalPlaceKey: photoRequest.canonicalPhotoCacheKey,
                     placeName: place.place.canonicalName,
                     // Activity artwork already resolved the feed variant. Do
                     // not let image delivery re-resolve to another visit's photo.
-                    photoRequest: allowsUserPhotoFallback ? sheetPlace.photoRequest : nil,
+                    photoRequest: allowsUserPhotoFallback ? photoRequest : nil,
                     variant: .feed,
                     onLoadFailure: handlePhotoLoadFailure
                 )
@@ -1898,7 +1949,7 @@ struct FeedResolvedPlacePhoto: View {
 
     private func resolvePhoto() async {
         let resolutionKey = photoResolutionKey
-        let request = sheetPlace.photoRequest.rendering(.feed)
+        let request = photoRequest.rendering(.feed)
         if let cachedPhoto = backend.cachedPlacePhoto(for: request),
            FeedPlacePhotoPolicy.accepts(cachedPhoto, allowsUserPhotoFallback: allowsUserPhotoFallback),
            !(cachedPhoto.isGooglePlacesPhoto
@@ -1915,7 +1966,7 @@ struct FeedResolvedPlacePhoto: View {
             if remotePhoto.isGooglePlacesPhoto,
                remotePhoto.providerPlaceID == failedGooglePhotoID {
                 guard allowsUserPhotoFallback else { return }
-                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: sheetPlace.photoRequest)
+                resolvedPhoto = try await backend.visibleUserPlacePhoto(for: photoRequest)
             } else {
                 resolvedPhoto = remotePhoto
             }
@@ -1942,6 +1993,20 @@ struct FeedResolvedPlacePhoto: View {
 }
 
 enum FeedPlacePhotoPolicy {
+    static func request(for visiblePlace: VisiblePlace) -> PlacePhotoRequest {
+        let place = visiblePlace.place
+        return PlacePhotoRequest(
+            placeID: place.id,
+            name: DroppedPinNamePolicy.displayName(canonicalName: place.canonicalName,
+                sourceProvider: place.sourceProvider, attributes: visiblePlace.attributes),
+            address: place.address,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            sourceProvider: place.sourceProvider,
+            sourceProviderPlaceID: place.sourceProviderPlaceID
+        )
+    }
+
     static func accepts(_ photo: PlacePhoto, allowsUserPhotoFallback: Bool) -> Bool {
         photo.isGooglePlacesPhoto || allowsUserPhotoFallback
     }

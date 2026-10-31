@@ -1321,7 +1321,7 @@ struct SupabaseVisitRepository: VisitRepository {
     }
 }
 
-private struct PlaceVisitRow: Decodable {
+private struct PlaceVisitRow: Decodable, Sendable {
     static let selectColumns = "id,user_place_id,visited_at,note,rating_score,tags,backfilled_from_user_place,created_at,updated_at,deleted_at"
 
     let id: String
@@ -2282,7 +2282,7 @@ struct SupabasePlaceListRepository: PlaceListRepository {
     }
 }
 
-private struct RemoteProfileRelationshipDTO: Decodable {
+private struct RemoteProfileRelationshipDTO: Decodable, Sendable {
     let profileID: String
     let relationship: String
 
@@ -2299,12 +2299,12 @@ private struct RemoteProfileRelationshipDTO: Decodable {
     }
 }
 
-private struct RemoteCurrentUserCalendarSnapshotDTO: Decodable {
+private struct RemoteCurrentUserCalendarSnapshotDTO: Decodable, Sendable {
     let places: [RemoteVisiblePlaceDTO]
     let visits: [PlaceVisitRow]
 }
 
-private struct RemotePlaceListsSnapshotDTO: Decodable {
+private struct RemotePlaceListsSnapshotDTO: Decodable, Sendable {
     let summaries: [RemotePlaceListSummaryDTO]
     let details: [RemotePlaceListDetailDTO]
     let ownerPlaces: [RemoteVisiblePlaceDTO]
@@ -2344,7 +2344,7 @@ struct SupabaseSurfaceSnapshotRepository: SurfaceSnapshotRepository {
     }
 
     func currentUserCalendarSnapshot() async throws -> CurrentUserCalendarRemoteSnapshot {
-        let response: RemoteCurrentUserCalendarSnapshotDTO = try await rpc.call(
+        let response: RemoteCurrentUserCalendarSnapshotDTO = try await rpc.callSnapshot(
             "current_user_calendar_snapshot",
             params: EmptyParams()
         )
@@ -2355,7 +2355,7 @@ struct SupabaseSurfaceSnapshotRepository: SurfaceSnapshotRepository {
     }
 
     func placeListsSnapshot() async throws -> PlaceListsRemoteSnapshot {
-        let response: RemotePlaceListsSnapshotDTO = try await rpc.call(
+        let response: RemotePlaceListsSnapshotDTO = try await rpc.callSnapshot(
             "visible_place_lists_snapshot",
             params: EmptyParams()
         )

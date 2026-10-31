@@ -39,17 +39,14 @@ final class LiveLocationUITests: XCTestCase {
 
     private func assertVisibleLocation(in app: XCUIApplication, capture name: String) {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
-        let dot = app.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@ OR label CONTAINS[c] %@",
-                        "current location", "my location", "your location", "user location")
-        ).firstMatch
+        let deadline = ProcessInfo.processInfo.systemUptime + 25
         let visible = NSPredicate { _, _ in
-            guard dot.exists else { return false }
-            let frame = dot.frame
-            let top = app.buttons["live.draw"].frame.maxY
-            let bottom = app.descendants(matching: .any)["live.drawerHandle"].firstMatch.frame.minY
-            return !frame.isEmpty && frame.midX > 0 && frame.midX < app.frame.width
-                && frame.midY > top && frame.midY < bottom
+            guard ProcessInfo.processInfo.systemUptime < deadline,
+                  let snapshot = try? app.snapshot(),
+                  ProcessInfo.processInfo.systemUptime < deadline else { return false }
+            // One native read keeps the dot and exposed-map bounds simultaneous.
+            return self.hasVisibleLocation(in: snapshot)
+                && ProcessInfo.processInfo.systemUptime < deadline
         }
         let result = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: visible, object: nil)], timeout: 25)
         let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -64,5 +61,39 @@ final class LiveLocationUITests: XCTestCase {
         }
         XCTAssertEqual(result, .completed,
                        "The actual device-location dot must be inside the exposed map, not at the home city.")
+    }
+
+    private func hasVisibleLocation(in snapshot: XCUIElementSnapshot) -> Bool {
+        @MainActor
+        func descendants(of node: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
+            node.children.flatMap { [$0] + descendants(of: $0) }
+        }
+        @MainActor
+        func valid(_ frame: CGRect) -> Bool {
+            !frame.isEmpty && !frame.isNull && !frame.isInfinite
+                && [frame.minX, frame.minY, frame.maxX, frame.maxY].allSatisfy(\.isFinite)
+        }
+        let nodes = descendants(of: snapshot)
+        let maps = nodes.filter { $0.identifier == "live.map" }
+        let draws = nodes.filter { $0.elementType == .button && $0.identifier == "live.draw" }
+        let drawers = nodes.filter { $0.identifier == "live.drawerHandle" }
+        guard maps.count == 1, draws.count == 1, drawers.count == 1,
+              valid(snapshot.frame), valid(maps[0].frame), valid(draws[0].frame), valid(drawers[0].frame)
+        else { return false }
+        let nativeMaps = ([maps[0]] + descendants(of: maps[0])).filter { $0.elementType == .map }
+        guard nativeMaps.count == 1, valid(nativeMaps[0].frame) else { return false }
+        let mapFrame = maps[0].frame.intersection(nativeMaps[0].frame).intersection(snapshot.frame)
+        let top = max(mapFrame.minY, draws[0].frame.maxY)
+        let bottom = min(mapFrame.maxY, drawers[0].frame.minY)
+        guard valid(mapFrame), top < bottom else { return false }
+        let locationLabels = ["current location", "my location", "your location", "user location"]
+        let frames = descendants(of: maps[0]).filter { node in
+            locationLabels.contains { node.label.localizedCaseInsensitiveContains($0) }
+        }.map(\.frame)
+        // MapKit may repeat the same annotation in its accessibility hierarchy.
+        // Distinct candidate geometry is ambiguous and must not pass by chance.
+        guard let frame = frames.first, valid(frame), frames.allSatisfy({ $0 == frame }) else { return false }
+        return frame.midX > mapFrame.minX && frame.midX < mapFrame.maxX
+            && frame.midY > top && frame.midY < bottom
     }
 }

@@ -1007,7 +1007,7 @@ struct PlaceImportCanonicalReviewScreen: View {
         }
         guard canContinueCommit(expectedUserID: expectedUserID) else { return false }
         importStore.performBatchedMutations {
-            for (id, saveID) in completedItems { importStore.markSaved(itemID: id, userPlaceID: saveID) }
+            importStore.markSavedItems(completedItems)
             for (id, entries, destinationID) in completedReceipts {
                 importStore.recordReceipt(batchID: id, entries: entries, destinationListID: destinationID)
             }
@@ -1056,8 +1056,7 @@ struct PlaceImportCanonicalReviewScreen: View {
 
     private func destinationList(for batch: PlaceImportBatch) -> LocalPlaceList? {
         guard batch.source == .googleMaps, let sourceListName = batch.sourceListName else { return nil }
-        if let listID = batch.destinationListID,
-           let existing = store.visiblePlaceLists.first(where: { $0.id == listID }) {
+        if let existing = store.existingImportDestinationList(for: batch) {
             return existing
         }
         let existingNames = Set(

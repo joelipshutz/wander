@@ -1302,9 +1302,16 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Categories"].exists)
         XCTAssertTrue(app.staticTexts["People"].exists)
         XCTAssertTrue(app.staticTexts["Status"].exists)
+        for _ in 0..<5 where !demo.exists {
+            popover.swipeUp()
+        }
         XCTAssertTrue(app.buttons["map.more.person.user_demo"].exists)
 
-        app.buttons["Done"].tap()
+        for _ in 0..<5 where !done.isHittable {
+            popover.swipeDown()
+        }
+        XCTAssertTrue(done.isHittable)
+        done.tap()
         app.buttons["map.filter.featured"].tap()
         more.tap()
         XCTAssertTrue(popover.waitForExistence(timeout: 3))
@@ -2401,7 +2408,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(firstPlaceResult.waitForExistence(timeout: 4))
         XCTAssertTrue(firstPlaceResult.isHittable)
         XCTAssertTrue(app.staticTexts["Refining with smart filters…"].exists)
-        XCTAssertFalse(app.staticTexts["favorites"].exists)
+        XCTAssertFalse(app.staticTexts["Favorites"].exists)
         let refinementGate = app.buttons["uitest.discoverRefinementGate"]
         let pendingGateState = "first=1:pending;"
         XCTAssertTrue((refinementGate.value as? String)?.hasPrefix(pendingGateState) == true,
@@ -2428,7 +2435,7 @@ final class OnboardingUITests: XCTestCase {
                        "Returning must preserve the original operation without cancellation; refresh operations may coexist.")
         XCTAssertTrue(refinementGate.isHittable)
         refinementGate.tap()
-        XCTAssertTrue(app.staticTexts["favorites"].waitForExistence(timeout: 60),
+        XCTAssertTrue(app.staticTexts["Favorites"].waitForExistence(timeout: 60),
                       "The pending refinement must finish and update results after returning.")
         XCTAssertFalse(app.staticTexts["Refining with smart filters…"].exists)
         XCTAssertEqual(searchField.value as? String, "coffee")

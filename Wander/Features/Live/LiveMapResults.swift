@@ -118,9 +118,13 @@ final class LiveMapResults: ObservableObject {
         let featuredTask = Task { @MainActor [weak self] in
             let candidates = await featured()
             guard let self, !Task.isCancelled, self.requestID == token else { return }
-            self.featuredPlaces = candidates ?? []
+            let next = candidates ?? []
+            // Empty receipts still update their lease, but do not rebuild the
+            // social pin projection when neither receipt contains a place.
+            let changesPlaces = !self.featuredPlaces.isEmpty || !next.isEmpty
+            if changesPlaces { self.featuredPlaces = next }
             self.featuredExpiresAt = candidates == nil ? nil : self.clock().advanced(by: LiveFeedDisplayLease.duration)
-            self.revision &+= 1
+            if changesPlaces { self.revision &+= 1 }
             self.scheduleExpiry(userID: request.userID, token: token)
         }
         await withTaskCancellationHandler {
@@ -178,6 +182,8 @@ final class LiveMapResults: ObservableObject {
     }
 
     func revalidate(userID: String, permits: (FeedActivity) -> Bool) {
+        let interval = WanderDebugLog.beginPerformanceInterval("Live Map Authorization Revalidation")
+        defer { WanderDebugLog.endPerformanceInterval("Live Map Authorization Revalidation", id: interval) }
         if let currentRequest, currentRequest.userID != userID {
             requestID = UUID(); expiryTask?.cancel(); loadingRequest = nil
             self.currentRequest = nil; activities = []; featuredPlaces = []
@@ -239,7 +245,10 @@ struct LivePlaceIdentity: Hashable {
     private let membersByAlias: [String: Set<Member>]
 
     init(places: [LocalPlace]) {
-        let members = Set(places.map(Member.init))
+        self.init(members: Set(places.map(Member.init)))
+    }
+
+    fileprivate init(members: Set<Member>) {
         self.members = members
         aliases = Set(members.flatMap(\.lookupKeys))
         // An unverified provider UUID must not become an independent RPC seed.
@@ -261,7 +270,12 @@ struct LivePlaceIdentity: Hashable {
     func matches(_ place: LocalPlace) -> Bool { matches(Member(place)) }
 
     func intersects(_ other: LivePlaceIdentity) -> Bool {
-        other.members.contains { matches($0) }
+        // Matching is symmetric. Probe the larger identity's alias index with
+        // the smaller collection so a single pin never scans all saved history.
+        if members.count < other.members.count {
+            return members.contains { other.matches($0) }
+        }
+        return other.members.contains { matches($0) }
     }
 
     private func matches(_ member: Member) -> Bool {
@@ -412,9 +426,20 @@ enum LiveMapProjection {
     static func pins(activities: [FeedActivity], featured: [VisiblePlace],
                      ownCheckInPlaces: [VisiblePlace] = [], totemContext: LiveTotemContext? = nil,
                      previousPins: [LivePlacePin] = []) -> [LivePlacePin] {
-        let ownIdentity = LivePlaceIdentity(places: ownCheckInPlaces.filter {
+        // All evidence is captured afresh for this synchronous projection.
+        // Shared models appearing in several events/history rows need only one
+        // normalization; no identity survives a subsequent model mutation.
+        var evidenceByObject: [ObjectIdentifier: LivePlaceIdentity.Member] = [:]
+        func member(for place: LocalPlace) -> LivePlaceIdentity.Member {
+            let key = ObjectIdentifier(place)
+            if let member = evidenceByObject[key] { return member }
+            let member = LivePlaceIdentity.Member(place)
+            evidenceByObject[key] = member
+            return member
+        }
+        let ownIdentity = LivePlaceIdentity(members: Set(ownCheckInPlaces.filter {
             $0.owner.deletedAt == nil && $0.userPlace.deletedAt == nil && $0.owner.id == $0.userPlace.userID
-        }.map(\.place))
+        }.map { member(for: $0.place) }))
         var seenEvents = Set<String>()
         let events = activities.filter { $0.place != nil && seenEvents.insert($0.id).inserted }
         let places = events.compactMap(\.place) + featured
@@ -433,14 +458,7 @@ enum LiveMapProjection {
             let left = root(lhs), right = root(rhs)
             if left != right { parents[max(left, right)] = min(left, right) }
         }
-        var evidenceByObject: [ObjectIdentifier: LivePlaceIdentity.Member] = [:]
-        let evidence = identityPlaces.map { place in
-            let key = ObjectIdentifier(place)
-            if let member = evidenceByObject[key] { return member }
-            let member = LivePlaceIdentity.Member(place)
-            evidenceByObject[key] = member
-            return member
-        }
+        let evidence = identityPlaces.map { member(for: $0) }
         var firstByMember: [LivePlaceIdentity.Member: Int] = [:]
         var firstByStrongKey: [String: Int] = [:]
         var indicesByWeakKey: [String: [Int]] = [:]
@@ -477,14 +495,15 @@ enum LiveMapProjection {
                 if lhs.place.id != rhs.place.id { return lhs.place.id < rhs.place.id }
                 return lhs.id < rhs.id
             }).first else { continue }
-            let identity = LivePlaceIdentity(places: indices.map { identityPlaces[$0] })
+            let identity = LivePlaceIdentity(members: Set(indices.map { evidence[$0] }))
             let featuredPlaces = indices.filter { $0 >= events.count && $0 < places.count }.map { places[$0] }
             let isFeatured = featuredPlaces.contains { $0.userPlace.deletedAt == nil && $0.owner.deletedAt == nil }
+            let hasPriorOwnCheckIn = identity.intersects(ownIdentity)
             result.append(LivePlacePin(id: place.place.id, place: place,
                 activities: FeedPresentation.newestFirst(groupEvents),
-                hasPriorOwnCheckIn: identity.intersects(ownIdentity), identity: identity,
+                hasPriorOwnCheckIn: hasPriorOwnCheckIn, identity: identity,
                 totemState: totemContext?.state(for: identity, activities: groupEvents, featured: isFeatured,
-                    additionalSavedPlaces: featuredPlaces, hasPriorOwnCheckIn: identity.intersects(ownIdentity)) ?? .empty))
+                    additionalSavedPlaces: featuredPlaces, hasPriorOwnCheckIn: hasPriorOwnCheckIn) ?? .empty))
         }
         result.sort { $0.id < $1.id }
         var previousByAlias: [String: Set<Int>] = [:]

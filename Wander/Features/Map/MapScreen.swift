@@ -18939,7 +18939,10 @@ struct PlaceActivitySection: View {
     @State private var editLoadError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+        let currentEntries = entries
+        let displayedEntries = filter == .all ? currentEntries : currentEntries.filter { filter.includes($0) }
+        let companionVisitIDs = currentEntries.compactMap { $0.visit?.serverID }.sorted()
+        return VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
             Text("Check-in history")
                 .font(AstirTypography.sectionTitle)
                 .textCase(.uppercase)
@@ -18953,14 +18956,14 @@ struct PlaceActivitySection: View {
                     .font(AstirTypography.bodySmall)
             }
 
-            if filteredEntries.isEmpty {
+            if displayedEntries.isEmpty {
                 PlaceActivityEmptyState(text: emptyStateText)
             } else {
                 // The parent place profile already owns the vertical ScrollView.
                 // Keeping this finite history eager prevents variable-height
                 // ticket cards from being evicted and rebuilt mid-scroll.
                 VStack(spacing: WanderTheme.spacing2) {
-                    ForEach(filteredEntries) { entry in
+                    ForEach(displayedEntries) { entry in
                         PlaceActivityCard(
                             entry: entry,
                             photos: photos(for: entry),
@@ -18977,10 +18980,11 @@ struct PlaceActivitySection: View {
             }
         }
         .fullScreenCover(item: $viewerRoute) { route in
+            let photoEntries = entries
             PlaceActivityPhotoViewer(
-                photos: allPhotos,
+                photos: photoEntries.flatMap(photos(for:)),
                 initialPhotoID: route.photoID,
-                entriesByID: entriesByID
+                entriesByID: Dictionary(uniqueKeysWithValues: photoEntries.map { ($0.id, $0) })
             )
         }
         .sheet(item: $editFlow, onDismiss: {
@@ -19095,27 +19099,6 @@ struct PlaceActivitySection: View {
                 }
                 return lhs.owner.displayName.localizedCaseInsensitiveCompare(rhs.owner.displayName) == .orderedAscending
             }
-    }
-
-    private var filteredEntries: [PlaceActivityEntry] {
-        switch filter {
-        case .all:
-            entries
-        case .myVisits:
-            entries.filter { filter.includes($0) }
-        }
-    }
-
-    private var entriesByID: [String: PlaceActivityEntry] {
-        Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0) })
-    }
-
-    private var allPhotos: [PlaceActivityPhoto] {
-        entries.flatMap(photos(for:))
-    }
-
-    private var companionVisitIDs: [String] {
-        entries.compactMap { $0.visit?.serverID }.sorted()
     }
 
     private var engagementUserPlaceIDs: [String] {

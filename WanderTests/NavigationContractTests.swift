@@ -832,7 +832,11 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(resolvedPhoto.contains("@State private var failedGooglePhotoID: String?"))
         XCTAssertTrue(resolvedPhoto.contains("await backend.placePhoto("))
         XCTAssertTrue(resolvedPhoto.contains("await backend.visibleUserPlacePhoto("))
-        XCTAssertTrue(resolvedPhoto.contains("photoRequest: allowsUserPhotoFallback ? sheetPlace.photoRequest : nil"))
+        XCTAssertTrue(resolvedPhoto.contains("FeedPlacePhotoPolicy.request(for: place)"))
+        XCTAssertTrue(resolvedPhoto.contains("canonicalPlaceKey: photoRequest.canonicalPhotoCacheKey"))
+        XCTAssertTrue(resolvedPhoto.contains("photoRequest: allowsUserPhotoFallback ? photoRequest : nil"))
+        XCTAssertTrue(resolvedPhoto.contains("visibleUserPlacePhoto(for: photoRequest)"))
+        XCTAssertTrue(resolvedPhoto.contains("guard resolutionKey == photoResolutionKey else { return }"))
         XCTAssertTrue(resolvedPhoto.contains("guard allowsUserPhotoFallback else { return }"))
         XCTAssertTrue(resolvedPhoto.contains("variant: .feed"))
         XCTAssertTrue(resolvedPhoto.contains("PlaceProfilePhotoImage("))
@@ -1376,7 +1380,7 @@ final class NavigationContractTests: XCTestCase {
         )
 
         XCTAssertTrue(activitySection.contains("VStack(spacing: WanderTheme.spacing2)"))
-        XCTAssertTrue(activitySection.contains("ForEach(filteredEntries)"))
+        XCTAssertTrue(activitySection.contains("ForEach(displayedEntries)"))
         XCTAssertFalse(activitySection.contains("LazyVStack"))
     }
 
@@ -4694,7 +4698,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("variant: .fullscreen"))
         XCTAssertTrue(lists.contains("request.rendering(.listThumbnail)"))
         XCTAssertTrue(lists.contains("variant: .listThumbnail"))
-        XCTAssertTrue(feed.contains("sheetPlace.photoRequest.rendering(.feed)"))
+        XCTAssertTrue(feed.contains("let request = photoRequest.rendering(.feed)"))
+        XCTAssertTrue(feed.contains("backend.placePhoto(for: request)"))
         XCTAssertTrue(feed.contains("variant: .feed"))
         XCTAssertTrue(imports.contains("request.rendering(.listThumbnail)"))
         XCTAssertTrue(imports.contains("variant: .listThumbnail"))

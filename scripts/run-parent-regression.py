@@ -52,9 +52,20 @@ UI_THREE_CASE_RECOVERY = (
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork",
 )
 
+# These new three-sample 1500-row stress workloads exceed ordinary privacy/contact
+# allowances. Keep each required with the existing performance-lane allowance.
+IMPORT_PERFORMANCE_METHODS = {
+    "import-file-performance": "WanderTests/ImportAutoSaveFileResponsivenessTests/testPerformanceFileAutoSaveWith1500ResolvedRowsAndList",
+    "import-autosave-performance": "WanderTests/ImportAutoSavePerformanceTests/testPerformanceGoogleWannaAutoSaveWith1500ResolvedRows",
+    "import-autosave-no-list-performance": "WanderTests/ImportAutoSaveWithoutListPerformanceTests/testPerformanceGoogleWannaAutoSaveWithoutListWith1500ResolvedRows",
+}
+
+
 REPLAY_METHODS = {
     "replay-private": "WanderTests/ReplayMaskingTests/testPrivateMessageContentIsMaskedInActualReplayImage",
     "replay-credentials": "WanderTests/ReplayMaskingTests/testReadableContentAndCredentialMaskingInActualReplayImage",
+    "replay-feed": "WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay",
+    "replay-masked-scroll": "WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll",
 }
 
 
@@ -154,7 +165,7 @@ def run_isolated_replay(*, suite: str, products: Path, device_id: str,
                         result_bundle: Path, command: list[str], receipt: Path) -> int:
     """Run one exact method and require its actual mount evidence after restoration."""
     if suite not in REPLAY_METHODS:
-        raise ValueError("Inert host is restricted to the two exact Replay methods")
+        raise ValueError("Inert host is restricted to exact allowlisted Replay methods")
     def option(name):
         if command.count(name) != 1 or command.index(name) + 1 >= len(command):
             raise ValueError("Replay command option is missing or ambiguous")
@@ -225,15 +236,20 @@ def validate_replay_result(suite: str, summary: dict, tests: dict, device_id: st
     """Require the named real-image proof once; warnings do not change its result."""
     if suite not in REPLAY_METHODS:
         raise ValueError("Unknown single-method Replay suite")
+    validate_required_method_result(REPLAY_METHODS[suite], summary, tests, device_id)
+
+
+def validate_required_method_result(identifier: str, summary: dict, tests: dict, device_id: str) -> None:
+    """Reject empty, skipped, duplicated, wrong-device or wrong-method passes."""
     expected = {"result": "Passed", "totalTestCount": 1, "passedTests": 1,
                 "failedTests": 0, "skippedTests": 0, "expectedFailures": 0}
     if not isinstance(summary, dict) or any(summary.get(k) != v for k, v in expected.items()):
-        raise ValueError("Required Replay method did not pass exactly once")
+        raise ValueError("Required method did not pass exactly once")
     configurations = summary.get("devicesAndConfigurations")
     if (not isinstance(configurations, list) or len(configurations) != 1
             or configurations[0].get("device", {}).get("deviceId") != device_id
             or configurations[0].get("device", {}).get("platform") != "iOS Simulator"):
-        raise ValueError("Required Replay result has the wrong device")
+        raise ValueError("Required result has the wrong device")
     cases = []
 
     def visit(value):
@@ -247,11 +263,35 @@ def validate_replay_result(suite: str, summary: dict, tests: dict, device_id: st
                 visit(child)
 
     visit(tests)
-    identifier = REPLAY_METHODS[suite]
     if (len(cases) != 1 or cases[0].get("result") != "Passed"
             or cases[0].get("nodeIdentifier", "").removesuffix("()") != identifier.split("/", 1)[1]
             or cases[0].get("nodeIdentifierURL") != "test://com.apple.xcode/Wander/" + identifier):
-        raise ValueError("Required Replay case identity or outcome does not match")
+        raise ValueError("Required case identity or outcome does not match")
+
+
+def record_required_method_result(identifier: str, result: Path, device_id: str) -> bool:
+    """Keep both native result exports even when the method fails validation."""
+    exports = {}
+    try:
+        for kind in ["summary", "tests"]:
+            path = result.with_suffix("." + kind + ".json")
+            try:
+                with path.open("xb") as output:
+                    exported = subprocess.run(["xcrun", "xcresulttool", "get", "test-results", kind,
+                        "--path", str(result), "--compact"], stdout=output, timeout=120, check=False)
+                if exported.returncode == 0:
+                    exports[kind] = path
+            except subprocess.TimeoutExpired:
+                continue
+        if set(exports) != {"summary", "tests"}:
+            return False
+        validate_required_method_result(identifier, json.loads(exports["summary"].read_bytes()),
+            json.loads(exports["tests"].read_bytes()), device_id)
+        return True
+    except PermissionError:
+        raise
+    except (OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired):
+        return False
 
 
 def prepare_ui_performance_products(products: Path, preserve_system_failures: bool = False,
@@ -314,7 +354,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", *IMPORT_PERFORMANCE_METHODS, "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -342,6 +382,7 @@ def main() -> int:
                  ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "graphics"} else
                  [REPLAY_METHODS[args.suite]] if args.suite in REPLAY_METHODS else
                  [replay] if args.suite == "replay" else
+                 [IMPORT_PERFORMANCE_METHODS[args.suite]] if args.suite in IMPORT_PERFORMANCE_METHODS else
                  performance if args.suite == "performance" else ["WanderTests"])
     isolated_ui = ISOLATED_UI_PERFORMANCE | ISOLATED_UI_WARM_PERFORMANCE | REFERENCE_UI_PERFORMANCE
     if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "graphics"} and not isolated_ui.issubset(inventory):
@@ -378,7 +419,11 @@ def main() -> int:
     # Original CPU timing limits run separately with --suite performance on the
     # controlled reference simulator. Full-size deterministic contracts remain
     # in the unit suite, matching the main branch shared-runner policy.
-    isolated = {replay: "replay", **{test: "performance" for test in performance}} if args.suite == "unit" else {}
+    isolated = {replay: "replay",
+                **{identifier: suite for suite, identifier in IMPORT_PERFORMANCE_METHODS.items()},
+                **{identifier: suite for suite, identifier in REPLAY_METHODS.items()
+                   if not identifier.startswith(replay + "/")},
+                **{test: "performance" for test in performance}} if args.suite == "unit" else {}
     if args.suite == "ui":
         isolated = {**{test: "ui-performance" for test in sorted(ISOLATED_UI_PERFORMANCE)},
                     **{test: "ui-warm-performance" for test in sorted(ISOLATED_UI_WARM_PERFORMANCE)},
@@ -432,7 +477,13 @@ def main() -> int:
         receipt = Path(args.replay_host_receipt) if args.replay_host_receipt else result.with_suffix(".host-admission.json")
         return run_isolated_replay(suite=args.suite, products=Path(args.test_products), device_id=args.destination,
                                    result_bundle=result, command=command, receipt=receipt)
-    return subprocess.run(command, cwd=root, check=False).returncode
+    code = subprocess.run(command, cwd=root, check=False).returncode
+    if args.suite in IMPORT_PERFORMANCE_METHODS:
+        verified = record_required_method_result(IMPORT_PERFORMANCE_METHODS[args.suite], Path(args.result_bundle), args.destination)
+        if not verified:
+            print(f"Required {args.suite} result did not validate; inspect its summary and tests exports.", flush=True)
+        return code if code else (0 if verified else 1)
+    return code
 
 
 if __name__ == "__main__":

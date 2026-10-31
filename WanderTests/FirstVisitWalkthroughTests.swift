@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import XCTest
 @testable import Wander
@@ -173,6 +174,68 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         XCTAssertFalse(relaunched.hasContextualEnrollment)
     }
 
+    func testKnownInitialUserBindingIsSilentAndPreservesPersistedProgress() throws {
+        let defaults = try makeDefaults()
+        let store = FirstVisitWalkthroughStore(defaults: defaults)
+        store.enrollContextualHints(for: "account-a")
+        store.setProgress(1, for: "account-a", surface: .map)
+        let checkpoint = FirstVisitWalkthroughCheckpoint(target: .mapFriends, updatedAt: .now,
+            tutorialCandidate: nil, tutorialUserPlaceID: nil, tutorialMemorySnapshot: nil)
+        store.setCheckpoint(checkpoint, for: "account-a")
+        let persistedBeforeBinding = defaults.dictionaryRepresentation() as NSDictionary
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "account-a", store: store)
+        var publications = 0
+        let observation = coordinator.objectWillChange.sink { publications += 1 }
+        defer { observation.cancel() }
+
+        coordinator.setUserID("account-a")
+        XCTAssertEqual(publications, 0)
+        XCTAssertEqual(coordinator.userID, "account-a")
+        XCTAssertEqual(defaults.dictionaryRepresentation() as NSDictionary, persistedBeforeBinding)
+        XCTAssertTrue(coordinator.hasContextualEnrollment)
+        XCTAssertEqual(store.checkpoint(for: "account-a"), checkpoint)
+        XCTAssertEqual(coordinator.restoreJourneyIfNeeded(), .resumed(.map))
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+    }
+
+    func testInitiallyBoundUserStillResetsPresentationAndKeepsAccountsIsolatedOnSwitch() throws {
+        let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "account-a", store: store)
+        coordinator.activate(.map)
+        coordinator.advancePassiveStep()
+        coordinator.setEligibilityResolutionPending(true)
+        let accountACheckpoint = try XCTUnwrap(store.checkpoint(for: "account-a"))
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        XCTAssertTrue(coordinator.isContextualEnabled)
+        var publications = 0
+        let observation = coordinator.objectWillChange.sink { publications += 1 }
+        defer { observation.cancel() }
+
+        coordinator.setUserID("account-a")
+        XCTAssertEqual(publications, 0)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        XCTAssertTrue(coordinator.isAwaitingEligibilityResolution)
+        coordinator.setUserID("account-b")
+        XCTAssertGreaterThan(publications, 0)
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertNil(coordinator.requestedSurface)
+        XCTAssertEqual(coordinator.currentStepIndex, 0)
+        XCTAssertFalse(coordinator.isContextualEnabled)
+        XCTAssertFalse(coordinator.isAwaitingEligibilityResolution)
+        XCTAssertFalse(coordinator.hasContextualEnrollment)
+        XCTAssertNil(store.checkpoint(for: "account-b"))
+        XCTAssertEqual(store.checkpoint(for: "account-a"), accountACheckpoint)
+
+        coordinator.activate(.map)
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFeatured)
+        XCTAssertTrue(store.hasContextualEnrollment(for: "account-b"))
+        coordinator.setUserID("account-a")
+        XCTAssertEqual(coordinator.restoreJourneyIfNeeded(), .resumed(.map))
+        XCTAssertEqual(coordinator.currentStep?.target, .mapFriends)
+        XCTAssertEqual(store.checkpoint(for: "account-b")?.target, .mapFeatured)
+        XCTAssertEqual(store.checkpoint(for: "account-a"), accountACheckpoint)
+    }
+
     func testDebugResetNeedsEnabledReplayToEnrollAgain() throws {
         let coordinator = FirstVisitWalkthroughCoordinator(userID: "reviewer", store: FirstVisitWalkthroughStore(defaults: try makeDefaults()))
         coordinator.prepareDebugReplay(at: .placeSaveActions)
@@ -200,6 +263,83 @@ final class FirstVisitWalkthroughTests: XCTestCase {
         coordinator.setContextualEnabled(true)
         coordinator.activate(.feed)
         XCTAssertEqual(coordinator.currentStep?.target, .feedActivity)
+    }
+
+    func testUnchangedContextualEligibilityDoesNotPublishButStillEnrollsCurrentUser() throws {
+        let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "new-user", store: store, isEnabled: false)
+        var values: [Bool] = []
+        var objectPublications = 0
+        let observations = [
+            coordinator.$isContextualEnabled.dropFirst().sink { values.append($0) },
+            coordinator.objectWillChange.sink { objectPublications += 1 }
+        ]
+        defer { observations.forEach { $0.cancel() } }
+
+        for _ in 0..<3 {
+            coordinator.setContextualEnabled(false)
+            coordinator.setContextualEnabled(true)
+        }
+        XCTAssertFalse(coordinator.hasContextualEnrollment)
+        XCTAssertFalse(coordinator.isContextualEnabled)
+        XCTAssertTrue(values.isEmpty)
+        XCTAssertEqual(objectPublications, 0)
+
+        coordinator.setContextualEnabled(true, enrollCurrentUser: true)
+        XCTAssertTrue(coordinator.hasContextualEnrollment)
+        XCTAssertTrue(coordinator.isContextualEnabled)
+        XCTAssertEqual(values, [true])
+        XCTAssertEqual(objectPublications, 1)
+
+        // Enrollment can change independently of the in-memory published
+        // value. An unchanged true request must still perform its enrollment.
+        store.reset(for: "new-user")
+        XCTAssertFalse(coordinator.hasContextualEnrollment)
+        coordinator.setContextualEnabled(true, enrollCurrentUser: true)
+        coordinator.setContextualEnabled(true)
+        XCTAssertTrue(coordinator.hasContextualEnrollment)
+        XCTAssertTrue(coordinator.isContextualEnabled)
+        XCTAssertEqual(values, [true])
+        XCTAssertEqual(objectPublications, 1)
+    }
+
+    func testContextualDisableStillClearsActiveHintAndRepeatedDisableDoesNotPublish() throws {
+        let store = FirstVisitWalkthroughStore(defaults: try makeDefaults())
+        let coordinator = FirstVisitWalkthroughCoordinator(userID: "new-user", store: store, isEnabled: false)
+        coordinator.setContextualEnabled(true, enrollCurrentUser: true)
+        coordinator.activate(.add)
+        coordinator.advancePassiveStep()
+        XCTAssertEqual(coordinator.activeSurface, .add)
+        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+        XCTAssertGreaterThan(coordinator.currentStepIndex, 0)
+
+        var values: [Bool] = []
+        var objectPublications = 0
+        let observations = [
+            coordinator.$isContextualEnabled.dropFirst().sink { values.append($0) },
+            coordinator.objectWillChange.sink { objectPublications += 1 }
+        ]
+        defer { observations.forEach { $0.cancel() } }
+        coordinator.setContextualEnabled(true)
+        XCTAssertEqual(coordinator.currentStep?.target, .addImport)
+        XCTAssertTrue(values.isEmpty)
+        XCTAssertEqual(objectPublications, 0)
+
+        coordinator.setContextualEnabled(false)
+        XCTAssertEqual(values, [false])
+        XCTAssertNil(coordinator.activeSurface)
+        XCTAssertEqual(coordinator.currentStepIndex, 0)
+        XCTAssertTrue(coordinator.hasContextualEnrollment)
+        let publicationsAfterCleanup = objectPublications
+        XCTAssertGreaterThan(publicationsAfterCleanup, 0)
+        coordinator.setContextualEnabled(false)
+        XCTAssertEqual(values, [false])
+        XCTAssertEqual(objectPublications, publicationsAfterCleanup)
+
+        coordinator.setContextualEnabled(true)
+        coordinator.activate(.placeDetail)
+        XCTAssertEqual(values, [false, true])
+        XCTAssertEqual(coordinator.currentStep?.target, .placeSaveActions)
     }
 
     func testPrimaryCompletionDoesNotEraseAnActiveContextualHint() throws {

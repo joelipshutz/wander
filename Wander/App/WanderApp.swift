@@ -51,6 +51,33 @@ enum ReplayFixtureHostPolicy {
 }
 #endif
 
+/// Shared opt-in for the large Live UI fixture and its matching fake session.
+/// Ordinary simulator sessions retain their existing demo account.
+enum LivePerformanceUITestPolicy {
+    static let currentUserID = "perf_user_000"
+
+    static func isEnabled(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        let required: Set<String> = ["-WanderLivePerformanceUITest", "-WanderUsePerformanceFixtures",
+            "-WanderAuthenticatedUITest", "-WanderUnifiedLiveUITest"]
+        return isSimulator && required.isSubset(of: Set(arguments))
+        #else
+        return false
+        #endif
+    }
+
+    private static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        true
+        #else
+        false
+        #endif
+    }
+}
+
 enum SimulatorTestSessionPolicy {
     static let authenticatedFixtureArgument = "-WanderAuthenticatedUITest"
     static let resetAuthenticatedFixtureArgument = "-WanderResetAuthenticatedUITest"
@@ -91,6 +118,14 @@ enum SimulatorTestSessionPolicy {
         }
 
         return defaults.bool(forKey: persistenceKey)
+    }
+
+    static func authenticatedFixtureUserID(
+        arguments: [String] = ProcessInfo.processInfo.arguments,
+        isSimulator: Bool = isSimulatorBuild
+    ) -> String {
+        LivePerformanceUITestPolicy.isEnabled(arguments: arguments, isSimulator: isSimulator)
+            ? LivePerformanceUITestPolicy.currentUserID : "user_joe"
     }
 
     static func forcedOnboardingStep(
@@ -175,7 +210,7 @@ struct WanderApp: App {
                     provider: PreviewAuthSessionProvider(
                         state: .signedIn(
                             AuthSession(
-                                userID: "user_joe",
+                                userID: SimulatorTestSessionPolicy.authenticatedFixtureUserID(),
                                 displayName: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "Joe",
                                 handle: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? nil : "joe",
                                 isAppleSignIn: ProcessInfo.processInfo.arguments.contains("-WanderAppleOnboardingUITest") ? true : nil
@@ -1055,12 +1090,23 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
         return LiveManualPaginationUITestRepository()
     }
 
+    func liveMapActivity(
+        audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int
+    ) async throws -> FollowedFeedPage {
+        guard audience == .everyone, query.isValid, before == nil, limit == 50 else {
+            throw FixtureError.unexpectedRequest
+        }
+        // Deliberately isolate Feed pagination from map enumeration. This
+        // empty terminal map must never prime/reset the Feed cursor or query.
+        return FollowedFeedPage(activity: [], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
+    }
+
     func liveFeed(
         audience: FeedAudience, query: LiveFeedQuery, before: String?, limit: Int,
         onContent: @MainActor (FollowedFeedPage) -> Void
     ) async throws -> FollowedFeedPage {
         guard audience == .everyone, limit == FeedPagination.pageSize, query.isValid,
-              query.activityType == .all, query.polygon == nil, query.center == nil,
+              query.activityType == .all, query.center == nil,
               query.categoryIDs.isEmpty, query.personIDs.isEmpty else {
             throw FixtureError.unexpectedRequest
         }
@@ -1075,8 +1121,27 @@ final class LiveManualPaginationUITestRepository: FeedRepository {
                                      avatarURL: nil, bio: nil, relationship: .owner)
             let list = LocalPlaceList(localID: "fixture-live-manual-list", ownerUserID: actor.id,
                                       name: "Paging fixture", description: "", createdAt: occurredAt, updatedAt: occurredAt)
-            let activity = FeedActivity(id: Self.activityID, kind: .listCreated, actor: actor,
-                                        list: list, occurredAt: occurredAt)
+            let visiblePlace: VisiblePlace?
+            let kind: FeedActivityKind
+            if let vertex = query.polygon?.first {
+                // Normal Live requests include the committed viewport polygon.
+                // Its boundary is included by the real query policy, so use one
+                // fictional list addition there without bypassing that filter.
+                let place = LocalPlace(localID: "fixture-live-manual-place", canonicalName: "Paging fixture place",
+                    category: "cafe", latitude: vertex.latitude, longitude: vertex.longitude, syncState: .synced)
+                let owner = LocalProfile(localID: actor.id, handle: actor.handle,
+                    displayName: actor.displayName, syncState: .synced)
+                let save = LocalUserPlace(localID: "fixture-live-manual-save", userID: actor.id,
+                    placeID: place.id, status: .been, visibility: .followers,
+                    sourceType: "manual", syncState: .synced)
+                visiblePlace = VisiblePlace(id: save.id, place: place, userPlace: save, owner: owner, attributes: [])
+                kind = .listItemAdded
+            } else {
+                visiblePlace = nil
+                kind = .listCreated
+            }
+            let activity = FeedActivity(id: Self.activityID, kind: kind, actor: actor,
+                                        place: visiblePlace, list: list, occurredAt: occurredAt)
             guard query.includes(activity) else { throw FixtureError.unexpectedRequest }
             page = FollowedFeedPage(activity: [activity], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)
         }

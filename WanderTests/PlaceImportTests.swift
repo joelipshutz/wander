@@ -1608,7 +1608,7 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(importStore.item(id: sourceRetry.id)?.state, .needsHelp)
     }
 
-    func testFortyFivePlaceImportPersistsEachStoreOnce() async {
+    func testFortyFivePlaceImportPersistsMatchedBoundedCheckpoints() async {
         let batchID = "google-list"
         let items = (1...45).map { index in
             let candidate = PlaceCandidate(
@@ -1665,9 +1665,11 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
             resolver: FakePlaceImportResolver()
         )
         var storeSaveCount = 0
+        var checkpointCount = 0
         let persistence = WanderStorePersistence(
             load: { nil },
-            save: { _ in storeSaveCount += 1 }
+            save: { _ in storeSaveCount += 1 },
+            checkpointAsync: { _ in storeSaveCount += 1; checkpointCount += 1 }
         )
         let store = WanderStore(
             fixtures: WanderFixtures.empty(),
@@ -1692,8 +1694,11 @@ final class PlaceImportAutoSaveCoordinatorTests: XCTestCase {
         XCTAssertEqual(result.needsReviewCount, 0)
         XCTAssertEqual(store.currentUserVisiblePlaces.count, 45)
         XCTAssertEqual(store.visiblePlaceLists.first?.cachedItemCount, 45)
-        XCTAssertEqual(storeSaveCount, 1)
-        XCTAssertEqual(importPersistence.saveCount, 1)
+        XCTAssertGreaterThanOrEqual(checkpointCount, 6)
+        XCTAssertLessThanOrEqual(checkpointCount, 45)
+        XCTAssertEqual(storeSaveCount, checkpointCount + 1)
+        XCTAssertEqual(importPersistence.saveCount, checkpointCount)
+        XCTAssertTrue(store.automaticImportCheckpoints.isEmpty)
         XCTAssertNotNil(importStore.batches.first?.automaticSaveCompletedAt)
         XCTAssertEqual(importStore.batches.first?.receipt?.entries.count, 45)
     }
@@ -4077,16 +4082,22 @@ final class PlaceImportStoreTests: XCTestCase {
         let persistence = InMemoryPlaceImportPersistence(
             snapshot: PlaceImportSnapshot(batches: [batch], items: [item])
         )
-        let store = PlaceImportStore(
-            persistence: persistence,
-            resolver: CancellationThenSuccessPlaceImportResolver()
-        )
+        let resolver = CancellationThenSuccessPlaceImportResolver()
+        let store = PlaceImportStore(persistence: persistence, resolver: resolver)
 
         store.resumePendingImports()
         for _ in 0..<100 where store.item(id: item.id)?.state != .resolving {
             await Task.yield()
         }
         XCTAssertEqual(store.item(id: item.id)?.state, .resolving)
+
+        // Claiming a row precedes launching its child task. Pause only once
+        // the first resolver is actually suspended, so this tests in-flight
+        // cancellation rather than postponing the fixture's first long wait.
+        for _ in 0..<100 where resolver.attemptCount == 0 {
+            await Task.yield()
+        }
+        XCTAssertEqual(resolver.attemptCount, 1)
 
         store.pauseProcessing(batchIDs: [batch.id])
         await Task.yield()
@@ -9861,7 +9872,7 @@ private final class SuspendedPlaceImportResolver: PlaceImportResolving {
 
 @MainActor
 private final class CancellationThenSuccessPlaceImportResolver: PlaceImportResolving {
-    private var attemptCount = 0
+    private(set) var attemptCount = 0
 
     func resolve(seed: PlaceImportSeed, source: PlaceImportSource) async throws -> PlaceImportResolution {
         attemptCount += 1

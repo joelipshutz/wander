@@ -744,6 +744,26 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         capture("drawer-half-after-pan-and-return")
     }
 
+    func testFiltersLeadingEdgeOfMinimumHitTargetOpensSheet() {
+        assertFilterEdgeOpensSheet(.leading)
+    }
+
+    func testFiltersTrailingEdgeOfMinimumHitTargetOpensSheet() {
+        assertFilterEdgeOpensSheet(.trailing)
+    }
+
+    private func assertFilterEdgeOpensSheet(_ edge: FilterHitEdge) {
+        let app = launchLive()
+        openFilters(in: app, pressAtEdge: edge)
+        let navigation = app.navigationBars["Filters"]
+        XCTAssertTrue(navigation.exists)
+        navigation.buttons["Cancel"].tap()
+        XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
+        assertDrawer("half expanded", count: 4, in: app)
+        XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
+        XCTAssertEqual(summary(in: app).label, "All time")
+    }
+
     func testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement() {
         let app = launchLive()
         openFilters(in: app)
@@ -1172,22 +1192,61 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertEqual(result, .completed)
     }
 
-    private func openFilters(in app: XCUIApplication) {
-        let button = app.buttons["Filters"]
+    private enum FilterHitEdge: String { case leading, trailing }
+
+    private func openFilters(in app: XCUIApplication, pressAtEdge edge: FilterHitEdge? = nil) {
+        let button = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ AND label == %@ AND enabled == true",
+            "slider.horizontal.3", "Filters")).element
+        let applicationFrame = app.frame
         var previousFrame = CGRect.null
-        var stableSince = ProcessInfo.processInfo.systemUptime
-        wait(NSPredicate { _, _ in
-            guard button.exists, button.isEnabled, button.isHittable else { return false }
-            let frame = button.frame
-            guard self.finite(frame), app.frame.contains(frame) else { return false }
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + 10
+        var stableSince = startedAt
+        var observations = 0
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            observations += 1
+            // Resolve enabled state and geometry together. Separate queries for
+            // each property can consume the entire native observation deadline.
+            guard let snapshot = try? button.snapshot(), snapshot.isEnabled,
+                  ProcessInfo.processInfo.systemUptime <= deadline,
+                  self.finite(snapshot.frame), applicationFrame.contains(snapshot.frame),
+                  button.isHittable,
+                  ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            let frame = snapshot.frame
             if frame != previousFrame {
                 previousFrame = frame
                 stableSince = ProcessInfo.processInfo.systemUptime
                 return false
             }
             return ProcessInfo.processInfo.systemUptime - stableSince >= 0.5
-        }, timeout: 10)
-        button.press(forDuration: 0.1)
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        let observation = XCTAttachment(string: "observations=\(observations); elapsed=\(ProcessInfo.processInfo.systemUptime - startedAt); verifiedFrame=\(previousFrame); applicationFrame=\(applicationFrame); requiredStableSeconds=0.5; waitResult=\(result.rawValue)")
+        observation.name = "REC-636-filters-open-native-observation"
+        observation.lifetime = .keepAlways
+        add(observation)
+        XCTAssertEqual(result, .completed)
+        if let edge {
+            XCTAssertGreaterThanOrEqual(previousFrame.width, 44)
+            XCTAssertGreaterThanOrEqual(previousFrame.height, 44)
+            let point = CGPoint(x: edge == .leading ? previousFrame.minX + 2 : previousFrame.maxX - 2,
+                                y: previousFrame.midY)
+            XCTAssertTrue(previousFrame.contains(point))
+            XCTAssertTrue(applicationFrame.contains(point))
+            let contact = XCTAttachment(string: "edge=\(edge.rawValue); verifiedFrame=\(previousFrame); contact=\(point); insetPoints=2; pressDuration=0.1; maximumPressCount=1")
+            contact.name = "REC-675-filters-minimum-hit-target"
+            contact.lifetime = .keepAlways
+            add(contact)
+            // Exercise the empty padding inside the same verified 44pt label.
+            // One physical press per fresh launch; no activation fallback.
+            app.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: point.x - applicationFrame.minX, dy: point.y - applicationFrame.minY))
+                .press(forDuration: 0.1)
+        } else {
+            button.press(forDuration: 0.1)
+        }
         XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForExistence(timeout: 5))
     }
 
@@ -1214,20 +1273,17 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         // Both queries avoid the identically labeled Nearby header button.
         let choice: XCUIElement
         if let semanticOptionID {
-            choice = app.buttons.matching(identifier: semanticOptionID).element
+            choice = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ AND enabled == true", semanticOptionID)).element
         } else {
-            choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
+            choice = app.collectionViews.buttons.matching(NSPredicate(
+                format: "label == %@ AND enabled == true", option)).element
         }
-        waitHittable(choice, diagnosticFailure: { snapshotError in
+        waitForEnabledPopupChoice(choice, diagnosticFailure: {
             // Observe the failed wait once, before its original assertion aborts
             // the test. These reads neither retry the tap nor extend its gate.
             self.capture("popup-option-wait-failed")
             var observations = ["option=\(option)", "postFailureSnapshotRequestedUptime=\(ProcessInfo.processInfo.systemUptime)"]
-            if let snapshotError {
-                observations.append("lastChoiceSnapshotError=\(String(describing: snapshotError))")
-            } else {
-                observations.append("lastChoiceSnapshotError=none")
-            }
             do {
                 let snapshot = try app.snapshot()
                 var choiceCount = 0
@@ -1498,6 +1554,40 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func finite(_ frame: CGRect) -> Bool {
         !frame.isNull && !frame.isInfinite && !frame.isEmpty
             && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+    }
+
+    private func waitForEnabledPopupChoice(_ choice: XCUIElement, diagnosticFailure: () -> Void) {
+        // The unique popup query already requires enabled == true. Resolve its
+        // genuine native hit point once per poll, without a separate snapshot.
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + 10
+        var pollCount = 0
+        var totalReadSeconds: TimeInterval = 0
+        var maximumReadSeconds: TimeInterval = 0
+        var lateHitCount = 0
+        var lastHittable = false
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            pollCount += 1
+            let readStartedAt = ProcessInfo.processInfo.systemUptime
+            let hittable = choice.isHittable
+            let readFinishedAt = ProcessInfo.processInfo.systemUptime
+            let readSeconds = readFinishedAt - readStartedAt
+            totalReadSeconds += readSeconds
+            maximumReadSeconds = max(maximumReadSeconds, readSeconds)
+            lastHittable = hittable
+            if hittable && readFinishedAt > deadline { lateHitCount += 1 }
+            return hittable && readFinishedAt <= deadline
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+        if result != .completed {
+            let observation = XCTAttachment(string: "pollCount=\(pollCount); totalNativeReadMS=\(totalReadSeconds * 1_000); maximumNativeReadMS=\(maximumReadSeconds * 1_000); lastHittable=\(lastHittable); hittableReturnedAfterDeadlineCount=\(lateHitCount); elapsedMS=\((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000); waitResult=\(result.rawValue)")
+            observation.name = "REC-675-popup-native-hit-observation"
+            observation.lifetime = .keepAlways
+            add(observation)
+            diagnosticFailure()
+        }
+        XCTAssertEqual(result, .completed)
     }
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,

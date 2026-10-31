@@ -134,7 +134,7 @@ struct RemoteCurrentProfileDTO: Codable, Equatable {
     }
 }
 
-struct RemoteVisiblePlaceDTO: Codable, Equatable {
+struct RemoteVisiblePlaceDTO: Codable, Equatable, Sendable {
     private enum ViewerTaxonomyKey {
         static let primaryCategory = "__viewer_taxonomy_primary_category"
         static let subcategory = "__viewer_taxonomy_subcategory"
@@ -311,7 +311,7 @@ struct RemoteVisiblePlaceDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceAttributeDTO: Codable, Equatable {
+struct RemotePlaceAttributeDTO: Codable, Equatable, Sendable {
     let questionDefinitionID: String?
     let questionKey: String
     let valueType: String
@@ -787,7 +787,7 @@ struct RemoteActivityCommentPostDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceListCollaboratorDTO: Codable, Equatable {
+struct RemotePlaceListCollaboratorDTO: Codable, Equatable, Sendable {
     let userID: String
     let handle: String
     let displayName: String
@@ -813,7 +813,7 @@ struct RemotePlaceListCollaboratorDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceListRowDTO: Codable, Equatable {
+struct RemotePlaceListRowDTO: Codable, Equatable, Sendable {
     let id: String
     let ownerUserID: String
     let ownerHandle: String?
@@ -871,7 +871,7 @@ struct RemotePlaceListRowDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceListSummaryDTO: Codable, Equatable {
+struct RemotePlaceListSummaryDTO: Codable, Equatable, Sendable {
     let id: String
     let ownerUserID: String
     let ownerHandle: String
@@ -923,7 +923,7 @@ struct RemotePlaceListSummaryDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceListItemDTO: Codable, Equatable {
+struct RemotePlaceListItemDTO: Codable, Equatable, Sendable {
     let id: String
     let listID: String
     let placeID: String
@@ -963,7 +963,7 @@ struct RemotePlaceListItemDTO: Codable, Equatable {
     }
 }
 
-struct RemotePlaceListDetailDTO: Codable, Equatable {
+struct RemotePlaceListDetailDTO: Codable, Equatable, Sendable {
     let list: RemotePlaceListRowDTO
     let collaborators: [RemotePlaceListCollaboratorDTO]
     let items: [RemotePlaceListItemDTO]

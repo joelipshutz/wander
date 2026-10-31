@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'Wander/App/WanderRootView.swift'
       - 'Wander/Features/Feed/**'
       - 'Wander/Features/Activity/**'
       - 'Wander/Features/Profile/*Notification*.swift'
@@ -16,19 +17,35 @@ on:
       - 'WanderTests/PersonMention*Tests.swift'
       - 'Wander/Services/FeedModels.swift'
       - 'Wander/Services/ActivityEngagementModels.swift'
+      - 'Wander/Services/ActivityBookmarkObservation.swift'
       - 'Wander/Services/WanderLocalStore.swift'
       - 'WanderTests/Feed*Tests.swift'
+      - 'WanderTests/ActivityBookmarkProjectionTests.swift'
+      - 'WanderTests/ActivityBookmarkObservationTests.swift'
+      - 'WanderTests/ImportMountedFeedResponsivenessTests.swift'
+      - 'WanderTests/RetainedTabContentTests.swift'
       - 'WanderTests/ActivityEngagementTests.swift'
       - 'WanderTests/*Notification*Tests.swift'
       - 'WanderTests/RemoteRepositoryTests.swift'
       - 'WanderTests/CheckInQuestionPreferencesTests.swift'
       - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderTests/ReplayFixtureHostAdmission.swift'
+      - 'WanderTests/FeedScreenScrollingPerformanceTests.swift'
+      - 'WanderTests/PostHogReplayPerformanceTests.swift'
+      - 'scripts/test_replay_isolation_workflows.py'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/FeedConsolidationUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/test_import_performance_routing.py'
+      - 'scripts/test_live_continuity_workflow.py'
+      - 'scripts/test_compact_workflow_isolation.py'
+      - 'WanderTests/ImportAutoSaveFileResponsivenessTests.swift'
+      - 'WanderTests/ImportAutoSavePerformanceTests.swift'
+      - 'WanderTests/ImportAutoSaveWithoutListPerformanceTests.swift'
+      - 'WanderTests/PureModelPerformanceTestHost*.swift'
       - 'scripts/record-replay-compiler-flags.py'
       - 'scripts/test_record_replay_compiler_flags.py'
       - 'scripts/replay-simulator-fixture.py'
@@ -90,19 +107,18 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
 
-  native:
-    if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only }}
+  native-main:
+    if: ${{ !inputs.compact_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
-    # Large + compact + isolated Replay finished at the old 75-minute ceiling,
-    # leaving no time for artifact upload and runner cleanup. Test deadlines
-    # remain unchanged; this budget covers the entire multi-simulator job.
+    # Large-phone units, import stress and Replay retain their existing budget.
+    # Compact UI has an independent runner so this work cannot consume its time.
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           lfs: true
-      - name: Generate project and select existing simulators
+      - name: Generate project and select existing large simulator
         run: |
           brew install xcodegen
           xcodegen generate
@@ -111,8 +127,7 @@ jobs:
           import json, os, re
           from pathlib import Path
           devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
-          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID'),
-                             (('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID')]:
               for name in names:
                   choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
                              for runtime, rows in devices.items() if 'iOS' in runtime
@@ -140,7 +155,12 @@ jobs:
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
           -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
+          -skip-testing:WanderTests/ImportAutoSaveFileResponsivenessTests/testPerformanceFileAutoSaveWith1500ResolvedRowsAndList
+          -skip-testing:WanderTests/ImportAutoSavePerformanceTests/testPerformanceGoogleWannaAutoSaveWith1500ResolvedRows
+          -skip-testing:WanderTests/ImportAutoSaveWithoutListPerformanceTests/testPerformanceGoogleWannaAutoSaveWithoutListWith1500ResolvedRows
           -skip-testing:WanderTests/ReplayMaskingTests
+          -skip-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay
+          -skip-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll
           -only-testing:WanderUITests/FeedPaginationUITests
           -only-testing:WanderUITests/LiveDrawerActionsUITests
           -only-testing:WanderUITests/FeedAudienceUITests
@@ -170,6 +190,31 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 600
           -maximum-test-execution-time-allowance 900
           -resultBundlePath "$RUNNER_TEMP/large.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      # Required three-sample stress workloads; ordinary test deadlines stay unchanged.
+      - name: Required 1500-row file import performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-file-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportFilePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-file-performance-selection.json"
+      - name: Required 1500-row automatic import performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSavePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-performance-selection.json"
+      - name: Required 1500-row automatic import without list performance
+        if: ${{ (success() || failure()) && !inputs.compact_only && !inputs.unpassed_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-no-list-performance \
+            --destination "$LARGE_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSaveWithoutListPerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-no-list-performance-selection.json"
       - name: Prepare isolated Replay test products once
         id: replay-products
         if: ${{ (success() || failure()) && !inputs.compact_only }}
@@ -178,12 +223,15 @@ jobs:
           test ! -e "$RUNNER_TEMP/ReplayDerivedData"
           test ! -L "$RUNNER_TEMP/ReplayDerivedData"
           python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          python3 -B -m unittest discover -s scripts -p test_replay_isolation_workflows.py
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
             -destination "platform=iOS Simulator,id=$LARGE_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
             -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
             -only-testing:WanderTests/ReplayMaskingTests \
+            -only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay \
+            -only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
             GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
           python3 scripts/record-replay-compiler-flags.py \
@@ -196,7 +244,7 @@ jobs:
           python3 -B scripts/test_replay_simulator_fixture.py
           python3 -B scripts/replay-simulator-fixture.py prepare --source-device "$LARGE_DEVICE_ID"
       # Replay capture owns process-wide SDK state. Each scenario starts a fresh
-      # test host on one dedicated same-model/runtime simulator; both remain required.
+      # test host on one dedicated same-model/runtime simulator; all four remain required.
       - name: Verify private-message replay in an isolated process
         if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
         run: |
@@ -243,13 +291,63 @@ jobs:
               suite=suite, products=products, device_id=device, result_bundle=bundle,
               command=command, receipt=root / (suite + "-host.json")))
           PY
+      - name: Verify mounted Feed replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-feed"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+              "-maximum-test-execution-time-allowance", "900",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify masked scrolling replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' && steps.replay-fixture.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-masked-scroll"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["REPLAY_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "600",
+              "-maximum-test-execution-time-allowance", "900",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
       - name: Export Replay evidence before fixture cleanup
         id: replay-evidence
         if: ${{ always() && steps.replay-fixture.outcome == 'success' }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
           status=0
-          for device in replay-private replay-credentials; do
+          for device in replay-private replay-credentials replay-feed replay-masked-scroll; do
             if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" > "$RUNNER_TEMP/evidence/$device-summary.json" || status=1
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/evidence/$device" || status=1
@@ -266,6 +364,84 @@ jobs:
       - name: Stop large simulator
         if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
+      - name: Export native evidence
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          for size in large; do
+            if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feed-checkin-native-evidence
+          path: |
+            ${{ runner.temp }}/evidence
+            ${{ runner.temp }}/ImportFilePerformance.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.summary.json
+            ${{ runner.temp }}/ImportFilePerformance.tests.json
+            ${{ runner.temp }}/import-file-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSavePerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.tests.json
+            ${{ runner.temp }}/import-autosave-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.tests.json
+            ${{ runner.temp }}/import-autosave-no-list-performance-selection.json
+            ${{ runner.temp }}/large.xcresult
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
+            ${{ runner.temp }}/replay-feed.xcresult
+            ${{ runner.temp }}/replay-feed-host.json
+            ${{ runner.temp }}/replay-feed-host
+            ${{ runner.temp }}/replay-masked-scroll.xcresult
+            ${{ runner.temp }}/replay-masked-scroll-host.json
+            ${{ runner.temp }}/replay-masked-scroll-host
+            ${{ runner.temp }}/replay-simulator-fixture
+          retention-days: 14
+
+  native-compact:
+    if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only && (inputs.compact_only || !inputs.unpassed_only) }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Verify independent compact workflow contracts
+        run: python3 -B -m unittest discover -s scripts -p test_compact_workflow_isolation.py
+      - name: Generate project and select existing compact simulator
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for names, key in [(('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+              for name in names:
+                  choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                             for runtime, rows in devices.items() if 'iOS' in runtime
+                             for d in rows if d['name'] == name]
+                  if choices:
+                      device = sorted(choices, key=lambda item: item[0])[-1][1]
+                      break
+              else:
+                  raise RuntimeError(f'No supported simulator for {key}')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write(f'{key}={device["udid"]}\n')
+              print('Testing on', device['name'])
+          PY
       - name: Verify scrolling on a compact phone
         if: ${{ (success() || failure()) && (inputs.compact_only || !inputs.unpassed_only) }}
         run: >-
@@ -281,32 +457,57 @@ jobs:
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
           -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
           -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Export native evidence
+      - name: Export compact native evidence
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small; do
-            if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
-              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
-              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
-            fi
-          done
+          if [ -d "$RUNNER_TEMP/small.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/small.xcresult" > "$RUNNER_TEMP/evidence/small-summary.json" || true
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/small.xcresult" --output-path "$RUNNER_TEMP/evidence/small" || true
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: feed-checkin-native-evidence
+          name: feed-checkin-compact-evidence
           path: |
             ${{ runner.temp }}/evidence
-            ${{ runner.temp }}/large.xcresult
             ${{ runner.temp }}/small.xcresult
-            ${{ runner.temp }}/replay-private.xcresult
-            ${{ runner.temp }}/replay-credentials.xcresult
-            ${{ runner.temp }}/replay-private-host.json
-            ${{ runner.temp }}/replay-private-host
-            ${{ runner.temp }}/replay-credentials-host.json
-            ${{ runner.temp }}/replay-credentials-host
-            ${{ runner.temp }}/replay-simulator-fixture
           retention-days: 14
+
+  # Keep the existing required check name while both native workers run independently.
+  native:
+    if: ${{ always() }}
+    needs: [native-main, native-compact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the native jobs selected by this workflow mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPACT_ONLY: ${{ inputs.compact_only }}
+          UNPASSED_ONLY: ${{ inputs.unpassed_only }}
+          CONTINUITY_ONLY: ${{ inputs.continuity_only }}
+          CONTINUITY_REMAINING_ONLY: ${{ inputs.continuity_remaining_only }}
+          MAIN_RESULT: ${{ needs['native-main'].result }}
+          COMPACT_RESULT: ${{ needs['native-compact'].result }}
+        run: |
+          python3 - <<'PY_NATIVE_GATE'
+          import os
+          names = ['COMPACT_ONLY', 'UNPASSED_ONLY', 'CONTINUITY_ONLY', 'CONTINUITY_REMAINING_ONLY']
+          modes = {name: os.environ.get(name, '') == 'true' for name in names}
+          if os.environ['EVENT_NAME'] != 'workflow_dispatch' and any(modes.values()):
+              raise SystemExit('Native coverage exclusions require explicit workflow_dispatch inputs')
+          if sum(modes.values()) > 1:
+              raise SystemExit('Choose one focused mode; combined exclusions are not a passing gate')
+          continuity = modes['CONTINUITY_ONLY'] or modes['CONTINUITY_REMAINING_ONLY']
+          required = {'MAIN_RESULT': not modes['COMPACT_ONLY'] and not continuity,
+                      'COMPACT_RESULT': not continuity and (modes['COMPACT_ONLY'] or not modes['UNPASSED_ONLY'])}
+          for name, needed in required.items():
+              expected = 'success' if needed else 'skipped'
+              if os.environ.get(name) != expected:
+                  raise SystemExit(f'{name}: expected {expected}, got {os.environ.get(name, "missing")}')
+          print('All native jobs required by this workflow mode succeeded')
+          PY_NATIVE_GATE
 
   live-continuity:
     if: ${{ !inputs.compact_only && (!inputs.unpassed_only || inputs.continuity_only || inputs.continuity_remaining_only) }}
@@ -331,6 +532,8 @@ jobs:
         with:
           persist-credentials: false
           lfs: true
+      - name: Verify Live continuity evidence contract
+        run: python3 -B -m unittest discover -s scripts -p test_live_continuity_workflow.py
       - name: Generate project and select existing continuity simulators
         run: |
           brew install xcodegen
@@ -465,7 +668,7 @@ jobs:
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()']}
           expected_devices = {'large': os.environ.get('LARGE_DEVICE_ID', ''), 'compact': os.environ.get('SMALL_DEVICE_ID', '')}
           coverage = {
-              'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
+              'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 10,
               'requiredRegressionCases': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
                                         'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
               'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
@@ -476,7 +679,7 @@ jobs:
           (evidence / 'expected-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
           problems = []
           for label in ['large', 'compact']:
-              expected_count = len(remaining_cases[label]) if remaining else 8
+              expected_count = len(remaining_cases[label]) if remaining else 10
               counts = {}
               bundle = root / f'live-continuity-{label}.xcresult'
               if not bundle.is_dir():
@@ -525,6 +728,8 @@ jobs:
                           'LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn()',
                           'LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()',
+                          'LiveDrawerAndFilterUITests/testFiltersLeadingEdgeOfMinimumHitTargetOpensSheet()',
+                          'LiveDrawerAndFilterUITests/testFiltersTrailingEdgeOfMinimumHitTargetOpensSheet()',
                           'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']
                       if remaining:
                           required = remaining_cases[label] if label == 'large' else []

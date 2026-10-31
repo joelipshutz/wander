@@ -14,6 +14,10 @@ on:
       - 'Wander/Services/PostHogAnalyticsClient.swift'
       - 'WanderTests/PrivateMessag*Tests.swift'
       - 'WanderTests/ReplayMaskingTests.swift'
+      - 'WanderTests/ReplayFixtureHostAdmission.swift'
+      - 'WanderTests/FeedScreenScrollingPerformanceTests.swift'
+      - 'WanderTests/PostHogReplayPerformanceTests.swift'
+      - 'scripts/test_replay_isolation_workflows.py'
       - 'WanderUITests/LiveMigrationAndPrivacyUITests.swift'
       - 'WanderUITests/PersonTypeaheadUITests.swift'
       - 'Wander/Services/TrustedPlaceSearch.swift'
@@ -21,6 +25,12 @@ on:
       - 'WanderTests/WanderPlaceCategoryTests.swift'
       - 'WanderUITests/MapPlaceCardUITests.swift'
       - 'scripts/run-parent-regression.py'
+      - 'scripts/test_import_performance_routing.py'
+      - 'scripts/test_compact_workflow_isolation.py'
+      - 'WanderTests/ImportAutoSaveFileResponsivenessTests.swift'
+      - 'WanderTests/ImportAutoSavePerformanceTests.swift'
+      - 'WanderTests/ImportAutoSaveWithoutListPerformanceTests.swift'
+      - 'WanderTests/PureModelPerformanceTestHost*.swift'
       - 'scripts/record-replay-compiler-flags.py'
       - 'scripts/test_record_replay_compiler_flags.py'
       - '.github/workflows/privacy-validation.yml'
@@ -39,7 +49,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  native:
+  native-main:
+    if: ${{ !inputs.compact_privacy_recovery_only }}
     runs-on: macos-26
     timeout-minutes: 100
     steps:
@@ -47,7 +58,7 @@ jobs:
         with:
           lfs: true
           persist-credentials: false
-      - name: Generate project and select existing simulators
+      - name: Generate project and select existing Pro simulator
         run: |
           brew install xcodegen
           xcodegen generate
@@ -57,7 +68,7 @@ jobs:
           import json, os, re
           from pathlib import Path
           devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
-          for name, variable in [('iPhone 17', 'PRO_DEVICE_ID'), ('iPhone 16e', 'COMPACT_DEVICE_ID')]:
+          for name, variable in [('iPhone 17', 'PRO_DEVICE_ID')]:
               choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == name]
               assert choices, f'No existing {name} simulator'
               _, device = sorted(choices, key=lambda item: item[0])[-1]
@@ -81,7 +92,12 @@ jobs:
           -only-testing:WanderTests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
           -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
+          -skip-testing:WanderTests/ImportAutoSaveFileResponsivenessTests/testPerformanceFileAutoSaveWith1500ResolvedRowsAndList
+          -skip-testing:WanderTests/ImportAutoSavePerformanceTests/testPerformanceGoogleWannaAutoSaveWith1500ResolvedRows
+          -skip-testing:WanderTests/ImportAutoSaveWithoutListPerformanceTests/testPerformanceGoogleWannaAutoSaveWithoutListWith1500ResolvedRows
           -skip-testing:WanderTests/ReplayMaskingTests
+          -skip-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay
+          -skip-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsKeepAllThreeSlotsOnAnUnratedPlace
           -only-testing:WanderUITests/MapPlaceCardUITests/testPrivacyRatingsRemainReadableAtAccessibilityTextSize
           -only-testing:WanderUITests/PersonTypeaheadUITests/testCommentDraftAndSelectedMentionSurviveBackgroundEntry
@@ -90,6 +106,31 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/pro.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      # Required three-sample stress workloads; ordinary test deadlines stay unchanged.
+      - name: Required 1500-row file import performance
+        if: ${{ (success() || failure()) && !inputs.compact_privacy_recovery_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-file-performance \
+            --destination "$PRO_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportFilePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-file-performance-selection.json"
+      - name: Required 1500-row automatic import performance
+        if: ${{ (success() || failure()) && !inputs.compact_privacy_recovery_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-performance \
+            --destination "$PRO_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSavePerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-performance-selection.json"
+      - name: Required 1500-row automatic import without list performance
+        if: ${{ (success() || failure()) && !inputs.compact_privacy_recovery_only }}
+        run: |
+          python3 -B -m unittest discover -s scripts -p test_import_performance_routing.py
+          python3 scripts/run-parent-regression.py --suite import-autosave-no-list-performance \
+            --destination "$PRO_DEVICE_ID" --derived-data "$RUNNER_TEMP/DerivedData" \
+            --result-bundle "$RUNNER_TEMP/ImportAutoSaveWithoutListPerformance.xcresult" \
+            --selection-file "$RUNNER_TEMP/import-autosave-no-list-performance-selection.json"
       - name: Prepare isolated Replay test products once
         id: replay-products
         if: ${{ !inputs.compact_privacy_recovery_only && (success() || failure()) }}
@@ -98,12 +139,15 @@ jobs:
           test ! -e "$RUNNER_TEMP/ReplayDerivedData"
           test ! -L "$RUNNER_TEMP/ReplayDerivedData"
           python3 -m unittest discover -s scripts -p test_record_replay_compiler_flags.py
+          python3 -B -m unittest discover -s scripts -p test_replay_isolation_workflows.py
           xcodebuild build-for-testing -quiet -project Wander.xcodeproj -scheme Wander -configuration Debug \
             -destination "platform=iOS Simulator,id=$PRO_DEVICE_ID" \
             -derivedDataPath "$RUNNER_TEMP/ReplayDerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/DerivedData/SourcePackages" -jobs 2 -parallel-testing-enabled NO \
             -testProductsPath "$RUNNER_TEMP/Replay.xctestproducts" \
             -only-testing:WanderTests/ReplayMaskingTests \
+            -only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay \
+            -only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll \
             CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES \
             GCC_OPTIMIZATION_LEVEL=s SWIFT_OPTIMIZATION_LEVEL=-Onone
           python3 scripts/record-replay-compiler-flags.py \
@@ -160,16 +204,156 @@ jobs:
               suite=suite, products=products, device_id=device, result_bundle=bundle,
               command=command, receipt=root / (suite + "-host.json")))
           PY
-      - name: Release Pro simulator and wait for compact startup
+      - name: Verify mounted Feed replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-feed"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Verify masked scrolling replay in an isolated process
+        if: ${{ !cancelled() && steps.replay-products.outcome == 'success' }}
+        run: |
+          python3 - <<'PY'
+          import importlib.util, os
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location("parent_regression", "scripts/run-parent-regression.py")
+          regression = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(regression)
+          root = Path(os.environ["RUNNER_TEMP"])
+          suite = "replay-masked-scroll"
+          products = root / "Replay.xctestproducts"
+          device = os.environ["PRO_DEVICE_ID"]
+          bundle = root / (suite + ".xcresult")
+          command = ["xcodebuild", "test-without-building", "-quiet", "-testProductsPath", str(products),
+              "-destination", "platform=iOS Simulator,id=" + device,
+              "-jobs", "2", "-parallel-testing-enabled", "NO",
+              "-only-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll",
+              "-test-timeouts-enabled", "YES", "-default-test-execution-time-allowance", "120",
+              "-maximum-test-execution-time-allowance", "180",
+              "-resultBundlePath", str(bundle)]
+          raise SystemExit(regression.run_isolated_replay(
+              suite=suite, products=products, device_id=device, result_bundle=bundle,
+              command=command, receipt=root / (suite + "-host.json")))
+          PY
+      - name: Release Pro simulator
         if: ${{ !inputs.compact_privacy_recovery_only && (success() || failure()) }}
         run: |
           if xcrun simctl list devices booted --json | python3 -c 'import json,os,sys; sys.exit(not any(d["udid"] == os.environ["PRO_DEVICE_ID"] for rows in json.load(sys.stdin)["devices"].values() for d in rows))'; then
             xcrun simctl shutdown "$PRO_DEVICE_ID"
           fi
-          xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
-      - name: Initialize compact simulator for privacy recovery
-        if: ${{ inputs.compact_privacy_recovery_only && (success() || failure()) }}
+      - name: Export screenshots and test summaries
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/screens"
+          for device in pro replay-private replay-credentials replay-feed replay-masked-scroll; do
+            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
+              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
+              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
+            fi
+          done
+      - name: Save native screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-screens
+          path: ${{ runner.temp }}/screens
+          retention-days: 14
+      - name: Save full native test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-results
+          path: |
+            ${{ runner.temp }}/pro.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.xcresult
+            ${{ runner.temp }}/ImportFilePerformance.summary.json
+            ${{ runner.temp }}/ImportFilePerformance.tests.json
+            ${{ runner.temp }}/import-file-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSavePerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSavePerformance.tests.json
+            ${{ runner.temp }}/import-autosave-performance-selection.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.xcresult
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.summary.json
+            ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.tests.json
+            ${{ runner.temp }}/import-autosave-no-list-performance-selection.json
+            ${{ runner.temp }}/replay-private.xcresult
+            ${{ runner.temp }}/replay-credentials.xcresult
+            ${{ runner.temp }}/replay-private-host.json
+            ${{ runner.temp }}/replay-private-host
+            ${{ runner.temp }}/replay-credentials-host.json
+            ${{ runner.temp }}/replay-credentials-host
+            ${{ runner.temp }}/replay-feed.xcresult
+            ${{ runner.temp }}/replay-feed-host.json
+            ${{ runner.temp }}/replay-feed-host
+            ${{ runner.temp }}/replay-masked-scroll.xcresult
+            ${{ runner.temp }}/replay-masked-scroll-host.json
+            ${{ runner.temp }}/replay-masked-scroll-host
+          retention-days: 14
+      - name: Package simulator app for local review
+        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
+        run: |
+          if [ -d "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" ]; then
+            ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" "$RUNNER_TEMP/Wander-simulator.zip"
+          fi
+      - name: Save simulator app
+        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: privacy-simulator-app
+          path: ${{ runner.temp }}/Wander-simulator.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+  native-compact:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Verify independent compact workflow contracts
+        run: python3 -B -m unittest discover -s scripts -p test_compact_workflow_isolation.py
+      - name: Generate project and select existing compact simulator
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -version
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for name, variable in [('iPhone 16e', 'COMPACT_DEVICE_ID')]:
+              choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d) for runtime, rows in devices.items() if 'iOS' in runtime for d in rows if d['name'] == name]
+              assert choices, f'No existing {name} simulator'
+              _, device = sorted(choices, key=lambda item: item[0])[-1]
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(variable + '=' + device['udid'] + '\n')
+              print('Using', name, device['udid'])
+          PY
+      - name: Initialize compact simulator
+        if: ${{ success() || failure() }}
         run: |
           xcrun simctl bootstatus "$COMPACT_DEVICE_ID" -b
           open -a Simulator --args -CurrentDeviceUDID "$COMPACT_DEVICE_ID"
@@ -197,49 +381,51 @@ jobs:
           -test-timeouts-enabled YES -default-test-execution-time-allowance 120
           -maximum-test-execution-time-allowance 180
           -resultBundlePath "$RUNNER_TEMP/compact.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
-      - name: Export screenshots and test summaries
+      - name: Export compact screenshots and test summary
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/screens"
-          for device in pro compact replay-private replay-credentials; do
-            if [ -d "$RUNNER_TEMP/$device.xcresult" ]; then
-              xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$device.xcresult" --format json > "$RUNNER_TEMP/screens/$device-summary.json" || true
-              xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$device.xcresult" --output-path "$RUNNER_TEMP/screens/$device" || true
-            fi
-          done
-      - name: Save native screenshots
+          if [ -d "$RUNNER_TEMP/compact.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/compact.xcresult" --format json > "$RUNNER_TEMP/screens/compact-summary.json" || true
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/compact.xcresult" --output-path "$RUNNER_TEMP/screens/compact" || true
+          fi
+      - name: Save compact privacy screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: privacy-screens
+          name: privacy-compact-screens
           path: ${{ runner.temp }}/screens
           retention-days: 14
-      - name: Save full native test results
+      - name: Save full compact privacy results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: privacy-results
-          path: |
-            ${{ runner.temp }}/pro.xcresult
-            ${{ runner.temp }}/compact.xcresult
-            ${{ runner.temp }}/replay-private.xcresult
-            ${{ runner.temp }}/replay-credentials.xcresult
-            ${{ runner.temp }}/replay-private-host.json
-            ${{ runner.temp }}/replay-private-host
-            ${{ runner.temp }}/replay-credentials-host.json
-            ${{ runner.temp }}/replay-credentials-host
+          name: privacy-compact-results
+          path: ${{ runner.temp }}/compact.xcresult
           retention-days: 14
-      - name: Package simulator app for local review
-        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
+
+  # Keep the existing required check name while both native workers run independently.
+  native:
+    if: ${{ always() }}
+    needs: [native-main, native-compact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the native jobs selected by this workflow mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPACT_PRIVACY_RECOVERY_ONLY: ${{ inputs.compact_privacy_recovery_only }}
+          MAIN_RESULT: ${{ needs['native-main'].result }}
+          COMPACT_RESULT: ${{ needs['native-compact'].result }}
         run: |
-          if [ -d "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" ]; then
-            ditto -c -k --sequesterRsrc --keepParent "$RUNNER_TEMP/DerivedData/Build/Products/Debug-iphonesimulator/Wander.app" "$RUNNER_TEMP/Wander-simulator.zip"
-          fi
-      - name: Save simulator app
-        if: ${{ always() && !inputs.compact_privacy_recovery_only }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: privacy-simulator-app
-          path: ${{ runner.temp }}/Wander-simulator.zip
-          if-no-files-found: ignore
-          retention-days: 7
+          python3 - <<'PY_NATIVE_GATE'
+          import os
+          recovery = os.environ.get('COMPACT_PRIVACY_RECOVERY_ONLY') == 'true'
+          if os.environ['EVENT_NAME'] != 'workflow_dispatch' and recovery:
+              raise SystemExit('Native coverage exclusions require explicit workflow_dispatch inputs')
+          for name, needed in {'MAIN_RESULT': not recovery, 'COMPACT_RESULT': True}.items():
+              expected = 'success' if needed else 'skipped'
+              if os.environ.get(name) != expected:
+                  raise SystemExit(f'{name}: expected {expected}, got {os.environ.get(name, "missing")}')
+          print('All native jobs required by this workflow mode succeeded')
+          PY_NATIVE_GATE
