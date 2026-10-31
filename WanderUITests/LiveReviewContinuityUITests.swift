@@ -1273,20 +1273,17 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         // Both queries avoid the identically labeled Nearby header button.
         let choice: XCUIElement
         if let semanticOptionID {
-            choice = app.buttons.matching(identifier: semanticOptionID).element
+            choice = app.buttons.matching(NSPredicate(
+                format: "identifier == %@ AND enabled == true", semanticOptionID)).element
         } else {
-            choice = app.collectionViews.buttons.matching(NSPredicate(format: "label == %@", option)).element
+            choice = app.collectionViews.buttons.matching(NSPredicate(
+                format: "label == %@ AND enabled == true", option)).element
         }
-        waitHittable(choice, diagnosticFailure: { snapshotError in
+        waitForEnabledPopupChoice(choice, diagnosticFailure: {
             // Observe the failed wait once, before its original assertion aborts
             // the test. These reads neither retry the tap nor extend its gate.
             self.capture("popup-option-wait-failed")
             var observations = ["option=\(option)", "postFailureSnapshotRequestedUptime=\(ProcessInfo.processInfo.systemUptime)"]
-            if let snapshotError {
-                observations.append("lastChoiceSnapshotError=\(String(describing: snapshotError))")
-            } else {
-                observations.append("lastChoiceSnapshotError=none")
-            }
             do {
                 let snapshot = try app.snapshot()
                 var choiceCount = 0
@@ -1557,6 +1554,40 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func finite(_ frame: CGRect) -> Bool {
         !frame.isNull && !frame.isInfinite && !frame.isEmpty
             && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
+    }
+
+    private func waitForEnabledPopupChoice(_ choice: XCUIElement, diagnosticFailure: () -> Void) {
+        // The unique popup query already requires enabled == true. Resolve its
+        // genuine native hit point once per poll, without a separate snapshot.
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let deadline = startedAt + 10
+        var pollCount = 0
+        var totalReadSeconds: TimeInterval = 0
+        var maximumReadSeconds: TimeInterval = 0
+        var lateHitCount = 0
+        var lastHittable = false
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
+            pollCount += 1
+            let readStartedAt = ProcessInfo.processInfo.systemUptime
+            let hittable = choice.isHittable
+            let readFinishedAt = ProcessInfo.processInfo.systemUptime
+            let readSeconds = readFinishedAt - readStartedAt
+            totalReadSeconds += readSeconds
+            maximumReadSeconds = max(maximumReadSeconds, readSeconds)
+            lastHittable = hittable
+            if hittable && readFinishedAt > deadline { lateHitCount += 1 }
+            return hittable && readFinishedAt <= deadline
+        }, object: nil)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 10)
+        if result != .completed {
+            let observation = XCTAttachment(string: "pollCount=\(pollCount); totalNativeReadMS=\(totalReadSeconds * 1_000); maximumNativeReadMS=\(maximumReadSeconds * 1_000); lastHittable=\(lastHittable); hittableReturnedAfterDeadlineCount=\(lateHitCount); elapsedMS=\((ProcessInfo.processInfo.systemUptime - startedAt) * 1_000); waitResult=\(result.rawValue)")
+            observation.name = "REC-675-popup-native-hit-observation"
+            observation.lifetime = .keepAlways
+            add(observation)
+            diagnosticFailure()
+        }
+        XCTAssertEqual(result, .completed)
     }
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,

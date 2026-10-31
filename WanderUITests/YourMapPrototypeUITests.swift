@@ -250,8 +250,8 @@ final class YourMapPrototypeUITests: XCTestCase {
 
     func testGeographyOnlyUnknownLocationsShowsEmptyColumnsWithoutToggle() {
         let app = launchGeography(page: "patternsGeographyEmpty")
-        XCTAssertTrue(app.staticTexts["No cities yet"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["No countries yet"].exists)
+        XCTAssertTrue(app.staticTexts["No Cities yet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No Countries yet"].exists)
         XCTAssertFalse(app.buttons["yourMap.prototype.geography.expand"].exists)
         XCTAssertEqual(geographyRows(in: app, kind: "city").count, 0)
         XCTAssertEqual(geographyRows(in: app, kind: "country").count, 0)
@@ -412,7 +412,7 @@ final class YourMapPrototypeUITests: XCTestCase {
         XCTAssertFalse(app.buttons["listEditor.addPlaces"].exists)
         XCTAssertFalse(app.staticTexts["Place changes save immediately."].exists)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ AND label ENDSWITH %@", "Remove ", " from list")).count, 0)
-        let collaborators = app.staticTexts["collaborators"]
+        let collaborators = app.staticTexts["Collaborators"]
         for _ in 0..<3 where !collaborators.isHittable {
             app.swipeUp()
         }

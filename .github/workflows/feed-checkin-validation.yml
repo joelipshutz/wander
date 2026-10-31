@@ -17,9 +17,11 @@ on:
       - 'WanderTests/PersonMention*Tests.swift'
       - 'Wander/Services/FeedModels.swift'
       - 'Wander/Services/ActivityEngagementModels.swift'
+      - 'Wander/Services/ActivityBookmarkObservation.swift'
       - 'Wander/Services/WanderLocalStore.swift'
       - 'WanderTests/Feed*Tests.swift'
       - 'WanderTests/ActivityBookmarkProjectionTests.swift'
+      - 'WanderTests/ActivityBookmarkObservationTests.swift'
       - 'WanderTests/ImportMountedFeedResponsivenessTests.swift'
       - 'WanderTests/RetainedTabContentTests.swift'
       - 'WanderTests/ActivityEngagementTests.swift'
@@ -38,9 +40,12 @@ on:
       - 'WanderUITests/MapFilterInteractionUITests.swift'
       - 'scripts/run-parent-regression.py'
       - 'scripts/test_import_performance_routing.py'
+      - 'scripts/test_live_continuity_workflow.py'
+      - 'scripts/test_compact_workflow_isolation.py'
       - 'WanderTests/ImportAutoSaveFileResponsivenessTests.swift'
       - 'WanderTests/ImportAutoSavePerformanceTests.swift'
       - 'WanderTests/ImportAutoSaveWithoutListPerformanceTests.swift'
+      - 'WanderTests/PureModelPerformanceTestHost*.swift'
       - 'scripts/record-replay-compiler-flags.py'
       - 'scripts/test_record_replay_compiler_flags.py'
       - 'scripts/replay-simulator-fixture.py'
@@ -102,19 +107,18 @@ jobs:
           -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
 
-  native:
-    if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only }}
+  native-main:
+    if: ${{ !inputs.compact_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
-    # Large + compact + isolated Replay finished at the old 75-minute ceiling,
-    # leaving no time for artifact upload and runner cleanup. Test deadlines
-    # remain unchanged; this budget covers the entire multi-simulator job.
+    # Large-phone units, import stress and Replay retain their existing budget.
+    # Compact UI has an independent runner so this work cannot consume its time.
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           lfs: true
-      - name: Generate project and select existing simulators
+      - name: Generate project and select existing large simulator
         run: |
           brew install xcodegen
           xcodegen generate
@@ -123,8 +127,7 @@ jobs:
           import json, os, re
           from pathlib import Path
           devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
-          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID'),
-                             (('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+          for names, key in [(('iPhone 17 Pro', 'iPhone 17'), 'LARGE_DEVICE_ID')]:
               for name in names:
                   choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
                              for runtime, rows in devices.items() if 'iOS' in runtime
@@ -361,26 +364,11 @@ jobs:
       - name: Stop large simulator
         if: ${{ always() && steps.replay-fixture.outcome == 'skipped' }}
         run: xcrun simctl shutdown "$LARGE_DEVICE_ID" || true
-      - name: Verify scrolling on a compact phone
-        if: ${{ (success() || failure()) && (inputs.compact_only || !inputs.unpassed_only) }}
-        run: >-
-          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
-          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
-          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
-          -only-testing:WanderUITests/FeedPaginationUITests
-          -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
-          -only-testing:WanderUITests/FeedConsolidationUITests/testUnseenDotsClearOnlyAfterBrowsingAndPersistAcrossReopening
-          -only-testing:WanderUITests/LiveDrawerActionsUITests
-          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
-          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
-          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
-          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
-          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
       - name: Export native evidence
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          for size in large small; do
+          for size in large; do
             if [ -d "$RUNNER_TEMP/$size.xcresult" ]; then
               xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/$size.xcresult" > "$RUNNER_TEMP/evidence/$size-summary.json" || true
               xcrun xcresulttool export attachments --path "$RUNNER_TEMP/$size.xcresult" --output-path "$RUNNER_TEMP/evidence/$size" || true
@@ -405,7 +393,6 @@ jobs:
             ${{ runner.temp }}/ImportAutoSaveWithoutListPerformance.tests.json
             ${{ runner.temp }}/import-autosave-no-list-performance-selection.json
             ${{ runner.temp }}/large.xcresult
-            ${{ runner.temp }}/small.xcresult
             ${{ runner.temp }}/replay-private.xcresult
             ${{ runner.temp }}/replay-credentials.xcresult
             ${{ runner.temp }}/replay-private-host.json
@@ -420,6 +407,107 @@ jobs:
             ${{ runner.temp }}/replay-masked-scroll-host
             ${{ runner.temp }}/replay-simulator-fixture
           retention-days: 14
+
+  native-compact:
+    if: ${{ !inputs.continuity_only && !inputs.continuity_remaining_only && (inputs.compact_only || !inputs.unpassed_only) }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          lfs: true
+      - name: Verify independent compact workflow contracts
+        run: python3 -B -m unittest discover -s scripts -p test_compact_workflow_isolation.py
+      - name: Generate project and select existing compact simulator
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          devices = json.loads((Path(os.environ['RUNNER_TEMP']) / 'devices.json').read_text())['devices']
+          for names, key in [(('iPhone 17e', 'iPhone 16e', 'iPhone SE (3rd generation)'), 'SMALL_DEVICE_ID')]:
+              for name in names:
+                  choices = [(tuple(map(int, re.findall(r'\d+', runtime))), d)
+                             for runtime, rows in devices.items() if 'iOS' in runtime
+                             for d in rows if d['name'] == name]
+                  if choices:
+                      device = sorted(choices, key=lambda item: item[0])[-1][1]
+                      break
+              else:
+                  raise RuntimeError(f'No supported simulator for {key}')
+              with open(os.environ['GITHUB_ENV'], 'a') as output:
+                  output.write(f'{key}={device["udid"]}\n')
+              print('Testing on', device['name'])
+          PY
+      - name: Verify scrolling on a compact phone
+        if: ${{ (success() || failure()) && (inputs.compact_only || !inputs.unpassed_only) }}
+        run: >-
+          xcodebuild test -quiet -project Wander.xcodeproj -scheme Wander
+          -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
+          -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
+          -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
+          -only-testing:WanderUITests/FeedConsolidationUITests/testUnseenDotsClearOnlyAfterBrowsingAndPersistAcrossReopening
+          -only-testing:WanderUITests/LiveDrawerActionsUITests
+          -only-testing:WanderUITests/MapFilterInteractionUITests/testMoreFiltersHidesMapDockAndBottomNavigationDismissesWithoutResetting
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedRatingsStayAtTopRightForShortAndLongPlaceNames
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedPhotoStackPagesAndReturnsWithoutOpeningProfileOrPlace
+          -only-testing:WanderUITests/FeedActivityGroupingUITests/testFeedOmitsPhotoStackWhenSaveHasNoPhotos
+          -resultBundlePath "$RUNNER_TEMP/small.xcresult" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- GENERATE_INFOPLIST_FILE=YES
+      - name: Export compact native evidence
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/evidence"
+          if [ -d "$RUNNER_TEMP/small.xcresult" ]; then
+            xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/small.xcresult" > "$RUNNER_TEMP/evidence/small-summary.json" || true
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/small.xcresult" --output-path "$RUNNER_TEMP/evidence/small" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feed-checkin-compact-evidence
+          path: |
+            ${{ runner.temp }}/evidence
+            ${{ runner.temp }}/small.xcresult
+          retention-days: 14
+
+  # Keep the existing required check name while both native workers run independently.
+  native:
+    if: ${{ always() }}
+    needs: [native-main, native-compact]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the native jobs selected by this workflow mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMPACT_ONLY: ${{ inputs.compact_only }}
+          UNPASSED_ONLY: ${{ inputs.unpassed_only }}
+          CONTINUITY_ONLY: ${{ inputs.continuity_only }}
+          CONTINUITY_REMAINING_ONLY: ${{ inputs.continuity_remaining_only }}
+          MAIN_RESULT: ${{ needs['native-main'].result }}
+          COMPACT_RESULT: ${{ needs['native-compact'].result }}
+        run: |
+          python3 - <<'PY_NATIVE_GATE'
+          import os
+          names = ['COMPACT_ONLY', 'UNPASSED_ONLY', 'CONTINUITY_ONLY', 'CONTINUITY_REMAINING_ONLY']
+          modes = {name: os.environ.get(name, '') == 'true' for name in names}
+          if os.environ['EVENT_NAME'] != 'workflow_dispatch' and any(modes.values()):
+              raise SystemExit('Native coverage exclusions require explicit workflow_dispatch inputs')
+          if sum(modes.values()) > 1:
+              raise SystemExit('Choose one focused mode; combined exclusions are not a passing gate')
+          continuity = modes['CONTINUITY_ONLY'] or modes['CONTINUITY_REMAINING_ONLY']
+          required = {'MAIN_RESULT': not modes['COMPACT_ONLY'] and not continuity,
+                      'COMPACT_RESULT': not continuity and (modes['COMPACT_ONLY'] or not modes['UNPASSED_ONLY'])}
+          for name, needed in required.items():
+              expected = 'success' if needed else 'skipped'
+              if os.environ.get(name) != expected:
+                  raise SystemExit(f'{name}: expected {expected}, got {os.environ.get(name, "missing")}')
+          print('All native jobs required by this workflow mode succeeded')
+          PY_NATIVE_GATE
 
   live-continuity:
     if: ${{ !inputs.compact_only && (!inputs.unpassed_only || inputs.continuity_only || inputs.continuity_remaining_only) }}
@@ -444,6 +532,8 @@ jobs:
         with:
           persist-credentials: false
           lfs: true
+      - name: Verify Live continuity evidence contract
+        run: python3 -B -m unittest discover -s scripts -p test_live_continuity_workflow.py
       - name: Generate project and select existing continuity simulators
         run: |
           brew install xcodegen
@@ -578,7 +668,7 @@ jobs:
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()']}
           expected_devices = {'large': os.environ.get('LARGE_DEVICE_ID', ''), 'compact': os.environ.get('SMALL_DEVICE_ID', '')}
           coverage = {
-              'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 8,
+              'testClasses': ['LiveReviewContinuityUITests', 'LiveDrawerAndFilterUITests'], 'expectedCasesPerDevice': 10,
               'requiredRegressionCases': ['SenderNotificationFlowUITests/testLargeTextAndDarkNativeControls()',
                                         'YourMapPrototypeUITests/testAdaptiveMapKeepsEveryPlaceAndExpandsAllDotsAtCloseZoom()'],
               'devices': ['large', 'compact'], 'allSelectedCasesMustPass': True}
@@ -589,7 +679,7 @@ jobs:
           (evidence / 'expected-coverage.json').write_text(json.dumps(coverage, indent=2) + '\n')
           problems = []
           for label in ['large', 'compact']:
-              expected_count = len(remaining_cases[label]) if remaining else 8
+              expected_count = len(remaining_cases[label]) if remaining else 10
               counts = {}
               bundle = root / f'live-continuity-{label}.xcresult'
               if not bundle.is_dir():
@@ -638,6 +728,8 @@ jobs:
                           'LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn()',
                           'LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()',
+                          'LiveDrawerAndFilterUITests/testFiltersLeadingEdgeOfMinimumHitTargetOpensSheet()',
+                          'LiveDrawerAndFilterUITests/testFiltersTrailingEdgeOfMinimumHitTargetOpensSheet()',
                           'LiveDrawerAndFilterUITests/testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement()']
                       if remaining:
                           required = remaining_cases[label] if label == 'large' else []

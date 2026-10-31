@@ -247,7 +247,10 @@ final class LiveExperienceUITests: XCTestCase {
         let app = launch()
         let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         XCTAssertTrue(handle.waitForExistence(timeout: 30))
-        XCTAssertTrue((handle.value as? String)?.contains("loaded updates") == true,
+        XCTAssertTrue((handle.value as? String)?.range(
+            of: #"^(?:1 activity|[0-9]+\+? activities)\. "#,
+            options: .regularExpression
+        ) != nil,
                       "The combined drawer element must retain its loaded count for VoiceOver.")
         let start = handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         start.press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)))
@@ -336,10 +339,26 @@ final class LiveExperienceUITests: XCTestCase {
         app.activate()
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertEqual(composer.value as? String, "Let’s go Saturday.")
+        XCTAssertTrue(app.navigationBars["Private reply"].exists,
+                      "Foreground return must preserve the original private-message route.")
         app.buttons["messaging.send"].tap()
         XCTAssertTrue(app.staticTexts["Let’s go Saturday."].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Simulated"].exists)
         capture("private-demo-reply")
+
+        let inboxBack = app.navigationBars.buttons["Messages"]
+        XCTAssertTrue(inboxBack.waitForExistence(timeout: 10))
+        inboxBack.tap()
+        let done = app.navigationBars.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10))
+        done.tap()
+        XCTAssertTrue(messages.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.tabBars.buttons["Profile"].isSelected)
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        waitForCondition(timeout: 10) { app.tabBars.buttons["Live"].isSelected }
+        XCTAssertFalse(composer.exists,
+                       "Dismissing Messages must release its foreground protection.")
     }
 
     func testActivityMenuOpensPrivateReplyForSelectedActivity() {

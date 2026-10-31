@@ -49,7 +49,9 @@ jobs:
       - run: deno check --config supabase/functions/clerk-profile-webhook/deno.json supabase/functions/clerk-profile-webhook/index.ts
   native:
     runs-on: macos-26
-    timeout-minutes: 60
+    # Full units, three required import stress runs and four fresh-host Replay
+    # cases share this job. Match Privacy's budget; per-test limits are unchanged.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
         with:

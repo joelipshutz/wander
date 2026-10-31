@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -27,6 +28,18 @@ WORKFLOW_CASES = {
 
 
 class ImportPerformanceRoutingTests(unittest.TestCase):
+    def test_contact_job_has_privacy_budget_for_required_serial_stress_and_replay(self):
+        def native_job(name, job="native"):
+            source = (ROOT / ".github/workflows" / name).read_text()
+            return re.split(r"\n  [\w-]+:\n", source.split("\n  " + job + ":\n", 1)[1], maxsplit=1)[0]
+        contact = native_job("contact-discovery-validation.yml")
+        privacy = native_job("privacy-validation.yml", "native-main")
+        budget = lambda job: int(re.search(r"^    timeout-minutes: (\d+)$", job, re.MULTILINE).group(1))
+        self.assertEqual(budget(contact), 100)
+        self.assertEqual(budget(contact), budget(privacy))
+        self.assertEqual(contact.count('"-default-test-execution-time-allowance", "120"'), 4)
+        self.assertEqual(contact.count('"-maximum-test-execution-time-allowance", "180"'), 4)
+
     def selection(self, suite):
         output = io.StringIO()
         with mock.patch("sys.argv", ["runner", "--suite", suite, "--list-only"]), \

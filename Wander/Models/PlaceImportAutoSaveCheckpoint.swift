@@ -127,7 +127,9 @@ struct PlaceImportAutoSaveChunkPolicy {
     let maximumRows: Int
     let budgetSeconds: TimeInterval
 
-    init(maximumRows: Int = 8, budgetSeconds: TimeInterval = 0.010) {
+    // Amortize checkpoint and presentation work across several rows. This is
+    // a soft row-work budget; snapshot and rendering time are measured separately.
+    init(maximumRows: Int = 8, budgetSeconds: TimeInterval = 0.040) {
         self.maximumRows = max(1, maximumRows)
         self.budgetSeconds = max(0, budgetSeconds)
     }

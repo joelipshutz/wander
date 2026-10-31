@@ -256,12 +256,24 @@ final class ImportSaveStreakDateProjection {
 
 @MainActor
 final class WanderStore: ObservableObject {
-    @Published private(set) var currentUser: LocalProfile
-    @Published private(set) var profiles: [LocalProfile]
-    @Published private(set) var places: [LocalPlace] {
-        didSet { importPlaceCollectionRevision &+= 1 }
+    @Published private(set) var currentUser: LocalProfile {
+        didSet {
+            finishActivityBookmarkObservation()
+            activityBookmarkHasDemand = false
+        }
     }
-    @Published private(set) var userPlaces: [LocalUserPlace]
+    @Published private(set) var profiles: [LocalProfile] {
+        didSet { invalidateActivityBookmarkStructure() }
+    }
+    @Published private(set) var places: [LocalPlace] {
+        didSet {
+            importPlaceCollectionRevision &+= 1
+            invalidateActivityBookmarkStructure()
+        }
+    }
+    @Published private(set) var userPlaces: [LocalUserPlace] {
+        didSet { invalidateActivityBookmarkStructure() }
+    }
     @Published private(set) var placeAttributes: [LocalPlaceAttribute]
     @Published private(set) var placeVisits: [LocalPlaceVisit]
     @Published private(set) var visitPhotos: [LocalVisitPhoto]
@@ -273,7 +285,9 @@ final class WanderStore: ObservableObject {
     private(set) var sharedVisitInboxUserID: String?
     @Published private(set) var sharedVisitInboxFailureUserID: String?
     @Published private(set) var follows: [LocalFollow]
-    @Published private(set) var blocks: [LocalBlock]
+    @Published private(set) var blocks: [LocalBlock] {
+        didSet { invalidateActivityBookmarkStructure() }
+    }
     @Published private(set) var mutes: [LocalMute]
     @Published private(set) var placeLists: [LocalPlaceList]
     @Published private(set) var placeListMembers: [LocalPlaceListMember]
@@ -582,8 +596,14 @@ final class WanderStore: ObservableObject {
     private var activityBookmarkStateByPlaceAliasCache: (
         revision: UInt64,
         userID: String,
+        observationID: ObjectIdentifier?,
+        observationRevision: UInt64,
+        locale: Locale,
         states: [String: ActivityBookmarkState]
     )?
+    private var activityBookmarkHasDemand = false
+    private var activityBookmarkObservation: ActivityBookmarkObservation?
+    private weak var activityBookmarkObservationContext: AutomaticImportProjectionContext?
     private var listPhotoAuthorizationScopeKeyCache: (
         revision: UInt64,
         userID: String,
@@ -1118,6 +1138,7 @@ final class WanderStore: ObservableObject {
             snapshot = WanderStoreSnapshot(store: self, records: context?.snapshotRecords(for: self))
         }
         WanderDebugLog.endPerformanceInterval("Import Checkpoint Snapshot", id: capture)
+        prewarmActivityBookmarks(using: context)
         let write = WanderDebugLog.beginPerformanceInterval("Import Checkpoint Write")
         defer { WanderDebugLog.endPerformanceInterval("Import Checkpoint Write", id: write) }
         try await persistence.checkpointAsync(snapshot)
@@ -1140,6 +1161,7 @@ final class WanderStore: ObservableObject {
         fileprivate var streak: ImportSaveStreakDateProjection?
         fileprivate var list: ListInsertionProjection?
         private var snapshots: AutomaticImportSnapshotRecords?
+        fileprivate var bookmarkObservation: ActivityBookmarkObservation?
 
         fileprivate init(store: WanderStore, ownerUserID: String) {
             self.store = store
@@ -1178,6 +1200,9 @@ final class WanderStore: ObservableObject {
         func finish() {
             guard !isFinished else { return }
             isFinished = true
+            store?.finishActivityBookmarkObservation(ownedBy: self)
+            bookmarkObservation?.finish()
+            bookmarkObservation = nil
             snapshots?.finish()
             snapshots = nil
             list?.finish()
@@ -3387,25 +3412,118 @@ final class WanderStore: ObservableObject {
         }
     }
 
+    var activityBookmarkObservationIsActive: Bool {
+        activityBookmarkObservationContext?.belongs(to: self) == true
+            && activityBookmarkObservation?.isFinished == false
+    }
+
+    var activityBookmarkObservationHasPendingSettlement: Bool {
+        activityBookmarkObservation?.hasPendingSettlement == true
+    }
+
+    var activityBookmarkObservationRegistrationCount: Int {
+        activityBookmarkObservationIsActive ? (activityBookmarkObservation?.registrationCount ?? 0) : 0
+    }
+
+    func waitForActivityBookmarkObservationSettlement() async {
+        await activityBookmarkObservation?.waitForPendingSettlement()
+    }
+
+    private func invalidateActivityBookmarkStructure() {
+        guard activityBookmarkObservation?.isFinished == false else { return }
+        activityBookmarkObservation?.invalidateStructure()
+    }
+
+    private func finishActivityBookmarkObservation(ownedBy context: AutomaticImportProjectionContext? = nil) {
+        if let context, activityBookmarkObservationContext !== context { return }
+        activityBookmarkStateByPlaceAliasCache = nil
+        activityBookmarkObservationContext = nil
+        // Keep a finished token until its pending willSet boundary settles. A
+        // synchronous observer during handoff must still bypass memoization.
+        activityBookmarkObservation?.finish()
+    }
+
+    private func prewarmActivityBookmarks(using context: AutomaticImportProjectionContext?) {
+        guard activityBookmarkHasDemand, let context, context.belongs(to: self) else { return }
+        if let owner = activityBookmarkObservationContext, owner !== context {
+            // Optional warming must never steal another import's observer scope.
+            return
+        }
+        if !activityBookmarkObservationIsActive {
+            guard activityBookmarkObservation?.hasPendingSettlement != true else { return }
+            let observation = ActivityBookmarkObservation()
+            context.bookmarkObservation = observation
+            activityBookmarkObservation = observation
+            activityBookmarkObservationContext = context
+            activityBookmarkStateByPlaceAliasCache = nil
+        }
+        _ = activityBookmarkStatesByPlaceAlias()
+    }
+
     private func activityBookmarkStatesByPlaceAlias() -> [String: ActivityBookmarkState] {
+        activityBookmarkHasDemand = true
+        if activityBookmarkObservation?.isFinished == false,
+           !activityBookmarkObservationIsActive {
+            finishActivityBookmarkObservation()
+        }
+        // Read even on a warm hit so mounted consumers retain a lightweight
+        // dependency instead of the library's per-field observation graph.
+        let observationRevision = activityBookmarkObservation?.revision ?? 0
+        let observation = activityBookmarkObservationIsActive ? activityBookmarkObservation : nil
+        let observationID = observation.map(ObjectIdentifier.init)
+        let pending = activityBookmarkObservation?.hasPendingSettlement == true
+        let locale = Locale.current
         if let cached = activityBookmarkStateByPlaceAliasCache,
+           !pending,
            cached.revision == presentationRevision,
-           cached.userID == currentUser.id {
+           cached.userID == currentUser.id,
+           cached.observationID == observationID,
+           cached.observationRevision == observationRevision,
+           cached.locale == locale {
             return cached.states
         }
 
+        let refresh = observation?.beginRefresh() == true ? observation : nil
+        defer { refresh?.endRefresh() }
         activityBookmarkIndexBuildCount += 1
         var states: [String: ActivityBookmarkState] = [:]
         let filters = PlaceFilters(ownerScopes: ["you"])
-        // Bookmark state consumes only authorized place identity and status.
-        // Reuse an existing full projection, but do not build attributes and
-        // visit observations solely to discard them for every import revision.
-        let ownedPlaces = visiblePlacesCache.first(where: { $0.filters == filters })?.places
-            ?? mergeVisiblePlaces(
-                localVisiblePlaces(filters: filters, includingAttributes: false).places
-                    + remoteVisiblePlaces(filters: filters)
+        refresh?.watch(currentUser, role: "viewer") { _ = $0.id }
+        for block in blocks {
+            refresh?.watch(block, role: "block") {
+                _ = $0.blockerUserID
+                _ = $0.blockedUserID
+            }
+        }
+        // Ordinary browsing retains its existing full-projection fast path.
+        // Once a bridge has watched raw edits, that presentation cache is not
+        // proof of current membership, including during the scope's handoff.
+        let ownedPlaces: [VisiblePlace]
+        if activityBookmarkObservation == nil,
+           let cached = visiblePlacesCache.first(where: { $0.filters == filters }) {
+            ownedPlaces = cached.places
+        } else {
+            ownedPlaces = mergeVisiblePlaces(
+                localVisiblePlaces(filters: filters, includingAttributes: false,
+                    bookmarkObservation: refresh).places
+                    + remoteVisiblePlaces(filters: filters, bookmarkObservation: refresh)
             )
+        }
         for visiblePlace in ownedPlaces {
+            refresh?.watch(visiblePlace.userPlace, role: "bookmark-status") { _ = $0.statusRaw }
+            refresh?.watch(visiblePlace.place, role: "bookmark-alias") {
+                _ = $0.localID
+                _ = $0.serverID
+                _ = $0.canonicalName
+                _ = $0.address
+                _ = $0.locality
+                _ = $0.region
+                _ = $0.country
+                _ = $0.latitude
+                _ = $0.longitude
+                _ = $0.sourceProvider
+                _ = $0.sourceProviderPlaceID
+            }
             let state: ActivityBookmarkState = visiblePlace.userPlace.status == .wannaGo
                 ? .wanna
                 : .checkedIn
@@ -3415,11 +3533,16 @@ final class WanderStore: ObservableObject {
                 }
             }
         }
-        activityBookmarkStateByPlaceAliasCache = (
-            revision: presentationRevision,
-            userID: currentUser.id,
-            states: states
-        )
+        if !pending {
+            activityBookmarkStateByPlaceAliasCache = (
+                revision: presentationRevision,
+                userID: currentUser.id,
+                observationID: observationID,
+                observationRevision: observationRevision,
+                locale: locale,
+                states: states
+            )
+        }
         return states
     }
 
@@ -6329,7 +6452,8 @@ final class WanderStore: ObservableObject {
 
     private func localVisiblePlaces(
         filters: PlaceFilters = PlaceFilters(),
-        includingAttributes: Bool = true
+        includingAttributes: Bool = true,
+        bookmarkObservation: ActivityBookmarkObservation? = nil
     ) -> LocalVisiblePlaceProjection {
         let normalizedCategories = filters.normalizedCategories
         // Category predicates can consume attribute-derived presentation. The
@@ -6338,11 +6462,13 @@ final class WanderStore: ObservableObject {
         let attributesByUserPlaceID: [String: [LocalPlaceAttribute]] = needsAttributes
             ? Dictionary(grouping: placeAttributes, by: \.userPlaceID) : [:]
         let placesByID = places.reduce(into: [String: LocalPlace]()) { result, place in
+            bookmarkObservation?.watch(place, role: "place-identity") { _ = $0.id }
             if result[place.id] == nil {
                 result[place.id] = place
             }
         }
         let profilesByID = profiles.reduce(into: [String: LocalProfile]()) { result, profile in
+            bookmarkObservation?.watch(profile, role: "profile-identity") { _ = $0.id }
             if result[profile.id] == nil {
                 result[profile.id] = profile
             }
@@ -6368,6 +6494,7 @@ final class WanderStore: ObservableObject {
         var accessByOwnerID: [String: (relationship: ViewerRelationship, blocked: Bool)] = [:]
 
         for userPlace in userPlaces {
+            bookmarkObservation?.watch(userPlace, role: "save-owner") { _ = $0.userID }
             let ownerOnlyProfile: LocalProfile?
             if isOwnerOnly {
                 // Resolve the same first profile before observing unrelated
@@ -6376,6 +6503,12 @@ final class WanderStore: ObservableObject {
                 ownerOnlyProfile = owner
             } else {
                 ownerOnlyProfile = nil
+            }
+            bookmarkObservation?.watch(userPlace, role: "owned-save-membership") {
+                _ = $0.id
+                _ = $0.placeID
+                _ = $0.deletedAt
+                _ = $0.visibilityRaw
             }
             let userPlaceID = userPlace.id
             let placeID = userPlace.placeID
@@ -6445,7 +6578,10 @@ final class WanderStore: ObservableObject {
         return LocalVisiblePlaceProjection(places: visiblePlaces, listLookup: listLookup)
     }
 
-    private func remoteVisiblePlaces(filters: PlaceFilters) -> [VisiblePlace] {
+    private func remoteVisiblePlaces(
+        filters: PlaceFilters,
+        bookmarkObservation: ActivityBookmarkObservation? = nil
+    ) -> [VisiblePlace] {
         guard !remoteVisiblePlaceCache.isEmpty else { return [] }
         // Preserve profiles.first(id OR handle), including a handle match that
         // precedes an ID match. These indices live only for this synchronous
@@ -6453,6 +6589,10 @@ final class WanderStore: ObservableObject {
         var firstProfileByID: [String: Int] = [:]
         var firstProfileByHandle: [String: Int] = [:]
         for (index, profile) in profiles.enumerated() {
+            bookmarkObservation?.watch(profile, role: "remote-profile-identity") {
+                _ = $0.id
+                _ = $0.handle
+            }
             if firstProfileByID[profile.id] == nil { firstProfileByID[profile.id] = index }
             if firstProfileByHandle[profile.handle] == nil { firstProfileByHandle[profile.handle] = index }
         }
@@ -6467,6 +6607,10 @@ final class WanderStore: ObservableObject {
         let normalizedCategories = filters.normalizedCategories
         return remoteVisiblePlaceCache
             .map { visiblePlace in
+                bookmarkObservation?.watch(visiblePlace.owner, role: "remote-owner-identity") {
+                    _ = $0.id
+                    _ = $0.handle
+                }
                 let index = min(firstProfileByID[visiblePlace.owner.id] ?? Int.max,
                                 firstProfileByHandle[visiblePlace.owner.handle] ?? Int.max)
                 guard index != Int.max else { return visiblePlace }
@@ -6474,6 +6618,11 @@ final class WanderStore: ObservableObject {
                     userPlace: visiblePlace.userPlace, owner: profiles[index], attributes: visiblePlace.attributes)
             }
             .filter { visiblePlace in
+                bookmarkObservation?.watch(visiblePlace.userPlace, role: "remote-save-membership") {
+                    _ = $0.userID
+                    _ = $0.deletedAt
+                    _ = $0.visibilityRaw
+                }
                 let ownerID = visiblePlace.owner.id
                 guard visiblePlace.userPlace.deletedAt == nil,
                       visibilityPolicy.canDisplayServerAuthorizedPlace(

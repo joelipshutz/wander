@@ -11,6 +11,9 @@ final class ImportAutoSaveWithoutListPerformanceTests: XCTestCase {
     /// Fixture construction, JSON encoding, disk I/O, and network are excluded.
     /// Keep this workload unchanged on the baseline and candidate revisions.
     func testPerformanceGoogleWannaAutoSaveWithoutListWith1500ResolvedRows() async throws {
+        let host = try PureModelPerformanceTestHost()
+        defer { host.restore() }
+        await Task.yield() // Allow host detachment before any measured sample.
         let rowCount = 1_500
         let existingCount = 100
         let overlappingCount = 20
@@ -97,7 +100,7 @@ final class ImportAutoSaveWithoutListPerformanceTests: XCTestCase {
         }
 
         let attachment = XCTAttachment(string:
-            "REC675 import_autosave_without_list_coordinator rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) list_memberships=0 samples_ms=\(samples) median_ms=\(samples.sorted()[1])")
+            "REC675 import_autosave_without_list_coordinator host_isolation=detached_app_root rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) list_memberships=0 samples_ms=\(samples) median_ms=\(samples.sorted()[1])")
         attachment.lifetime = .keepAlways
         add(attachment)
     }

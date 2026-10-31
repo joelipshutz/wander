@@ -123,6 +123,25 @@ struct WanderStorePersistence {
         )
     }
 
+    #if DEBUG
+    /// Per-writer regression seam; never compiled into Release products.
+    static func coalescingWithSchedulingGateForTesting(
+        load: @escaping () -> WanderStoreSnapshot?,
+        write: @escaping (WanderStoreSnapshot) -> Void,
+        afterSchedulingUnlock: @escaping @Sendable () -> Void
+    ) -> WanderStorePersistence {
+        let writer = CoalescingWanderStoreSnapshotWriter(
+            write: write, checkpointWrite: nil,
+            afterSchedulingUnlockForTesting: afterSchedulingUnlock
+        )
+        return WanderStorePersistence(
+            load: { writer.flush(); return load() },
+            save: writer.save, flush: writer.flush,
+            checkpoint: writer.checkpoint, checkpointAsync: writer.checkpointAsync
+        )
+    }
+    #endif
+
     private static func writeFile(
         _ snapshot: WanderStoreSnapshot,
         to url: URL,
@@ -155,6 +174,18 @@ private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
     private var pendingWrites: [PendingWrite] = []
     private var isDrainScheduled = false
     private var lifecycleObservers: [NSObjectProtocol] = []
+    #if DEBUG
+    private var afterSchedulingUnlockForTesting: (@Sendable () -> Void)?
+
+    convenience init(
+        write: @escaping (WanderStoreSnapshot) -> Void,
+        checkpointWrite: ((WanderStoreSnapshot) throws -> Void)?,
+        afterSchedulingUnlockForTesting: @escaping @Sendable () -> Void
+    ) {
+        self.init(write: write, checkpointWrite: checkpointWrite, flushOnAppLifecycle: false)
+        self.afterSchedulingUnlockForTesting = afterSchedulingUnlockForTesting
+    }
+    #endif
 
     init(
         write: @escaping (WanderStoreSnapshot) -> Void,
@@ -235,11 +266,15 @@ private final class CoalescingWanderStoreSnapshotWriter: @unchecked Sendable {
             return
         }
         isDrainScheduled = true
-        lock.unlock()
-
+        // Publish the scheduled drain before another save can observe that flag
+        // and return. A subsequent flush must find its work on the serial queue.
         queue.async { [self] in
             drain()
         }
+        lock.unlock()
+        #if DEBUG
+        afterSchedulingUnlockForTesting?()
+        #endif
     }
 
     func flush() {

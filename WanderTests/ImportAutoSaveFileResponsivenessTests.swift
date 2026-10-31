@@ -17,6 +17,9 @@ final class ImportAutoSaveFileResponsivenessTests: XCTestCase {
     }
 
     private func measureAutoSave(rowCount: Int) async throws {
+        let host = try PureModelPerformanceTestHost()
+        defer { host.restore() }
+        await Task.yield() // Allow host detachment before any measured sample.
         let existingCount = 100
         let overlappingCount = 20
         let batchID = "autosave-performance-batch"
@@ -182,7 +185,7 @@ final class ImportAutoSaveFileResponsivenessTests: XCTestCase {
         }
 
         let attachment = XCTAttachment(string:
-            "REC675 import_autosave_actual_file rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) samples=3 heartbeat_sleep_ms=1 wall_samples_ms=\(wallSamples) wall_median_ms=\(wallSamples.sorted()[1]) rows_per_second=\(wallSamples.map { Double(rowCount) * 1_000 / $0 }) heartbeat_max_gap_samples_ms=\(maximumGapSamples) heartbeat_max_gap_median_ms=\(maximumGapSamples.sorted()[1]) heartbeat_counts=\(heartbeatCounts) decoded_save_counts=\(decodedSaveCounts) decoded_membership_counts=\(decodedMembershipCounts) decoded_receipt_counts=\(decodedReceiptCounts) decoded_added_counts=\(decodedAddedCounts) decoded_existing_counts=\(decodedExistingCounts) decoded_saved_item_counts=\(decodedSavedItemCounts) store_final_bytes=\(storeByteCounts) import_final_bytes=\(importByteCounts)")
+            "REC675 import_autosave_actual_file host_isolation=detached_app_root rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) samples=3 heartbeat_sleep_ms=1 wall_samples_ms=\(wallSamples) wall_median_ms=\(wallSamples.sorted()[1]) rows_per_second=\(wallSamples.map { Double(rowCount) * 1_000 / $0 }) heartbeat_max_gap_samples_ms=\(maximumGapSamples) heartbeat_max_gap_median_ms=\(maximumGapSamples.sorted()[1]) heartbeat_counts=\(heartbeatCounts) decoded_save_counts=\(decodedSaveCounts) decoded_membership_counts=\(decodedMembershipCounts) decoded_receipt_counts=\(decodedReceiptCounts) decoded_added_counts=\(decodedAddedCounts) decoded_existing_counts=\(decodedExistingCounts) decoded_saved_item_counts=\(decodedSavedItemCounts) store_final_bytes=\(storeByteCounts) import_final_bytes=\(importByteCounts)")
         attachment.lifetime = .keepAlways
         add(attachment)
     }

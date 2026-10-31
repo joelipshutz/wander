@@ -4,6 +4,111 @@ import XCTest
 
 @MainActor
 final class PlaceImportAutoSaveChunkTests: XCTestCase {
+    func testFourRowCrashCheckpointReplaysIntraChunkDuplicateAndOriginalReceiptEntries() async throws {
+        let fixture = try ChunkFixture(count: 9, duplicateFirstPair: true)
+        defer { fixture.removeFiles() }
+        let stopped = await fixture.process(maximumRows: 4,
+            afterLibraryCheckpoint: { throw ChunkFailure.requested })
+        XCTAssertFalse(stopped.hasResult)
+        let durable = try XCTUnwrap(fixture.libraryPersistence.load())
+        let checkpoint = try XCTUnwrap(durable.automaticImportCheckpoints?.first)
+        let originalEntries = checkpoint.completedItems.map(\.entry)
+        XCTAssertEqual(checkpoint.completedItems.map(\.itemID), (0..<4).map { "item-\($0)" })
+        XCTAssertEqual(originalEntries.map(\.outcome), [.added, .existing, .added, .added])
+        let firstSaveID = try XCTUnwrap(originalEntries.first?.userPlaceID)
+        XCTAssertEqual(Array(originalEntries.prefix(2)).compactMap(\.userPlaceID), [firstSaveID, firstSaveID])
+        XCTAssertEqual(durable.userPlaces.count, 3)
+        XCTAssertEqual(fixture.store.userPlaces.count, 3)
+        XCTAssertEqual(fixture.store.placeListItems.filter { $0.deletedAt == nil }.count, 3)
+        XCTAssertFalse(checkpoint.isComplete)
+        let unadvanced = try fixture.importPersistence.load()
+        XCTAssertEqual(unadvanced.items.count, 9)
+        XCTAssertTrue(unadvanced.items.allSatisfy { $0.state != .saved })
+        XCTAssertNil(unadvanced.batches.first?.receipt)
+        XCTAssertNil(unadvanced.batches.first?.automaticSaveCompletedAt)
+
+        fixture.restoreBothStores()
+        let recovered = await fixture.process(maximumRows: 4)
+        XCTAssertEqual(recovered.addedCount, 8)
+        XCTAssertEqual(recovered.existingCount, 1)
+        let receipt = try XCTUnwrap(fixture.importStore.batches.first?.receipt)
+        XCTAssertEqual(receipt.id, checkpoint.receiptID)
+        XCTAssertEqual(receipt.entries.map(\.itemID), (0..<9).map { "item-\($0)" })
+        XCTAssertEqual(Array(receipt.entries.prefix(4)), originalEntries,
+            "Replay must preserve all four entry IDs, outcomes and original saved parents")
+        XCTAssertEqual(fixture.store.userPlaces.count, 8)
+        XCTAssertEqual(Set(fixture.store.userPlaces.map(\.id)).count, 8)
+        XCTAssertTrue(Set(originalEntries.compactMap(\.userPlaceID))
+            .isSubset(of: Set(fixture.store.userPlaces.map(\.id))))
+        XCTAssertTrue(fixture.importStore.items.allSatisfy { $0.state == .saved })
+        XCTAssertEqual(fixture.store.placeListItems.filter { $0.deletedAt == nil }.count, 8)
+        XCTAssertTrue(fixture.store.importNotificationCommits.allSatisfy { $0.silent && $0.locallyComplete })
+        XCTAssertEqual(try fixture.importPersistence.load().batches.first?.receipt, receipt)
+        let completedLibrary = try XCTUnwrap(fixture.libraryPersistence.load())
+        XCTAssertEqual(completedLibrary.userPlaces.count, 8)
+        XCTAssertEqual(completedLibrary.automaticImportCheckpoints, [])
+    }
+
+    func testHeldFourRowAcknowledgmentCannotPublishAfterCancellationOrAccountChange() async throws {
+        for changesAccount in [false, true] {
+            let fixture = try ChunkFixture(count: 9)
+            defer { fixture.removeFiles() }
+            let gate = ChunkGate()
+            fixture.afterLibraryWrite = { await gate.suspend() }
+            let task = Task { @MainActor in await fixture.process(maximumRows: 4) }
+            defer { task.cancel(); gate.release() }
+            await gate.waitUntilArrived()
+            let durable = try XCTUnwrap(fixture.libraryPersistence.load())
+            let checkpoint = try XCTUnwrap(durable.automaticImportCheckpoints?.first)
+            let originalEntries = checkpoint.completedItems.map(\.entry)
+            XCTAssertEqual(originalEntries.map(\.itemID), (0..<4).map { "item-\($0)" })
+            XCTAssertEqual(originalEntries.map(\.outcome), Array(repeating: .added, count: 4))
+            XCTAssertEqual(durable.userPlaces.count, 4)
+            let savedIDs = Set(fixture.store.userPlaces.map(\.id))
+            XCTAssertEqual(savedIDs.count, 4)
+            XCTAssertTrue(try fixture.importPersistence.load().items.allSatisfy { $0.state != .saved })
+            XCTAssertNil(fixture.importStore.batches.first?.receipt)
+            if changesAccount {
+                fixture.store.apply(authState: .signedIn(AuthSession(userID: "other-owner",
+                    displayName: "Other", handle: "other")))
+                fixture.importStore.bind(to: "other-owner")
+            } else {
+                task.cancel()
+            }
+            gate.release()
+            let result = await task.value
+            XCTAssertFalse(result.hasResult)
+            XCTAssertTrue(result.retryBatchIDs.isEmpty)
+            XCTAssertEqual(Set(fixture.store.userPlaces.map(\.id)), savedIDs,
+                "The stale task cannot save any of the five remaining rows")
+            XCTAssertTrue(fixture.store.userPlaces.allSatisfy { $0.userID == fixture.ownerID })
+            XCTAssertTrue(fixture.importStore.items.allSatisfy { $0.state != .saved })
+            XCTAssertTrue(fixture.importStore.batches.allSatisfy {
+                $0.receipt == nil && $0.automaticSaveCompletedAt == nil
+            })
+            let metadata = try fixture.importPersistence.load()
+            XCTAssertTrue(metadata.items.allSatisfy { $0.state != .saved })
+            XCTAssertTrue(metadata.batches.allSatisfy { $0.receipt == nil && $0.automaticSaveCompletedAt == nil })
+            fixture.afterLibraryWrite = nil
+            if changesAccount {
+                XCTAssertEqual(metadata.ownerUserID, "other-owner")
+                XCTAssertTrue(metadata.items.isEmpty)
+                XCTAssertTrue(metadata.batches.isEmpty)
+            } else {
+                XCTAssertEqual(metadata.items.count, 9)
+                fixture.restoreBothStores()
+                let recovered = await fixture.process(maximumRows: 4)
+                XCTAssertEqual(recovered.addedCount, 9)
+                XCTAssertEqual(recovered.existingCount, 0)
+                XCTAssertEqual(fixture.store.userPlaces.count, 9)
+                let receipt = try XCTUnwrap(fixture.importStore.batches.first?.receipt)
+                XCTAssertEqual(receipt.id, checkpoint.receiptID)
+                XCTAssertEqual(Array(receipt.entries.prefix(4)), originalEntries)
+                XCTAssertTrue(fixture.importStore.items.allSatisfy { $0.state == .saved })
+            }
+        }
+    }
+
     func testActualFileCrashBetweenLibraryAndImportCheckpointReplaysOriginalOutcomes() async throws {
         let fixture = try ChunkFixture(count: 5, duplicateFirstPair: true)
         defer { fixture.removeFiles() }

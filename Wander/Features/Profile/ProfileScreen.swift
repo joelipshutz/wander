@@ -274,6 +274,7 @@ struct ProfileScreen: View {
                     ? { showsMessages = true } : nil
             )
                 .modifier(ProfilePrivateMessagesPresentation(isPresented: $showsMessages))
+                .blocksProductUpsells(while: showsMessages, preservesForegroundEntry: true)
                 .sheet(isPresented: $showsFeedback) {
                     FeedbackSheet(repository: feedbackRepository, analytics: store.productAnalytics)
                 }

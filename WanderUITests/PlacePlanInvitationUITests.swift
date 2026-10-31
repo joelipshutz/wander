@@ -23,7 +23,8 @@ import XCTest
         bell.tap()
         let row = app.buttons["place-plan.notification.11111111-2222-4333-8444-555555555555"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertEqual(row.value as? String, "Unread")
+        XCTAssertEqual(row.value as? String, "New notification")
+        XCTAssertFalse(app.staticTexts["place-plan.message"].exists, "Visiting the inbox must not open the plan")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
         XCTAssertEqual(bell.value as? String, "No new notifications")
@@ -40,7 +41,8 @@ import XCTest
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
         bell.tap()
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertEqual(row.value as? String, "Unread", "The plan remains unopened and available")
+        XCTAssertEqual(row.value as? String, "Seen", "Inbox exposure remains acknowledged after relaunch")
+        XCTAssertFalse(app.staticTexts["place-plan.message"].exists, "The plan remains unopened and available")
         app.navigationBars.buttons.firstMatch.tap()
         XCTAssertTrue(bell.waitForExistence(timeout: 10))
         XCTAssertEqual(bell.value as? String, "No new notifications")
@@ -50,7 +52,8 @@ import XCTest
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
-                               "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest"]
+                               "-WanderDisableWalkthroughs", "-WanderPlacePlanUITest",
+                               "-WanderResetNotificationBadge"]
         app.launch()
         dismissStartupNotificationPromptIfNeeded(in: app)
         XCTAssertTrue(app.buttons["Profile"].firstMatch.waitForExistence(timeout: 15))
@@ -60,7 +63,7 @@ import XCTest
         notifications.tap()
         let row = app.buttons["place-plan.notification.11111111-2222-4333-8444-555555555555"]
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertEqual(row.value as? String, "Unread")
+        XCTAssertEqual(row.value as? String, "New notification")
         XCTAssertTrue(row.label.contains("Ryan invited you to Narwhal"))
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "rec486-notifications-plans"
@@ -72,7 +75,7 @@ import XCTest
         XCTAssertTrue(app.textFields.allElementsBoundByIndex.allSatisfy { !$0.isHittable })
         app.buttons["place-plan.close"].tap()
         XCTAssertTrue(row.waitForExistence(timeout: 10))
-        XCTAssertEqual(row.value as? String, "Read")
+        XCTAssertEqual(row.value as? String, "Seen")
         row.tap()
         XCTAssertTrue(app.staticTexts["place-plan.message"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["place-plan.message"].label, "Coffee on Saturday?")

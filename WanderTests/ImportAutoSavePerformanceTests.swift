@@ -17,6 +17,9 @@ final class ImportAutoSavePerformanceTests: XCTestCase {
     }
 
     private func measureAutoSave(rowCount: Int) async throws {
+        let host = try PureModelPerformanceTestHost()
+        defer { host.restore() }
+        await Task.yield() // Allow host detachment before any measured sample.
         let existingCount = 100
         let overlappingCount = 20
         let batchID = "autosave-performance-batch"
@@ -107,7 +110,7 @@ final class ImportAutoSavePerformanceTests: XCTestCase {
         }
 
         let attachment = XCTAttachment(string:
-            "REC675 import_autosave_coordinator rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) list_memberships=\(rowCount) samples_ms=\(samples) median_ms=\(samples.sorted()[1])")
+            "REC675 import_autosave_coordinator host_isolation=detached_app_root rows=\(rowCount) existing=\(existingCount) overlaps=\(overlappingCount) list_memberships=\(rowCount) samples_ms=\(samples) median_ms=\(samples.sorted()[1])")
         attachment.lifetime = .keepAlways
         add(attachment)
     }
