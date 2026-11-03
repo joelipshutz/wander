@@ -81,6 +81,31 @@ final class LiveProjectionPerformanceTests: XCTestCase {
         }
     }
 
+    func testImmutableIdentityRemainsAStableSetKeyAfterPlaceMetadataChanges() {
+        let place = makePlace(id: 1, key: "original")
+        let original = LivePlaceIdentity(places: [place])
+        let equivalent = LivePlaceIdentity(places: [place, place])
+        let originalAliases = original.aliases
+        let originalKey = original.cacheKey
+        var identities: Set<LivePlaceIdentity> = [original]
+        XCTAssertEqual(original, equivalent)
+        XCTAssertTrue(identities.contains(equivalent))
+        XCTAssertFalse(identities.insert(equivalent).inserted)
+
+        place.sourceProviderPlaceID = "corrected-provider-token"
+        place.address = "20 Corrected Road"
+        let corrected = LivePlaceIdentity(places: [place])
+        XCTAssertEqual(original.aliases, originalAliases)
+        XCTAssertEqual(original.cacheKey, originalKey)
+        XCTAssertNotEqual(corrected.aliases, originalAliases)
+        XCTAssertNotEqual(corrected, original)
+        XCTAssertTrue(identities.contains(original))
+        XCTAssertTrue(identities.contains(equivalent))
+        XCTAssertTrue(identities.insert(corrected).inserted)
+        XCTAssertEqual(identities.count, 2)
+        XCTAssertTrue(original.matches(place), "The stable place ID still joins corrected metadata.")
+    }
+
     private struct Fixture {
         let activities: [FeedActivity]
         let ownHistory: [VisiblePlace]

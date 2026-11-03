@@ -280,31 +280,24 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let originalDrawerLabel = app.staticTexts["live.drawerHandle"].label
         let destinationTopLimit = app.buttons["live.scope.featured"].frame.maxY
         let searchMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
-        let search = readySearch(in: app, startedAt: diagnosticStart)
         captureRouteDiagnostics("search-before-single-tap", in: app, startedAt: diagnosticStart,
             queries: [("exact-Search-label", searchMatches)])
+        // Resolve and verify the physical target after diagnostics, before the
+        // timed input. Do not spend the response window capturing the hierarchy.
+        let searchTarget = readySearch(in: app, startedAt: diagnosticStart)
         let tappedAt = ProcessInfo.processInfo.systemUptime
         let destinationDeadline = tappedAt + 10
-        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        searchTarget.tap()
         let searchBack = app.buttons["discover.searchBack"]
-        // Observe the native destination before collecting the full hierarchy.
-        let immediateSearchExists = searchBack.exists
-        let immediateObservedAt = ProcessInfo.processInfo.systemUptime
-        var reachedSearch = immediateSearchExists && immediateObservedAt <= destinationDeadline
+        let reachedSearch = UIObservation.wait(timeout: max(0, destinationDeadline - ProcessInfo.processInfo.systemUptime)) {
+            let exists = searchBack.exists
+            return exists && ProcessInfo.processInfo.systemUptime <= destinationDeadline
+        } == .completed
         captureRouteDiagnostics("search-after-single-tap", in: app, startedAt: diagnosticStart,
             queries: [("exact-Search-label", searchMatches)], observations: [
                 "tapStartedElapsedSeconds=\(tappedAt - diagnosticStart)",
-                "immediateSearchExists=\(immediateSearchExists); observedElapsedSeconds=\(immediateObservedAt - diagnosticStart); withinDestinationDeadline=\(immediateObservedAt <= destinationDeadline)"
+                "destinationObservedWithinOriginalTenSeconds=\(reachedSearch)"
             ])
-        // Capture time counts inside the original ten seconds from the only tap.
-        if !reachedSearch {
-            let remaining = destinationDeadline - ProcessInfo.processInfo.systemUptime
-            if remaining > 0 {
-                let appeared = searchBack.waitForExistence(timeout: remaining)
-                let observedAt = ProcessInfo.processInfo.systemUptime
-                reachedSearch = appeared && observedAt <= destinationDeadline
-            }
-        }
         if !reachedSearch {
             captureRouteDiagnostics("search-destination-wait-failed", in: app, startedAt: diagnosticStart,
                 queries: [("exact-Search-label", searchMatches)])
@@ -380,15 +373,14 @@ final class LiveReviewContinuityUITests: XCTestCase {
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,
                               diagnosticFailure: (() -> Void)? = nil) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let result = UIObservation.wait(timeout: timeout) {
             element.exists && element.isHittable
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        }
         if result != .completed { diagnosticFailure?() }
         XCTAssertEqual(result, .completed)
     }
 
-    private func readySearch(in app: XCUIApplication, startedAt: TimeInterval) -> XCUIElement {
+    private func readySearch(in app: XCUIApplication, startedAt: TimeInterval) -> XCUICoordinate {
         let matches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
         let count = matches.count
         if count != 1 {
@@ -399,15 +391,17 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let element = matches.element(boundBy: 0)
         let hittable = element.exists && element.isEnabled && element.isHittable
         let frame = hittable ? element.frame : CGRect.null
+        let applicationFrame = app.frame
         let ready = hittable && !frame.isNull && !frame.isInfinite && !frame.isEmpty
             && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy({ $0.isFinite })
-            && frame.width >= 44 && frame.height >= 44 && app.frame.contains(frame)
+            && frame.width >= 44 && frame.height >= 44 && applicationFrame.contains(frame)
         if !ready {
             captureRouteDiagnostics("search-readiness-failed", in: app, startedAt: startedAt,
                 queries: [("exact-Search-label", matches)])
         }
         XCTAssertTrue(ready, "Expected one enabled, hittable Search control with a full safe44pt frame")
-        return element
+        return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: frame.midX - applicationFrame.minX, dy: frame.midY - applicationFrame.minY))
     }
 
     private func captureRouteDiagnostics(_ name: String, in app: XCUIApplication, startedAt: TimeInterval,
@@ -688,7 +682,14 @@ final class LiveReviewContinuityUITests: XCTestCase {
 /// Uses the same current Live fixtures and committed-query contract as the journeys above.
 @MainActor
 final class LiveDrawerAndFilterUITests: XCTestCase {
-    override func setUp() { continueAfterFailure = false }
+    override func setUp() {
+        continueAfterFailure = false
+        addUIInterruptionMonitor(withDescription: "Dismiss Simulator notification banners") { element in
+            guard element.identifier == "NotificationShortLookView" else { return false }
+            element.swipeUp()
+            return true
+        }
+    }
 
     // Featured commits a viewport polygon: the four place activities match it;
     // Maya’s list-created event has no place and remains outside that query.
@@ -786,10 +787,30 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         captureCityPickerState("city-picker-before-tap", in: app, observations: [
             "cityExists=\(city.exists); cityFrame=\(city.frame); cityHittable=\(city.isHittable)"
         ])
-        // Use one deliberate native row-center press; destination observation
-        // below retains its five-second limit and exact selection assertions.
-        city.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.2)
+        XCTAssertTrue(UIObservation.dismissSystemNotificationBannerIfPresent())
+        // Diagnostics can outlive the captured row geometry. Re-admit the exact
+        // native row after them, then issue one ordinary tap without asking
+        // XCTest to resolve/scroll the element again during event synthesis.
+        guard let snapshot = try? app.snapshot() else {
+            return XCTFail("Expected a fresh native hierarchy before opening Area center")
+        }
+        let nodes = UIObservation.descendants(of: snapshot)
+        let cityRows = nodes.filter { $0.elementType == .button && $0.identifier == "live.filter.city" }
+        guard cityRows.count == 1, let row = cityRows.first, row.isEnabled,
+              let formFrame = nodes.first(where: { $0.identifier == "live.filters.form" })?.frame,
+              let navigationFrame = nodes.first(where: { $0.elementType == .navigationBar && $0.identifier == "Filters" })?.frame,
+              finite(row.frame), row.frame.width >= 44, row.frame.height >= 44,
+              formFrame.intersection(snapshot.frame).contains(row.frame),
+              row.frame.minY >= navigationFrame.maxY, city.isHittable else {
+            return XCTFail("Expected one enabled, hittable Area center row fully inside the visible form")
+        }
+        let rowCenter = CGPoint(x: row.frame.midX, y: row.frame.midY)
+        let admitted = XCTAttachment(string: "frame=\(row.frame); appFrame=\(snapshot.frame); contact=\(rowCenter); input=tap; maximumTapCount=1")
+        admitted.name = "REC-676-area-center-admitted-tap"
+        admitted.lifetime = .keepAlways
+        add(admitted)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: rowCenter.x - snapshot.frame.minX, dy: rowCenter.y - snapshot.frame.minY)).tap()
         guard let cityTarget = revealNativeCityOption("Los Angeles", in: app) else { return }
         let losAngeles = cityTarget.element
         let contact = CGPoint(x: cityTarget.frame.midX, y: cityTarget.frame.midY)
@@ -1195,6 +1216,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private enum FilterHitEdge: String { case leading, trailing }
 
     private func openFilters(in app: XCUIApplication, pressAtEdge edge: FilterHitEdge? = nil) {
+        XCTAssertTrue(UIObservation.dismissSystemNotificationBannerIfPresent())
         let button = app.buttons.matching(NSPredicate(
             format: "identifier == %@ AND label == %@ AND enabled == true",
             "slider.horizontal.3", "Filters")).element
@@ -1245,13 +1267,27 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                 .withOffset(CGVector(dx: point.x - applicationFrame.minX, dy: point.y - applicationFrame.minY))
                 .press(forDuration: 0.1)
         } else {
-            button.press(forDuration: 0.1)
+            // The ordinary Filters journey exercises a tap, not a long press.
+            // Reuse the native frame admitted above; do not resolve a new target.
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: previousFrame.midX - applicationFrame.minX,
+                dy: previousFrame.midY - applicationFrame.minY)).tap()
         }
-        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForExistence(timeout: 5))
+        // Query the native Form directly. An all-descendants identifier search
+        // walks the covered map/feed as well and can consume the response budget
+        // after the sheet has already appeared.
+        let form = filterFormElement(in: app)
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            form.exists
+        }, .completed, "Filters must open within the original five-second response budget.")
+    }
+
+    private func filterFormElement(in app: XCUIApplication) -> XCUIElement {
+        app.collectionViews.matching(NSPredicate(format: "identifier == %@", "live.filters.form")).firstMatch
     }
 
     private func filterForm(in app: XCUIApplication) -> XCUIElement {
-        let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
+        let form = filterFormElement(in: app)
         XCTAssertTrue(form.waitForExistence(timeout: 5))
         return form
     }
@@ -1471,7 +1507,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             // still chooses the direction that brings that exact row into view.
             guard attempt < 16 else { break }
             let dragDown = observed.button.map { $0.minY < observed.viewport.minY } ?? true
-            let from = CGPoint(x: observed.form.maxX - 8,
+            // Drag inside the content rather than the outer scroll-indicator
+            // gutter, where a native gesture can leave the row unmoved.
+            let from = CGPoint(x: observed.viewport.midX,
                                y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.45 : 0.75))
             let to = CGPoint(x: from.x,
                              y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.75 : 0.45))
@@ -1522,7 +1560,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func reveal(_ element: XCUIElement, in scroll: XCUIElement, direction: Direction, app: XCUIApplication) {
         for _ in 0..<16 {
             let viewport = usableViewport(scroll, app: app)
-            if element.exists && finite(element.frame) && viewport.contains(element.frame) && element.isHittable { return }
+            if visibleAndHittable(element, in: viewport) { return }
             XCTAssertTrue(finite(viewport) && viewport.width > 44 && viewport.height > 88)
             let fromY: CGFloat = direction == .down ? 0.75 : 0.45
             let toY: CGFloat = direction == .down ? 0.45 : 0.75
@@ -1539,7 +1577,26 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         tree.name = "REC-636-bounded-scroll-target-unreachable-hierarchy"
         tree.lifetime = .keepAlways
         add(tree)
-        XCTAssertTrue(element.exists && finite(element.frame) && usableViewport(scroll, app: app).contains(element.frame) && element.isHittable)
+        XCTAssertTrue(visibleAndHittable(element, in: usableViewport(scroll, app: app)))
+    }
+
+    private func visibleAndHittable(_ element: XCUIElement, in viewport: CGRect) -> Bool {
+        guard element.exists, let row = try? element.snapshot(),
+              finite(row.frame), viewport.contains(row.frame) else { return false }
+        if row.elementType == .switch {
+            let nativeSwitches = row.children.flatMap { UIObservation.descendants(of: $0) }
+                .filter { $0.elementType == .switch }
+            if !nativeSwitches.isEmpty {
+                // SwiftUI's labeled wrapper has no activation point on some
+                // Simulator snapshots. Require the actual native switch to be
+                // visible and hittable, just as setOn does before toggling it.
+                guard nativeSwitches.count == 1, let native = nativeSwitches.first,
+                      native.isEnabled, finite(native.frame), viewport.contains(native.frame),
+                      row.frame.contains(CGPoint(x: native.frame.midX, y: native.frame.midY)) else { return false }
+                return element.switches.firstMatch.isHittable
+            }
+        }
+        return element.isHittable
     }
 
     private func usableViewport(_ scroll: XCUIElement, app: XCUIApplication) -> CGRect {
@@ -1594,7 +1651,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                               diagnosticFailure: ((Error?) -> Void)? = nil) {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         var lastSnapshotError: Error?
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let result = UIObservation.wait(timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime)) {
             // A successful snapshot resolves existence and enabled state together;
             // hittability still comes from the genuine native element query.
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
@@ -1609,8 +1666,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             let hittable = element.isHittable
             return hittable && ProcessInfo.processInfo.systemUptime <= deadline
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        }
         if result != .completed { diagnosticFailure?(lastSnapshotError) }
         XCTAssertEqual(result, .completed)
     }

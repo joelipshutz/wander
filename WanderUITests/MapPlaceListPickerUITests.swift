@@ -246,13 +246,24 @@ final class MapPlaceListPickerUITests: XCTestCase {
 
         let firstList = app.buttons["Open Realistic list 000, collaborative list"]
         XCTAssertTrue(firstList.waitForExistence(timeout: 12))
+        XCTAssertTrue(firstList.isHittable)
+        let frame = firstList.frame
+        let appFrame = app.frame
+        XCTAssertTrue(appFrame.contains(frame))
+        XCTAssertGreaterThanOrEqual(frame.width, 44)
+        XCTAssertGreaterThanOrEqual(frame.height, 44)
+        // Resolve the visible target before timing its single physical tap.
+        let contact = app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: frame.midX - appFrame.minX, dy: frame.midY - appFrame.minY))
         let openStartedAt = Date()
-        firstList.tap()
+        contact.tap()
 
         let mapButton = app.buttons.matching(
             NSPredicate(format: "label BEGINSWITH %@", "View map for Realistic list 000")
         ).firstMatch
-        XCTAssertTrue(mapButton.waitForExistence(timeout: 8))
+        XCTAssertEqual(UIObservation.wait(timeout: max(0, 8 - Date().timeIntervalSince(openStartedAt))) {
+            mapButton.exists
+        }, .completed)
         XCTAssertLessThan(
             Date().timeIntervalSince(openStartedAt),
             8,

@@ -613,8 +613,9 @@ final class CheckInQuestionUITests: XCTestCase {
         capture("REC-589 before Silent activation")
         // Allow the native switch's press recognizer to activate after scrolling.
         silent.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).press(forDuration: 0.2)
-        let enabled = NSPredicate(format: "value == %@", "1")
-        wait(for: [XCTNSPredicateExpectation(predicate: enabled, object: silent)], timeout: 5)
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? silent.snapshot().value as? String) == "1"
+        }, .completed, "Silent must enable within the original five-second response budget.")
         XCTAssertTrue(app.staticTexts["Skip notifications for this save. Visibility stays the same."].exists)
         let more = app.buttons["save.moreOptions"]
         reveal(more, in: app)

@@ -1312,7 +1312,20 @@ final class OnboardingUITests: XCTestCase {
         }
         XCTAssertTrue(done.isHittable)
         done.tap()
-        app.buttons["map.filter.featured"].tap()
+        XCTAssertTrue(popover.waitForNonExistence(timeout: 2))
+        let featured = app.buttons["map.filter.featured"]
+        featured.tap()
+        var sourceObservations: [String] = []
+        let featuredSelected = UIObservation.wait(timeout: 2) {
+            guard let snapshot = try? featured.snapshot() else { return false }
+            sourceObservations.append("selected=\(snapshot.isSelected); value=\(String(describing: snapshot.value))")
+            return snapshot.isSelected
+        }
+        let sourceEvidence = XCTAttachment(string: sourceObservations.joined(separator: "\n"))
+        sourceEvidence.name = "Map More Featured selection before reopening"
+        sourceEvidence.lifetime = .keepAlways
+        add(sourceEvidence)
+        XCTAssertEqual(featuredSelected, .completed, "Featured must be selected before inspecting its More panel.")
         more.tap()
         XCTAssertTrue(popover.waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Categories"].exists)
@@ -1506,20 +1519,12 @@ final class OnboardingUITests: XCTestCase {
         let initialSearchY = placeSearch.frame.minY
         app.swipeUp()
 
-        let hidden = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hittable == false"),
-            object: placeSearch
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [hidden], timeout: 3), .completed)
+        XCTAssertEqual(UIObservation.wait(timeout: 3) { !placeSearch.isHittable }, .completed)
         XCTAssertFalse(addButton.isHittable)
 
         app.swipeDown()
 
-        let revealed = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "hittable == true"),
-            object: placeSearch
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [revealed], timeout: 3), .completed)
+        XCTAssertEqual(UIObservation.wait(timeout: 3) { placeSearch.isHittable }, .completed)
         XCTAssertTrue(addButton.isHittable)
         XCTAssertEqual(placeSearch.frame.minY, initialSearchY, accuracy: 2)
 
@@ -2681,11 +2686,10 @@ final class OnboardingUITests: XCTestCase {
             // The account field enters the accessibility tree offscreen while
             // the carousel is still moving. Observe a fresh query until the
             // actual control has landed, within the same autoplay budget.
-            let landed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            XCTAssertEqual(UIObservation.wait(timeout: 50) {
                 let email = app.textFields["auth.email"].firstMatch
                 return email.exists && email.isHittable
-            }, object: nil)
-            XCTAssertEqual(XCTWaiter.wait(for: [landed], timeout: 50), .completed)
+            }, .completed)
             XCTAssertEqual(app.state, .runningForeground)
             XCTAssertFalse(app.buttons["auth.close"].exists)
             let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -2884,6 +2888,9 @@ final class OnboardingUITests: XCTestCase {
         }
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         note.typeText("Discard this draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? note.snapshot().value as? String) == "Discard this draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         app.buttons["save.close"].tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
@@ -2892,7 +2899,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertNotEqual(app.textViews["save.note"].value as? String, "Discard this draft")
 
         app.textViews["save.note"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.textViews["save.note"].typeText("Check-in mode draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? app.textViews["save.note"].snapshot().value as? String) == "Check-in mode draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         let wannaChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)
@@ -2904,7 +2915,11 @@ final class OnboardingUITests: XCTestCase {
         let wannaNote = app.textViews["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
         wannaNote.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         wannaNote.typeText("Wanna mode draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? wannaNote.snapshot().value as? String) == "Wanna mode draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         XCTAssertTrue(checkInChoice.isHittable)
         checkInChoice.tap()
         XCTAssertEqual(app.textViews["save.note"].value as? String, "Check-in mode draft")
