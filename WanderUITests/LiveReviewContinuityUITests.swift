@@ -682,7 +682,14 @@ final class LiveReviewContinuityUITests: XCTestCase {
 /// Uses the same current Live fixtures and committed-query contract as the journeys above.
 @MainActor
 final class LiveDrawerAndFilterUITests: XCTestCase {
-    override func setUp() { continueAfterFailure = false }
+    override func setUp() {
+        continueAfterFailure = false
+        addUIInterruptionMonitor(withDescription: "Dismiss Simulator notification banners") { element in
+            guard element.identifier == "NotificationShortLookView" else { return false }
+            element.swipeUp()
+            return true
+        }
+    }
 
     // Featured commits a viewport polygon: the four place activities match it;
     // Maya’s list-created event has no place and remains outside that query.
@@ -780,10 +787,30 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         captureCityPickerState("city-picker-before-tap", in: app, observations: [
             "cityExists=\(city.exists); cityFrame=\(city.frame); cityHittable=\(city.isHittable)"
         ])
-        // Use one deliberate native row-center press; destination observation
-        // below retains its five-second limit and exact selection assertions.
-        city.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.2)
+        XCTAssertTrue(UIObservation.dismissSystemNotificationBannerIfPresent())
+        // Diagnostics can outlive the captured row geometry. Re-admit the exact
+        // native row after them, then issue one ordinary tap without asking
+        // XCTest to resolve/scroll the element again during event synthesis.
+        guard let snapshot = try? app.snapshot() else {
+            return XCTFail("Expected a fresh native hierarchy before opening Area center")
+        }
+        let nodes = UIObservation.descendants(of: snapshot)
+        let cityRows = nodes.filter { $0.elementType == .button && $0.identifier == "live.filter.city" }
+        guard cityRows.count == 1, let row = cityRows.first, row.isEnabled,
+              let formFrame = nodes.first(where: { $0.identifier == "live.filters.form" })?.frame,
+              let navigationFrame = nodes.first(where: { $0.elementType == .navigationBar && $0.identifier == "Filters" })?.frame,
+              finite(row.frame), row.frame.width >= 44, row.frame.height >= 44,
+              formFrame.intersection(snapshot.frame).contains(row.frame),
+              row.frame.minY >= navigationFrame.maxY, city.isHittable else {
+            return XCTFail("Expected one enabled, hittable Area center row fully inside the visible form")
+        }
+        let rowCenter = CGPoint(x: row.frame.midX, y: row.frame.midY)
+        let admitted = XCTAttachment(string: "frame=\(row.frame); appFrame=\(snapshot.frame); contact=\(rowCenter); input=tap; maximumTapCount=1")
+        admitted.name = "REC-676-area-center-admitted-tap"
+        admitted.lifetime = .keepAlways
+        add(admitted)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: rowCenter.x - snapshot.frame.minX, dy: rowCenter.y - snapshot.frame.minY)).tap()
         guard let cityTarget = revealNativeCityOption("Los Angeles", in: app) else { return }
         let losAngeles = cityTarget.element
         let contact = CGPoint(x: cityTarget.frame.midX, y: cityTarget.frame.midY)
@@ -1189,6 +1216,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private enum FilterHitEdge: String { case leading, trailing }
 
     private func openFilters(in app: XCUIApplication, pressAtEdge edge: FilterHitEdge? = nil) {
+        XCTAssertTrue(UIObservation.dismissSystemNotificationBannerIfPresent())
         let button = app.buttons.matching(NSPredicate(
             format: "identifier == %@ AND label == %@ AND enabled == true",
             "slider.horizontal.3", "Filters")).element
@@ -1239,9 +1267,15 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                 .withOffset(CGVector(dx: point.x - applicationFrame.minX, dy: point.y - applicationFrame.minY))
                 .press(forDuration: 0.1)
         } else {
-            button.press(forDuration: 0.1)
+            // The ordinary Filters journey exercises a tap, not a long press.
+            // Reuse the native frame admitted above; do not resolve a new target.
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+                dx: previousFrame.midX - applicationFrame.minX,
+                dy: previousFrame.midY - applicationFrame.minY)).tap()
         }
-        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            app.descendants(matching: .any)["live.filters.form"].firstMatch.exists
+        }, .completed, "Filters must open within the original five-second response budget.")
     }
 
     private func filterForm(in app: XCUIApplication) -> XCUIElement {

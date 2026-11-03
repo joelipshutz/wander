@@ -20,6 +20,16 @@ enum UIObservation {
         return XCTWaiter.wait(for: [expectation], timeout: remaining)
     }
 
+    /// Simulator setup notifications are not part of the app interaction. Clear
+    /// only the native notification banner, before admitting a timed app input.
+    static func dismissSystemNotificationBannerIfPresent() -> Bool {
+        let banner = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            .otherElements["NotificationShortLookView"].firstMatch
+        guard banner.exists else { return true }
+        banner.swipeUp()
+        return banner.waitForNonExistence(timeout: 5)
+    }
+
     static func descendants(of root: XCUIElementSnapshot) -> [XCUIElementSnapshot] {
         var result: [XCUIElementSnapshot] = []
         var pending = [root]

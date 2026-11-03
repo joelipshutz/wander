@@ -2897,6 +2897,9 @@ final class OnboardingUITests: XCTestCase {
         }
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         note.typeText("Discard this draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? note.snapshot().value as? String) == "Discard this draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         app.buttons["save.close"].tap()
         XCTAssertTrue(statusSelector.waitForNonExistence(timeout: 3))
         XCTAssertTrue(saveButton.waitForExistence(timeout: 3))
@@ -2905,7 +2908,11 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertNotEqual(app.textViews["save.note"].value as? String, "Discard this draft")
 
         app.textViews["save.note"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.textViews["save.note"].typeText("Check-in mode draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? app.textViews["save.note"].snapshot().value as? String) == "Check-in mode draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         let wannaChoice = app.scrollViews["save.editorScroll"].buttons["Wanna go"]
         XCTAssertTrue(wannaChoice.waitForExistence(timeout: 2))
         XCTAssertTrue(wannaChoice.isHittable)
@@ -2917,7 +2924,11 @@ final class OnboardingUITests: XCTestCase {
         let wannaNote = app.textViews["save.note"]
         XCTAssertNotEqual(wannaNote.value as? String, "Check-in mode draft")
         wannaNote.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         wannaNote.typeText("Wanna mode draft")
+        XCTAssertEqual(UIObservation.wait(timeout: 5) {
+            (try? wannaNote.snapshot().value as? String) == "Wanna mode draft"
+        }, .completed, "The complete note must arrive before changing or discarding its save mode.")
         XCTAssertTrue(checkInChoice.isHittable)
         checkInChoice.tap()
         XCTAssertEqual(app.textViews["save.note"].value as? String, "Check-in mode draft")
