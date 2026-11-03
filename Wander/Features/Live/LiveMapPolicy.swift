@@ -11,6 +11,44 @@ struct LiveDrawnArea: Codable, Equatable {
     }
     let vertices: [Vertex]
 
+    /// A finger-drawn loop can finish just past its starting point. Keep the
+    /// strict polygon contract, but remove a short closing overlap when that
+    /// is the only reason the completed stroke is invalid. Screen distances
+    /// make this tolerance independent of map zoom and latitude.
+    init?(drawing points: [CGPoint], convert: (CGPoint) -> CLLocationCoordinate2D?) {
+        guard (3...512).contains(points.count),
+              points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return nil }
+        // Convert together after the gesture, rather than collecting vertices
+        // from different camera poses while the drawing controls settle.
+        let coordinates = points.compactMap(convert)
+        guard coordinates.count == points.count,
+              coordinates.allSatisfy(CLLocationCoordinate2DIsValid) else { return nil }
+        if let area = Self(coordinates: coordinates) { self = area; return }
+
+        let start = points[0]
+        var distances = [CGFloat](repeating: 0, count: points.count)
+        for index in 1..<points.count {
+            distances[index] = distances[index - 1]
+                + hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y)
+        }
+        guard let length = distances.last, length.isFinite, length > 0 else { return nil }
+        let width = points.map(\.x).max()! - points.map(\.x).min()!
+        let height = points.map(\.y).max()! - points.map(\.y).min()!
+        // At most the last fifth of the stroke may be discarded, and the
+        // closing point must be within 20pt (less for small drawings). Never
+        // replace an arbitrary crossing with a hull or a different region.
+        let closureRadius = min(20, max(width, height) * 0.1)
+        let candidates = points.indices.dropFirst(3).filter {
+            distances[$0] >= length * 0.8
+                && hypot(points[$0].x - start.x, points[$0].y - start.y) <= closureRadius
+        }
+        guard let closure = candidates.min(by: {
+            hypot(points[$0].x - start.x, points[$0].y - start.y)
+                < hypot(points[$1].x - start.x, points[$1].y - start.y)
+        }), let area = Self(coordinates: Array(coordinates.prefix(closure))) else { return nil }
+        self = area
+    }
+
     init?(coordinates: [CLLocationCoordinate2D]) {
         guard coordinates.count >= 3, coordinates.count <= 512,
               coordinates.allSatisfy(CLLocationCoordinate2DIsValid) else { return nil }

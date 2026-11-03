@@ -67,7 +67,6 @@ struct LiveScreen: View {
     @State private var drawingActionsHeight: CGFloat = 0
     @State private var drawing = false
     @State private var drawPoints: [CGPoint] = []
-    @State private var drawCoordinates: [CLLocationCoordinate2D] = []
     @State private var draftArea: LiveDrawnArea?
     @State private var drawingError: String?
     @State private var filtersPresented = false
@@ -406,7 +405,7 @@ struct LiveScreen: View {
             filtersPresented = false; showsMessages = false; replyTarget = nil; selectedPlan = nil
             planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false; showsEvents = false; showsContactInvites = false
             showsUpcomingInvitations = false; receivedPlan = nil; queuedReceivedPlan = nil; wantsNotificationInbox = false
-            draftArea = nil; drawPoints = []; drawCoordinates = []
+            draftArea = nil; drawPoints = []
             selection = LiveBrowseSelection(); draftSelection = selection; detent = 1
             viewedPins = LiveViewedPinHistory.load(userID: store.currentUser.id)
             drawerMapOrigin = nil; cardMapOrigin = nil; cardMapCameraOrigin = nil; departedAt = nil; feedIsScrolled = false
@@ -673,17 +672,20 @@ struct LiveScreen: View {
                             }
                             .gesture(DragGesture(minimumDistance: 0)
                                 .onChanged { value in
-                                    if draftArea != nil { draftArea = nil; drawPoints = []; drawCoordinates = [] }
+                                    if draftArea != nil { draftArea = nil; drawPoints = [] }
+                                    if drawPoints.isEmpty { drawPoints = [value.startLocation] }
                                     guard drawPoints.count < 512,
-                                          drawPoints.last.map({ hypot($0.x - value.location.x, $0.y - value.location.y) >= 5 }) ?? true,
-                                          let point = proxy.coordinate(for: value.location) else { return }
-                                    drawPoints.append(value.location); drawCoordinates.append(point)
+                                          drawPoints.last.map({ hypot($0.x - value.location.x, $0.y - value.location.y) >= 5 }) ?? true else { return }
+                                    drawPoints.append(value.location)
                                     drawingError = nil
                                 }
-                                .onEnded { _ in
-                                    draftArea = LiveDrawnArea(coordinates: drawCoordinates)
+                                .onEnded { value in
+                                    if drawPoints.count < 512, drawPoints.last != value.location {
+                                        drawPoints.append(value.location)
+                                    }
+                                    draftArea = LiveDrawnArea(drawing: drawPoints, convert: proxy.coordinate(for:))
                                     drawingError = draftArea == nil ? "Draw a closed area within this region to continue." : nil
-                                    drawPoints = []; drawCoordinates = []
+                                    drawPoints = []
                                 })
                     }
                     .accessibilityLabel("Map drawing canvas")
@@ -1608,7 +1610,7 @@ struct LiveScreen: View {
         guard let viewport, viewport.span.longitudeDelta < 180 else { areaNotice = true; return }
         launchLocation.userDidChooseCamera()
         clearNativePlaceSelection()
-        drawing = true; draftArea = nil; drawPoints = []; drawCoordinates = []; drawingError = nil
+        drawing = true; draftArea = nil; drawPoints = []; drawingError = nil
     }
     private static func areaForViewport(_ region: MKCoordinateRegion) -> LiveDrawnArea? {
         guard region.span.longitudeDelta < 180 else { return nil }
