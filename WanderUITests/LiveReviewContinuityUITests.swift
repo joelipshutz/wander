@@ -1273,13 +1273,21 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                 dx: previousFrame.midX - applicationFrame.minX,
                 dy: previousFrame.midY - applicationFrame.minY)).tap()
         }
+        // Query the native Form directly. An all-descendants identifier search
+        // walks the covered map/feed as well and can consume the response budget
+        // after the sheet has already appeared.
+        let form = filterFormElement(in: app)
         XCTAssertEqual(UIObservation.wait(timeout: 5) {
-            app.descendants(matching: .any)["live.filters.form"].firstMatch.exists
+            form.exists
         }, .completed, "Filters must open within the original five-second response budget.")
     }
 
+    private func filterFormElement(in app: XCUIApplication) -> XCUIElement {
+        app.collectionViews.matching(NSPredicate(format: "identifier == %@", "live.filters.form")).firstMatch
+    }
+
     private func filterForm(in app: XCUIApplication) -> XCUIElement {
-        let form = app.descendants(matching: .any)["live.filters.form"].firstMatch
+        let form = filterFormElement(in: app)
         XCTAssertTrue(form.waitForExistence(timeout: 5))
         return form
     }
@@ -1499,7 +1507,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
             // still chooses the direction that brings that exact row into view.
             guard attempt < 16 else { break }
             let dragDown = observed.button.map { $0.minY < observed.viewport.minY } ?? true
-            let from = CGPoint(x: observed.form.maxX - 8,
+            // Drag inside the content rather than the outer scroll-indicator
+            // gutter, where a native gesture can leave the row unmoved.
+            let from = CGPoint(x: observed.viewport.midX,
                                y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.45 : 0.75))
             let to = CGPoint(x: from.x,
                              y: observed.viewport.minY + observed.viewport.height * (dragDown ? 0.75 : 0.45))
@@ -1550,7 +1560,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private func reveal(_ element: XCUIElement, in scroll: XCUIElement, direction: Direction, app: XCUIApplication) {
         for _ in 0..<16 {
             let viewport = usableViewport(scroll, app: app)
-            if element.exists && finite(element.frame) && viewport.contains(element.frame) && element.isHittable { return }
+            if visibleAndHittable(element, in: viewport) { return }
             XCTAssertTrue(finite(viewport) && viewport.width > 44 && viewport.height > 88)
             let fromY: CGFloat = direction == .down ? 0.75 : 0.45
             let toY: CGFloat = direction == .down ? 0.45 : 0.75
@@ -1567,7 +1577,26 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         tree.name = "REC-636-bounded-scroll-target-unreachable-hierarchy"
         tree.lifetime = .keepAlways
         add(tree)
-        XCTAssertTrue(element.exists && finite(element.frame) && usableViewport(scroll, app: app).contains(element.frame) && element.isHittable)
+        XCTAssertTrue(visibleAndHittable(element, in: usableViewport(scroll, app: app)))
+    }
+
+    private func visibleAndHittable(_ element: XCUIElement, in viewport: CGRect) -> Bool {
+        guard element.exists, let row = try? element.snapshot(),
+              finite(row.frame), viewport.contains(row.frame) else { return false }
+        if row.elementType == .switch {
+            let nativeSwitches = row.children.flatMap { UIObservation.descendants(of: $0) }
+                .filter { $0.elementType == .switch }
+            if !nativeSwitches.isEmpty {
+                // SwiftUI's labeled wrapper has no activation point on some
+                // Simulator snapshots. Require the actual native switch to be
+                // visible and hittable, just as setOn does before toggling it.
+                guard nativeSwitches.count == 1, let native = nativeSwitches.first,
+                      native.isEnabled, finite(native.frame), viewport.contains(native.frame),
+                      row.frame.contains(CGPoint(x: native.frame.midX, y: native.frame.midY)) else { return false }
+                return element.switches.firstMatch.isHittable
+            }
+        }
+        return element.isHittable
     }
 
     private func usableViewport(_ scroll: XCUIElement, app: XCUIApplication) -> CGRect {

@@ -490,6 +490,39 @@ final class LiveNativeMapTests: XCTestCase {
                              restoredPoints[0].y - restoredPoints[1].y), originalSeparation, accuracy: 0.5)
     }
 
+    func testFirstOverlappingCircleConvertsAndRendersOnCompactAndLargeMaps() throws {
+        for size in [CGSize(width: 375, height: 667), CGSize(width: 430, height: 800)] {
+            let map = LiveNativeMapView(frame: CGRect(origin: .zero, size: size))
+            let proxy = LiveNativeMapProxy()
+            let camera = MapCamera(centerCoordinate: region.center, distance: 2_400, heading: 28, pitch: 35)
+            var parent = makeParent(proxy: proxy, commandPosition: .camera(camera), coloredMap: true, drawing: true)
+            let coordinator = parent.makeCoordinator()
+            coordinator.attach(to: map)
+            defer { coordinator.detach(from: map) }
+            coordinator.update(parent: parent, map: map, animated: false)
+            map.layoutIfNeeded()
+
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = size.width * 0.22
+            let stroke = stride(from: 0.0, through: 380.0, by: 5).map { angle in
+                let radians = angle * .pi / 180
+                return CGPoint(x: center.x + radius * cos(radians), y: center.y + radius * sin(radians))
+            }
+            let coordinates = try stroke.map { try XCTUnwrap(proxy.coordinate(for: $0)) }
+            XCTAssertNil(LiveDrawnArea(coordinates: coordinates))
+            let boundary = try XCTUnwrap(LiveDrawnArea(drawing: stroke, convert: proxy.coordinate(for:)))
+            XCTAssertTrue(boundary.contains(try XCTUnwrap(proxy.coordinate(for: center))))
+            XCTAssertFalse(boundary.contains(try XCTUnwrap(proxy.coordinate(for:
+                CGPoint(x: center.x + radius * 1.5, y: center.y)))))
+
+            parent = makeParent(proxy: proxy, commandPosition: .camera(camera), coloredMap: true,
+                                drawing: true, boundary: boundary)
+            coordinator.update(parent: parent, map: map, animated: false)
+            let polygon = try XCTUnwrap(map.overlays.compactMap { $0 as? MKPolygon }.first)
+            XCTAssertEqual(polygon.pointCount, boundary.vertices.count)
+        }
+    }
+
     func testGrayscaleSitsBelowColoredAreaAndRadiusAfterToggle() throws {
         let map = MKMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
         let proxy = LiveNativeMapProxy()
