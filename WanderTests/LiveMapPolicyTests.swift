@@ -4,6 +4,92 @@ import SwiftUI
 @testable import Wander
 
 final class LiveMapPolicyTests: XCTestCase {
+    func testFirstCircleAcceptsShortClosingOverlapAtDifferentSizesAndDirections() throws {
+        for radius in [30.0, 80.0, 140.0] {
+            for direction in [-1.0, 1.0] {
+                for end in [370.0, 380.0, 390.0] {
+                    let stroke = circleStroke(radius: radius, degrees: end, direction: direction)
+                    XCTAssertNil(LiveDrawnArea(coordinates: stroke.map(drawingCoordinate)),
+                                 "Regression fixture must fail the raw polygon path")
+                    let area = try XCTUnwrap(LiveDrawnArea(drawing: stroke, convert: drawingCoordinate))
+                    XCTAssertTrue(area.contains(drawingCoordinate(CGPoint(x: 200, y: 200))))
+                    XCTAssertFalse(area.contains(drawingCoordinate(CGPoint(x: 200 + radius * 1.2, y: 200))))
+                    XCTAssertTrue(LiveFeedQuery(polygon: area.vertices.map {
+                        .init(latitude: $0.latitude, longitude: $0.longitude)
+                    }).isValid, "Drawing recovery must still satisfy the strict query contract")
+                }
+            }
+        }
+    }
+
+    func testClosingOverlapWithFivePointGestureSampling() throws {
+        for radius in [30.0, 80.0, 140.0] {
+            let stroke = circleStroke(radius: radius, degrees: 380).reduce(into: [CGPoint]()) { points, point in
+                if points.last.map({ hypot($0.x - point.x, $0.y - point.y) >= 5 }) ?? true {
+                    points.append(point)
+                }
+            }
+            let area = try XCTUnwrap(LiveDrawnArea(drawing: stroke, convert: drawingCoordinate))
+            XCTAssertTrue(area.contains(drawingCoordinate(CGPoint(x: 200, y: 200))))
+        }
+    }
+
+    func testValidOpenClosedAndConcaveStrokesKeepTheirExactBoundary() throws {
+        let concave = [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 100, y: 30),
+                       CGPoint(x: 30, y: 30), CGPoint(x: 30, y: 100), CGPoint(x: 0, y: 100)]
+        for stroke in [circleStroke(degrees: 330), circleStroke(degrees: 360), concave] {
+            let original = try XCTUnwrap(LiveDrawnArea(coordinates: stroke.map(drawingCoordinate)))
+            XCTAssertEqual(LiveDrawnArea(drawing: stroke, convert: drawingCoordinate), original)
+        }
+    }
+
+    func testDrawingDoesNotRepairFigureEightRepeatedLoopsOrLargeCrossings() {
+        let figureEight = stride(from: 0.0, through: 360.0, by: 5).map { angle in
+            let radians = angle * .pi / 180
+            return CGPoint(x: 200 + 100 * sin(radians), y: 200 + 100 * sin(2 * radians))
+        }
+        let crossing = [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 100), CGPoint(x: 0, y: 100),
+                        CGPoint(x: 100, y: 0), CGPoint(x: 0, y: 0)]
+        for stroke in [figureEight, circleStroke(degrees: 720), crossing] {
+            XCTAssertNil(LiveDrawnArea(drawing: stroke, convert: drawingCoordinate))
+        }
+    }
+
+    func testDrawingRejectsDegenerateOversizedAndNonfiniteInput() {
+        let line = [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0), CGPoint(x: 200, y: 0)]
+        for stroke in [[], Array(line.prefix(2)), line, Array(repeating: CGPoint.zero, count: 513),
+                       [CGPoint(x: CGFloat.infinity, y: 0)] + line] {
+            XCTAssertNil(LiveDrawnArea(drawing: stroke, convert: drawingCoordinate))
+        }
+    }
+
+    func testDrawingConvertsEachSampleOnceAndRejectsAnyMissingCoordinate() throws {
+        let stroke = circleStroke(degrees: 380)
+        var conversions = 0
+        XCTAssertNotNil(LiveDrawnArea(drawing: stroke) { point in
+            conversions += 1
+            return self.drawingCoordinate(point)
+        })
+        XCTAssertEqual(conversions, stroke.count)
+        XCTAssertNil(LiveDrawnArea(drawing: stroke) { point in
+            point == stroke[10] ? nil : self.drawingCoordinate(point)
+        })
+        XCTAssertNil(LiveDrawnArea(drawing: stroke) { _ in
+            CLLocationCoordinate2D(latitude: 91, longitude: 0)
+        })
+    }
+
+    private func circleStroke(radius: Double = 100, degrees: Double, direction: Double = 1) -> [CGPoint] {
+        stride(from: 0.0, through: degrees, by: 5).map { angle in
+            let radians = direction * angle * .pi / 180
+            return CGPoint(x: 200 + radius * cos(radians), y: 200 + radius * sin(radians))
+        }
+    }
+
+    private func drawingCoordinate(_ point: CGPoint) -> CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: point.y / 10_000, longitude: point.x / 10_000)
+    }
+
     func testDrawnAreaIncludesBoundaryAndExcludesOutside() throws {
         let area = try XCTUnwrap(LiveDrawnArea(coordinates: [point(0, 0), point(0, 2), point(2, 2), point(2, 0)]))
         XCTAssertTrue(area.contains(point(1, 1)))
