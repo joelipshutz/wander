@@ -52,6 +52,16 @@ UI_THREE_CASE_RECOVERY = (
     "WanderUITests/MapFilterInteractionUITests/testPerformanceFixtureTracesDenseMapPanZoomAndBoundsAnnotationWork",
 )
 
+# Dispatch-only confirmation for the REC-676 failures found by the full suite.
+# Keep all five methods in their original ordinary shards as well.
+UI_FOLLOWUP_RECOVERY = (
+    "WanderUITests/MapPlaceCardUITests/testPlaceWithUploadedPhotoOpensOnGoogleAndKeepsGallerySwipe",
+    "WanderUITests/MapPlaceListPickerUITests/testPerformanceFixtureColdListDetailIsImmediatelyScrollable",
+    "WanderUITests/OnboardingUITests/testFeedHeaderHidesOnDownScrollAndReturnsOnUpScrollAcrossSurfaces",
+    "WanderUITests/OnboardingUITests/testFilmExplorationsAutoAdvanceToInteractiveAccount",
+    "WanderUITests/PersonTypeaheadUITests/testMapSearchPickerInsertsFullName",
+)
+
 # These new three-sample 1500-row stress workloads exceed ordinary privacy/contact
 # allowances. Keep each required with the existing performance-lane allowance.
 IMPORT_PERFORMANCE_METHODS = {
@@ -354,7 +364,7 @@ def ui_test_identifiers(root: Path) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", *IMPORT_PERFORMANCE_METHODS, "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui", "graphics"], required=True)
+    parser.add_argument("--suite", choices=["clip", "unit", "replay", *REPLAY_METHODS, "performance", *IMPORT_PERFORMANCE_METHODS, "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery", "ui", "graphics"], required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=4)
     parser.add_argument("--destination")
@@ -379,16 +389,17 @@ def main() -> int:
         "WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget",
     ]
     inventory = (["AstirClipTests", "AstirClipUITests"] if args.suite == "clip" else
-                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "graphics"} else
+                 ui_test_identifiers(root) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery", "graphics"} else
                  [REPLAY_METHODS[args.suite]] if args.suite in REPLAY_METHODS else
                  [replay] if args.suite == "replay" else
                  [IMPORT_PERFORMANCE_METHODS[args.suite]] if args.suite in IMPORT_PERFORMANCE_METHODS else
                  performance if args.suite == "performance" else ["WanderTests"])
     isolated_ui = ISOLATED_UI_PERFORMANCE | ISOLATED_UI_WARM_PERFORMANCE | REFERENCE_UI_PERFORMANCE
-    if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "graphics"} and not isolated_ui.issubset(inventory):
+    if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery", "graphics"} and not isolated_ui.issubset(inventory):
         parser.error("isolated UI performance selection no longer matches the test inventory")
-    if args.suite in UI_RECOVERY_METHODS or args.suite == "ui-three-case-recovery":
-        selected = (list(UI_THREE_CASE_RECOVERY) if args.suite == "ui-three-case-recovery"
+    if args.suite in UI_RECOVERY_METHODS or args.suite in {"ui-three-case-recovery", "ui-followup-recovery"}:
+        selected = (list(UI_FOLLOWUP_RECOVERY) if args.suite == "ui-followup-recovery"
+                    else list(UI_THREE_CASE_RECOVERY) if args.suite == "ui-three-case-recovery"
                     else [UI_RECOVERY_METHODS[args.suite]])
         if not set(selected).issubset(inventory):
             parser.error("exact UI recovery selection no longer matches the test inventory")
@@ -431,7 +442,7 @@ def main() -> int:
     excluded = list(isolated)
     if not selected:
         parser.error("empty test selection")
-    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "graphics"} else None,
+    selection = {"suite": args.suite, "shard": args.shard, "totalUIInventory": len(inventory) if args.suite in {"ui", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery", "graphics"} else None,
                  "identifiers": selected, "isolatedTestSuites": isolated}
     if args.selection_file:
         Path(args.selection_file).write_text(json.dumps(selection, indent=2) + "\n")
@@ -452,11 +463,11 @@ def main() -> int:
         subprocess.run(["xcrun", "simctl", "addmedia", args.destination, str(photo)], check=True)
     print(f"Running {args.suite} selection {args.shard + 1}: {len(selected)} identifiers", flush=True)
     if args.test_products:
-        if args.suite in {"ui", "graphics", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery"}:
+        if args.suite in {"ui", "graphics", "ui-performance", "ui-warm-performance", "ui-reference-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery"}:
             capture_format = "screenRecording" if args.suite == "ui-warm-performance" else "screenshots"
             count = prepare_ui_performance_products(
                 Path(args.test_products),
-                preserve_system_failures=args.suite in {"ui", "graphics", "ui-warm-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery"},
+                preserve_system_failures=args.suite in {"ui", "graphics", "ui-warm-performance", *UI_RECOVERY_METHODS, "ui-three-case-recovery", "ui-followup-recovery"},
                 screen_capture_format=capture_format
             )
             print(f"Using {capture_format} for {count} UI target(s)", flush=True)

@@ -18,7 +18,12 @@ final class MapPlaceCardUITests: XCTestCase {
         XCTAssertTrue(googlePhoto.isHittable)
         XCTAssertFalse(app.descendants(matching: .any)["Photo by Ryan"].exists)
         capture("REC-463 Google-first place profile")
-        googlePhoto.swipeLeft()
+        // XCTest's default swipe travels just under half this page's width.
+        // Cross the paging midpoint with one native drag so a low-velocity
+        // delivery still selects the next photo instead of snapping back.
+        let start = googlePhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        let end = googlePhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end)
         XCTAssertTrue(app.descendants(matching: .any)["Photo by Ryan"].waitForExistence(timeout: 5))
         capture("REC-463 uploaded photo remains in gallery")
         app.buttons["place-profile.back"].tap()
