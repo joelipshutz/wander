@@ -21,7 +21,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         capture("Owner clear header")
 
         app.swipeUp()
-        assertPinned(name: name, photo: photo)
+        assertPinned(in: app)
         XCTAssertEqual(photo.frame.width, photoWidth, accuracy: 1)
         XCTAssertEqual(settings.frame.midY, toolbarY, accuracy: 1)
         XCTAssertEqual(app.buttons.matching(identifier: "Settings").count, 1)
@@ -36,7 +36,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         app.buttons["Cancel"].tap()
         XCTAssertTrue(settings.waitForExistence(timeout: 5))
         app.swipeUp()
-        assertPinned(name: name, photo: photo)
+        assertPinned(in: app)
         settings.tap()
         let settingsScreen = app.descendants(matching: .any)["settings.screen"]
         XCTAssertTrue(settingsScreen.waitForExistence(timeout: 5))
@@ -60,12 +60,11 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         let more = app.buttons["More profile actions"]
         XCTAssertTrue(more.waitForExistence(timeout: 15))
         let name = app.staticTexts["profile.header.name"].firstMatch
-        let photo = app.descendants(matching: .any)["profile.header.photo"].firstMatch
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         let toolbarY = more.frame.midY
         capture("Member clear header")
         app.swipeUp()
-        assertPinned(name: name, photo: photo)
+        assertPinned(in: app)
         XCTAssertEqual(more.frame.midY, toolbarY, accuracy: 1)
         capture("Member pinned header")
         more.tap()
@@ -89,7 +88,7 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         XCTAssertTrue(close.waitForNonExistence(timeout: 5))
         XCTAssertTrue(settings.isHittable)
         XCTAssertEqual(settings.frame.midY, toolbarY, accuracy: 1)
-        assertPinned(name: app.staticTexts["profile.header.name"].firstMatch, photo: photo)
+        assertPinned(in: app)
         capture("Pinned photo after full-screen return")
     }
 
@@ -125,16 +124,20 @@ final class ProfileHeaderMotionUITests: XCTestCase {
         return app
     }
 
-    private func assertPinned(name: XCUIElement, photo: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        // Scroll deceleration can finish before the separate header animation.
-        // Check the settled geometry instead of sampling an intermediate frame.
-        let settled = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in abs(name.frame.midY - photo.frame.midY) <= 3 },
-            object: nil
-        )
-        XCTAssertEqual(XCTWaiter.wait(for: [settled], timeout: 3), .completed, file: file, line: line)
-        XCTAssertEqual(name.frame.midY, photo.frame.midY, accuracy: 3, file: file, line: line)
-        XCTAssertGreaterThan(photo.frame.minY, 40, file: file, line: line)
+    private func assertPinned(in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        var geometry: (name: CGRect, photo: CGRect)?
+        let result = UIObservation.wait(timeout: 3) {
+            guard let snapshot = try? app.snapshot() else { return false }
+            let nodes = UIObservation.descendants(of: snapshot)
+            guard let name = nodes.first(where: { $0.elementType == .staticText && $0.identifier == "profile.header.name" }),
+                  let photo = nodes.first(where: { $0.identifier == "profile.header.photo" }) else { return false }
+            geometry = (name.frame, photo.frame)
+            return abs(name.frame.midY - photo.frame.midY) <= 3
+        }
+        XCTAssertEqual(result, .completed, file: file, line: line)
+        guard let geometry else { return XCTFail("Expected both header frames in one native snapshot", file: file, line: line) }
+        XCTAssertEqual(geometry.name.midY, geometry.photo.midY, accuracy: 3, file: file, line: line)
+        XCTAssertGreaterThan(geometry.photo.minY, 40, file: file, line: line)
     }
 
     private func capture(_ name: String) {

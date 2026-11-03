@@ -216,17 +216,19 @@ final class MapAppearanceUITests: XCTestCase {
     }
 
     private func physicalPinTarget(_ selected: XCUIElement, in app: XCUIApplication) throws -> CGPoint? {
-        guard selected.exists else { return nil }
-        let frame = selected.frame
-        let otherFrames = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
-            .allElementsBoundByIndex.filter { $0.identifier != selected.identifier }.map(\.frame)
+        let selectedID = selected.identifier
+        let snapshot = try app.snapshot()
+        let nodes = UIObservation.descendants(of: snapshot)
+        let pins = nodes.filter { $0.elementType == .button && $0.identifier.hasPrefix("live.pin.") }
+        guard let frame = pins.first(where: { $0.identifier == selectedID })?.frame else { return nil }
+        let otherFrames = pins.filter { $0.identifier != selectedID }.map(\.frame)
         // Native annotations keep a real 44-point hit region even when their
         // visible dot is compact. All candidates stay inside that region.
         let offsets: [CGFloat] = [0.5, 0.8, 0.2, 0.95, 0.05]
         let candidates = offsets.flatMap { y in offsets.map { x in
             CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
         } }
-        let viewport = try exposedMapFrame(in: app)
+        let viewport = try exposedMapFrame(snapshot: snapshot, nodes: nodes)
         return candidates.first { candidate in
             frame.contains(candidate) && viewport.contains(candidate)
                 && !otherFrames.contains(where: { $0.contains(candidate) })
@@ -239,7 +241,7 @@ final class MapAppearanceUITests: XCTestCase {
         let before = point(anchor.frame)
         let viewport = try exposedMapFrame(in: app)
         let distance: CGFloat = before.x < viewport.midX ? 28 : -28
-        let frames = livePinFrames(in: app)
+        let frames = try livePinFrames(in: app)
         let positions: [CGFloat] = [0.25, 0.5, 0.75]
         let paths = positions.flatMap { y in positions.map { x in
             let start = CGPoint(x: viewport.minX + viewport.width * x, y: viewport.minY + viewport.height * y)
@@ -274,7 +276,7 @@ final class MapAppearanceUITests: XCTestCase {
         let separation = distance(first, second)
         XCTAssertGreaterThan(separation, 2)
         let viewport = try exposedMapFrame(in: app)
-        let markerFrames = livePinFrames(in: app).map { $0.insetBy(dx: -12, dy: -12) }
+        let markerFrames = try livePinFrames(in: app).map { $0.insetBy(dx: -12, dy: -12) }
         let midpoint = CGPoint(x: (first.x + second.x) / 2, y: (first.y + second.y) / 2)
         let offsets: [CGFloat] = [0, -60, 60, -100, 100]
         let candidates = offsets.flatMap { y in offsets.map { x in
@@ -399,13 +401,25 @@ final class MapAppearanceUITests: XCTestCase {
     }
 
     private func exposedMapFrame(in app: XCUIApplication) throws -> CGRect {
-        let frame = try map(in: app).snapshot().frame.intersection(app.frame)
-        let controls = [app.buttons["live.draw"], app.buttons["Filters"], app.buttons["Add a place"]]
-            .filter { $0.exists && $0.isHittable }
+        let snapshot = try app.snapshot()
+        return try exposedMapFrame(snapshot: snapshot, nodes: UIObservation.descendants(of: snapshot))
+    }
+
+    private func exposedMapFrame(snapshot: XCUIElementSnapshot, nodes: [XCUIElementSnapshot]) throws -> CGRect {
+        let map = try XCTUnwrap(nodes.first { $0.elementType == .map })
+        let handle = try XCTUnwrap(nodes.first { $0.identifier == "live.drawerHandle" })
+        let frame = map.frame.intersection(snapshot.frame)
+        // Conservatively exclude every visible overlay frame. Hittability is
+        // required for controls we tap, not for content we must avoid touching.
+        let controls = nodes.filter {
+            $0.elementType == .button && ($0.identifier == "live.draw" || $0.label == "Filters" || $0.label == "Add a place")
+                && finite($0.frame) && $0.frame.intersects(frame)
+        }
         let top = max(frame.minY, controls.map { $0.frame.maxY }.max() ?? frame.minY) + 12
-        var bottom = min(frame.maxY, drawer(in: app).frame.minY) - 12
-        let search = app.buttons["live.searchArea"]
-        if search.exists && search.isHittable { bottom = min(bottom, search.frame.minY - 12) }
+        var bottom = min(frame.maxY, handle.frame.minY) - 12
+        if let search = nodes.first(where: { $0.identifier == "live.searchArea" && finite($0.frame) && $0.frame.intersects(frame) }) {
+            bottom = min(bottom, search.frame.minY - 12)
+        }
         let exposed = CGRect(x: frame.minX + 12, y: top, width: frame.width - 24, height: bottom - top)
         XCTAssertTrue(finite(exposed) && exposed.width > 160 && exposed.height > 120)
         return exposed
@@ -418,9 +432,11 @@ final class MapAppearanceUITests: XCTestCase {
     private func drawer(in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["live.drawerHandle"].firstMatch
     }
-    private func livePinFrames(in app: XCUIApplication) -> [CGRect] {
-        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "live.pin."))
-            .allElementsBoundByIndex.map(\.frame).filter(finite)
+    private func livePinFrames(in app: XCUIApplication) throws -> [CGRect] {
+        let snapshot = try app.snapshot()
+        return UIObservation.descendants(of: snapshot)
+            .filter { $0.elementType == .button && $0.identifier.hasPrefix("live.pin.") }
+            .map(\.frame).filter(finite)
     }
     private func point(_ frame: CGRect) -> CGPoint { CGPoint(x: frame.midX, y: frame.midY) }
     private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -444,16 +460,14 @@ final class MapAppearanceUITests: XCTestCase {
         var stableSince = started
         var previous: [CGRect] = []
         wait("Map and control geometry must settle before capture or input.", timeout: 15) {
-            guard elements.allSatisfy({ $0.exists }),
-                  let frames = try? elements.map({ try $0.snapshot().frame }), frames.allSatisfy(self.finite) else { return false }
+            guard let frames = try? elements.map({ try $0.snapshot().frame }), frames.allSatisfy(self.finite) else { return false }
             let now = ProcessInfo.processInfo.systemUptime
             if frames != previous { previous = frames; stableSince = now }
             return now - started >= minimumDuration && now - stableSince >= 1
         }
     }
     private func wait(_ message: String, timeout: TimeInterval = 10, condition: @escaping () -> Bool) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in condition() }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        let result = UIObservation.wait(timeout: timeout, condition: condition)
         if result != .completed { capture("interaction-failure") }
         XCTAssertEqual(result, .completed, message)
     }

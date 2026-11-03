@@ -280,31 +280,24 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let originalDrawerLabel = app.staticTexts["live.drawerHandle"].label
         let destinationTopLimit = app.buttons["live.scope.featured"].frame.maxY
         let searchMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
-        let search = readySearch(in: app, startedAt: diagnosticStart)
         captureRouteDiagnostics("search-before-single-tap", in: app, startedAt: diagnosticStart,
             queries: [("exact-Search-label", searchMatches)])
+        // Resolve and verify the physical target after diagnostics, before the
+        // timed input. Do not spend the response window capturing the hierarchy.
+        let searchTarget = readySearch(in: app, startedAt: diagnosticStart)
         let tappedAt = ProcessInfo.processInfo.systemUptime
         let destinationDeadline = tappedAt + 10
-        search.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        searchTarget.tap()
         let searchBack = app.buttons["discover.searchBack"]
-        // Observe the native destination before collecting the full hierarchy.
-        let immediateSearchExists = searchBack.exists
-        let immediateObservedAt = ProcessInfo.processInfo.systemUptime
-        var reachedSearch = immediateSearchExists && immediateObservedAt <= destinationDeadline
+        let reachedSearch = UIObservation.wait(timeout: max(0, destinationDeadline - ProcessInfo.processInfo.systemUptime)) {
+            let exists = searchBack.exists
+            return exists && ProcessInfo.processInfo.systemUptime <= destinationDeadline
+        } == .completed
         captureRouteDiagnostics("search-after-single-tap", in: app, startedAt: diagnosticStart,
             queries: [("exact-Search-label", searchMatches)], observations: [
                 "tapStartedElapsedSeconds=\(tappedAt - diagnosticStart)",
-                "immediateSearchExists=\(immediateSearchExists); observedElapsedSeconds=\(immediateObservedAt - diagnosticStart); withinDestinationDeadline=\(immediateObservedAt <= destinationDeadline)"
+                "destinationObservedWithinOriginalTenSeconds=\(reachedSearch)"
             ])
-        // Capture time counts inside the original ten seconds from the only tap.
-        if !reachedSearch {
-            let remaining = destinationDeadline - ProcessInfo.processInfo.systemUptime
-            if remaining > 0 {
-                let appeared = searchBack.waitForExistence(timeout: remaining)
-                let observedAt = ProcessInfo.processInfo.systemUptime
-                reachedSearch = appeared && observedAt <= destinationDeadline
-            }
-        }
         if !reachedSearch {
             captureRouteDiagnostics("search-destination-wait-failed", in: app, startedAt: diagnosticStart,
                 queries: [("exact-Search-label", searchMatches)])
@@ -380,15 +373,14 @@ final class LiveReviewContinuityUITests: XCTestCase {
 
     private func waitHittable(_ element: XCUIElement, timeout: TimeInterval = 10,
                               diagnosticFailure: (() -> Void)? = nil) {
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let result = UIObservation.wait(timeout: timeout) {
             element.exists && element.isHittable
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        }
         if result != .completed { diagnosticFailure?() }
         XCTAssertEqual(result, .completed)
     }
 
-    private func readySearch(in app: XCUIApplication, startedAt: TimeInterval) -> XCUIElement {
+    private func readySearch(in app: XCUIApplication, startedAt: TimeInterval) -> XCUICoordinate {
         let matches = app.buttons.matching(NSPredicate(format: "label == %@", "Search"))
         let count = matches.count
         if count != 1 {
@@ -399,15 +391,17 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let element = matches.element(boundBy: 0)
         let hittable = element.exists && element.isEnabled && element.isHittable
         let frame = hittable ? element.frame : CGRect.null
+        let applicationFrame = app.frame
         let ready = hittable && !frame.isNull && !frame.isInfinite && !frame.isEmpty
             && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy({ $0.isFinite })
-            && frame.width >= 44 && frame.height >= 44 && app.frame.contains(frame)
+            && frame.width >= 44 && frame.height >= 44 && applicationFrame.contains(frame)
         if !ready {
             captureRouteDiagnostics("search-readiness-failed", in: app, startedAt: startedAt,
                 queries: [("exact-Search-label", matches)])
         }
         XCTAssertTrue(ready, "Expected one enabled, hittable Search control with a full safe44pt frame")
-        return element
+        return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(
+            dx: frame.midX - applicationFrame.minX, dy: frame.midY - applicationFrame.minY))
     }
 
     private func captureRouteDiagnostics(_ name: String, in app: XCUIApplication, startedAt: TimeInterval,
@@ -1594,7 +1588,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                               diagnosticFailure: ((Error?) -> Void)? = nil) {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         var lastSnapshotError: Error?
-        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let result = UIObservation.wait(timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime)) {
             // A successful snapshot resolves existence and enabled state together;
             // hittability still comes from the genuine native element query.
             guard ProcessInfo.processInfo.systemUptime <= deadline else { return false }
@@ -1609,8 +1603,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             let hittable = element.isHittable
             return hittable && ProcessInfo.processInfo.systemUptime <= deadline
-        }, object: nil)
-        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        }
         if result != .completed { diagnosticFailure?(lastSnapshotError) }
         XCTAssertEqual(result, .completed)
     }

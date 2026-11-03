@@ -356,17 +356,12 @@ final class SenderNotificationFlowUITests: XCTestCase {
             !frame.isNull && !frame.isEmpty && !frame.isInfinite
                 && [frame.minX, frame.minY, frame.width, frame.height].allSatisfy { $0.isFinite }
         }
-        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        let readinessResult = UIObservation.wait(timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime)) {
             guard ProcessInfo.processInfo.systemUptime <= deadline,
                   let snapshot = try? app.snapshot() else { return false }
-            var editors: [XCUIElementSnapshot] = []
-            var grabbers: [XCUIElementSnapshot] = []
-            func visit(_ node: XCUIElementSnapshot) {
-                if node.elementType == .scrollView && node.identifier == "save.editorScroll" { editors.append(node) }
-                if node.identifier == "Sheet Grabber" || node.label == "Sheet Grabber" { grabbers.append(node) }
-                for child in node.children { visit(child) }
-            }
-            visit(snapshot)
+            let nodes = UIObservation.descendants(of: snapshot)
+            let editors = nodes.filter { $0.elementType == .scrollView && $0.identifier == "save.editorScroll" }
+            let grabbers = nodes.filter { $0.identifier == "Sheet Grabber" || $0.label == "Sheet Grabber" }
             guard editors.count == 1, grabbers.count == 1 else { return false }
             let appFrame = snapshot.frame
             let before = editors[0].frame.intersection(appFrame)
@@ -381,8 +376,7 @@ final class SenderNotificationFlowUITests: XCTestCase {
                   ProcessInfo.processInfo.systemUptime <= deadline else { return false }
             admitted = (appFrame, before, grabberFrame)
             return true
-        }, object: nil)
-        let readinessResult = XCTWaiter.wait(for: [ready], timeout: max(0, deadline - ProcessInfo.processInfo.systemUptime))
+        }
         guard readinessResult == .completed, let admitted else {
             capture("save-editor-native-grabber-not-ready")
             XCTFail("Expected one enabled native editor and Sheet Grabber with a visible in-app upward path.")

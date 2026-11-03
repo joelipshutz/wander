@@ -1312,7 +1312,20 @@ final class OnboardingUITests: XCTestCase {
         }
         XCTAssertTrue(done.isHittable)
         done.tap()
-        app.buttons["map.filter.featured"].tap()
+        XCTAssertTrue(popover.waitForNonExistence(timeout: 2))
+        let featured = app.buttons["map.filter.featured"]
+        featured.tap()
+        var sourceObservations: [String] = []
+        let featuredSelected = UIObservation.wait(timeout: 2) {
+            guard let snapshot = try? featured.snapshot() else { return false }
+            sourceObservations.append("selected=\(snapshot.isSelected); value=\(String(describing: snapshot.value))")
+            return snapshot.isSelected
+        }
+        let sourceEvidence = XCTAttachment(string: sourceObservations.joined(separator: "\n"))
+        sourceEvidence.name = "Map More Featured selection before reopening"
+        sourceEvidence.lifetime = .keepAlways
+        add(sourceEvidence)
+        XCTAssertEqual(featuredSelected, .completed, "Featured must be selected before inspecting its More panel.")
         more.tap()
         XCTAssertTrue(popover.waitForExistence(timeout: 3))
         XCTAssertTrue(app.staticTexts["Categories"].exists)

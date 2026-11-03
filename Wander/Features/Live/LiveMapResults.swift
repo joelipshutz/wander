@@ -250,7 +250,6 @@ struct LivePlaceIdentity: Hashable {
 
     fileprivate init(members: Set<Member>) {
         self.members = members
-        aliases = Set(members.flatMap(\.lookupKeys))
         // An unverified provider UUID must not become an independent RPC seed.
         // Validated target rows enter this set as members of the map component.
         placeIDs = Set(members.flatMap(\.ids))
@@ -258,6 +257,7 @@ struct LivePlaceIdentity: Hashable {
         for member in members {
             for key in member.lookupKeys { index[key, default: []].insert(member) }
         }
+        aliases = Set(index.keys)
         membersByAlias = index
     }
 
@@ -307,6 +307,11 @@ struct LivePlaceIdentity: Hashable {
         let country: String
         let latitude: Double?
         let longitude: Double?
+        // Identity evidence is immutable. Construct derived keys once rather
+        // than allocating the same strings/sets for each index and comparison.
+        let strongKeys: Set<String>
+        let weakKeys: Set<String>
+        let lookupKeys: Set<String>
 
         init(_ place: LocalPlace) {
             ids = Set([place.id, place.localID, place.serverID].compactMap { value in
@@ -333,28 +338,38 @@ struct LivePlaceIdentity: Hashable {
                 && CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude))
             latitude = valid ? (place.latitude == 0 ? 0 : place.latitude) : nil
             longitude = valid ? (place.longitude == 0 ? 0 : place.longitude) : nil
-        }
 
-        var strongKeys: Set<String> {
-            var keys = Set(ids.map { "id:\($0)" })
-            // UUID-valued provider IDs are historical references, so their
-            // geography/name corroboration cannot be bypassed as a strong key.
+            var strong = Set(ids.map { "id:\($0)" })
+            // UUID-valued provider IDs still require geographic corroboration.
             if referenceID == nil, !provider.isEmpty, !providerID.isEmpty {
-                keys.insert("provider:" + LivePlaceIdentity.field(provider) + LivePlaceIdentity.field(providerID))
+                strong.insert("provider:" + LivePlaceIdentity.field(provider) + LivePlaceIdentity.field(providerID))
             }
-            return keys
-        }
-
-        var weakKeys: Set<String> {
-            var keys = Set(ids.map { "reference:\($0)" })
-            if let referenceID { keys.insert("reference:\(referenceID)") }
+            var weak = Set(ids.map { "reference:\($0)" })
+            if let referenceID { weak.insert("reference:\(referenceID)") }
             if !name.isEmpty, !street.isEmpty, !locality.isEmpty {
-                keys.insert("address:" + [name, street, locality, region, country].map(LivePlaceIdentity.field).joined())
+                weak.insert("address:" + [name, street, locality, region, country].map(LivePlaceIdentity.field).joined())
             }
-            return keys
+            strongKeys = strong
+            weakKeys = weak
+            lookupKeys = strong.union(weak)
         }
 
-        var lookupKeys: Set<String> { strongKeys.union(weakKeys) }
+        // Derived indexes do not change value identity or add redundant hashing
+        // work when the same member appears under several aliases.
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.ids == rhs.ids && lhs.provider == rhs.provider && lhs.providerID == rhs.providerID
+                && lhs.referenceID == rhs.referenceID && lhs.name == rhs.name && lhs.street == rhs.street
+                && lhs.locality == rhs.locality && lhs.region == rhs.region && lhs.country == rhs.country
+                && lhs.latitude == rhs.latitude && lhs.longitude == rhs.longitude
+        }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(ids); hasher.combine(provider); hasher.combine(providerID)
+            hasher.combine(referenceID); hasher.combine(name); hasher.combine(street)
+            hasher.combine(locality); hasher.combine(region); hasher.combine(country)
+            hasher.combine(latitude); hasher.combine(longitude)
+        }
+
         var cacheKey: String {
             (ids.sorted() + [provider, providerID, name, street, locality, region, country,
                 latitude.map { String($0) } ?? "", longitude.map { String($0) } ?? ""]).map(LivePlaceIdentity.field).joined()

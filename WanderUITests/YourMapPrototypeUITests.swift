@@ -237,9 +237,9 @@ final class YourMapPrototypeUITests: XCTestCase {
 
         guard revealGeographyMetrics() else { return }
         toggle.tap()
-        let collapsed = NSPredicate(format: "value == %@", "Collapsed")
-        expectation(for: collapsed, evaluatedWith: toggle)
-        waitForExpectations(timeout: 3)
+        XCTAssertEqual(UIObservation.wait(timeout: 3) {
+            (try? toggle.snapshot().value as? String) == "Collapsed"
+        }, .completed)
         XCTAssertEqual(cityRows.count, 5)
         XCTAssertEqual(countryRows.count, 5)
         guard revealGeographyMetrics() else { return }
