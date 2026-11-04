@@ -481,6 +481,7 @@ struct SharedVisitInvitationInboxScreen: View {
     @State private var rowFrames: [String: CGRect] = [:]
     @State private var viewport: CGRect = .zero
     @State private var nativeVisibleIDs: Set<String> = []
+    @State private var circleNotificationCount = 0
     @State private var selectedFollower: FollowNotificationProfileRoute?
     let onReview: (SharedVisitInvitation) -> Void
     @State private var selectedPlan: ReceivedPlacePlanInvitation?
@@ -521,16 +522,17 @@ struct SharedVisitInvitationInboxScreen: View {
         )
     }
 
-    private var isEmpty: Bool { store.sharedVisitInvitations.isEmpty && plans.isEmpty && follows.isEmpty && activity.isEmpty }
+    private var isEmpty: Bool { circleNotificationCount == 0 && store.sharedVisitInvitations.isEmpty && plans.isEmpty && follows.isEmpty && activity.isEmpty }
 
     var body: some View {
         Group {
             if isEmpty, !isRefreshing, !planInbox.isLoading, !followInbox.isLoading, !activityInbox.isLoading {
-                emptyState
+                ScrollView { CircleQuestionInboxSection(onCountChange: { circleNotificationCount = $0 }).padding(20); emptyState }
             } else {
                 GeometryReader { geometry in
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: WanderTheme.spacing4) {
+                            CircleQuestionInboxSection(onCountChange: { circleNotificationCount = $0 })
                             if let refreshError {
                                 refreshErrorRow(refreshError)
                             }

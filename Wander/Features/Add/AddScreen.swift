@@ -582,6 +582,7 @@ struct AddScreen: View {
             } else {
                 VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
                     header
+                    CircleQuestionEntry()
                     suggestedPlaces
                         .padding(.top, isContextualAddIntroduction ? 50 : 0)
 

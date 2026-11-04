@@ -222,6 +222,14 @@ async function main() {
         await client.query("rollback to savepoint feedback_slack_smoke");
         await client.query("release savepoint feedback_slack_smoke");
         console.log("ok - independent private Slack feedback delivery and account context");
+        const circleInstalled = await client.query("select to_regprocedure('public.circle_questions()') is not null as installed");
+        if (circleInstalled.rows[0].installed) {
+          await client.query("savepoint circle_question_smoke");
+          await client.query(transactionBody(readFileSync(new URL("../supabase/tests/circle_questions.sql", import.meta.url), "utf8"), "rollback"));
+          await client.query("rollback to savepoint circle_question_smoke");
+          await client.query("release savepoint circle_question_smoke");
+          console.log("ok - Circle Question audience, Stealth, replies, retries and notification authorization");
+        }
         // Isolate pgTAP's per-transaction plan from the later history suite.
         await client.query("savepoint question_snapshot_smoke");
         try {

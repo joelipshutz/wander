@@ -3,7 +3,7 @@ import Foundation
 /// A reference, never a copied place note or activity payload. Display text is
 /// resolved by the server again on each read and disappears if access is lost.
 struct PrivateMessageContext: Codable, Equatable, Sendable {
-    enum Kind: String, Codable, Sendable { case activity, place }
+    enum Kind: String, Codable, Sendable { case activity, place, question }
     let kind: Kind
     let id: String
     var title: String? = nil

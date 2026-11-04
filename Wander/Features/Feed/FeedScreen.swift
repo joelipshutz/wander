@@ -770,6 +770,7 @@ struct FeedScreen: View {
     @ViewBuilder
     private func content(_ projection: FeedActivityRenderProjection) -> some View {
         let renderedFocusGroupID = projection.groupID(containing: pendingActivityFocus?.activityID)
+        CircleQuestionFeedSection(state: backend.circleQuestions, userID: store.currentUser.id)
         if showsInviteEntry { FeedInviteSection() }
         if !FeedPresentation.showsFeaturedPlaces {
             peopleRail
