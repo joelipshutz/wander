@@ -1,6 +1,12 @@
 import CoreLocation
 import Foundation
 
+enum LiveFeedLocationScope: String, Codable, CaseIterable, Identifiable {
+    case everywhere, mapArea
+    var id: Self { self }
+    var title: String { self == .everywhere ? "Everywhere" : "Map area" }
+}
+
 /// Draft controls become an immutable server query only when committed.
 struct LiveBrowseSelection: Codable, Equatable {
     enum Scope: String, Codable, CaseIterable, Identifiable {
@@ -29,6 +35,12 @@ struct LiveBrowseSelection: Codable, Equatable {
     private var storedCategoryOptions: [String: Set<String>]?
     var categoryOptions: [String: Set<String>] { storedCategoryOptions ?? [:] }
     var personIDs: Set<String> = []
+    // Older bookmarks decode as Everywhere without migrating their map choices.
+    private var storedFeedLocationScope: LiveFeedLocationScope?
+    var feedLocationScope: LiveFeedLocationScope {
+        get { storedFeedLocationScope ?? .everywhere }
+        set { storedFeedLocationScope = newValue }
+    }
     private(set) var committedAt: Date
 
     init(now: Date = .now) { committedAt = now }
@@ -90,7 +102,7 @@ struct LiveBrowseSelection: Codable, Equatable {
         isValid && query().includes(activity)
     }
 
-    func query(area: LiveDrawnArea? = nil) -> LiveFeedQuery {
+    func query(area: LiveDrawnArea? = nil, includingGeography: Bool = true) -> LiveFeedQuery {
         let type: LiveFeedQuery.ActivityType = switch activityType {
         case .all: .all
         case .checkIns: .checkIns
@@ -98,9 +110,49 @@ struct LiveBrowseSelection: Codable, Equatable {
         case .lists: .lists
         }
         return LiveFeedQuery(occurredAfter: occurredAfter, occurredBefore: occurredBefore,
-            activityType: type, polygon: area?.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) },
-            center: scope == .nearby ? center : nil, radiusMeters: scope == .nearby ? radius.rawValue : nil,
+            activityType: type, polygon: includingGeography ? area?.vertices.map { .init(latitude: $0.latitude, longitude: $0.longitude) } : nil,
+            center: includingGeography && area == nil && scope == .nearby ? center : nil,
+            radiusMeters: includingGeography && area == nil && scope == .nearby ? radius.rawValue : nil,
             categoryIDs: categoryIDs, categoryOptions: categoryOptions, personIDs: personIDs)
+    }
+
+    func feedQuery(area: LiveDrawnArea?) -> LiveFeedQuery {
+        query(area: area, includingGeography: feedLocationScope == .mapArea)
+    }
+
+    func applyingFilters(from previous: Self, audienceChanged: Bool, at now: Date) -> Self {
+        let changed = audienceChanged
+            || query(includingGeography: false) != previous.query(includingGeography: false)
+        return changed ? committed(at: now) : self
+    }
+
+    /// Reset what is shown without changing where either surface is browsing.
+    func resettingSharedFilters() -> Self {
+        var copy = self
+        copy.activityType = .all; copy.time = .all
+        copy.clearCategories(); copy.personIDs = []
+        return copy
+    }
+
+    var sharedFilterCount: Int {
+        (activityType == .all ? 0 : 1) + (time == .all ? 0 : 1)
+            + (hasCategorySelection ? 1 : 0) + (personIDs.isEmpty ? 0 : 1)
+    }
+
+    var sharedFilterTerms: [String] {
+        var terms: [String] = []
+        if activityType != .all { terms.append(activityType.rawValue) }
+        if time != .all { terms.append(time.title) }
+        if hasCategorySelection {
+            if categoryIDs.count == 1, let category = categoryIDs.first {
+                terms.append(WanderPlaceCategory.broadCategory(for: category))
+            } else if !categoryIDs.isEmpty { terms.append("\(categoryIDs.count) categories") }
+            let options = categoryOptions.values.flatMap { $0 }.sorted()
+            if options.count <= 2 { terms += options.map { AppCopy.capitalizingInitial($0) } }
+            else { terms.append("\(options.count) category options") }
+        }
+        if !personIDs.isEmpty { terms.append("\(personIDs.count) \(personIDs.count == 1 ? "person" : "people")") }
+        return terms
     }
 
     /// The visible map replaces earlier geographic bounds; all other filters
@@ -122,8 +174,7 @@ struct LiveBrowseSelection: Codable, Equatable {
     }
 
     var activeFilterCount: Int {
-        (scope == .nearby ? 1 : 0) + (activityType == .all ? 0 : 1) + (time == .all ? 0 : 1)
-            + (hasCategorySelection ? 1 : 0) + (personIDs.isEmpty ? 0 : 1)
+        (scope == .nearby ? 1 : 0) + sharedFilterCount
     }
 
     /// Derive choices before local refinements so a selection cannot remove its

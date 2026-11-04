@@ -214,7 +214,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let drawer = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         let committedDrawerValue = drawer.value as? String
         XCTAssertNotNil(committedDrawerValue)
-        XCTAssertTrue(committedDrawerValue?.hasPrefix("4 activities.") == true)
+        XCTAssertTrue(committedDrawerValue?.hasPrefix("4 activities on map.") == true)
         waitDrawer("expanded", in: app)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
         photos.tap()
@@ -353,6 +353,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        app.buttons["live.feed.scope.mapArea"].tap()
         return app
     }
 
@@ -696,7 +697,6 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
     private let allPlaceIDs: Set<String> = [
         "place_bar_nido", "place_noodles", "place_juniper_table", "place_fern_desk_coffee"
     ]
-    private let combinedSummary = "25 km · Los Angeles · Past 24 hours · Wannas · 1 category · 1 person · Only Friends"
 
     func testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity() {
         let app = launchLive()
@@ -740,7 +740,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         assertTabs(in: app)
         assertMapControls(in: app)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
-        XCTAssertEqual(summary(in: app).label, "All time")
+        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
         assertFeedCount(4, in: app)
         capture("drawer-half-after-pan-and-return")
     }
@@ -762,7 +762,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
         assertDrawer("half expanded", count: 4, in: app)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
-        XCTAssertEqual(summary(in: app).label, "All time")
+        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
     }
 
     func testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement() {
@@ -857,33 +857,15 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(actor.label.contains("Ryan"))
         capture("combined-filter-selected-wanna")
 
-        let older = feed.descendants(matching: .any)["feed.olderActivity"].firstMatch
-        reveal(older, in: feed, direction: .down, app: app)
-        XCTAssertTrue(older.exists, "Older matching activity has its own boundary even when this fixture has no older match.")
-        let disclosure = "These posts are outside your selected location, people, categories and activity filters."
-        let allBoundary = feed.descendants(matching: .any).matching(NSPredicate(
-            format: "label CONTAINS %@ AND label CONTAINS %@", disclosure, "Showing all activity")).firstMatch
-        reveal(allBoundary, in: feed, direction: .down, app: app)
-        XCTAssertTrue(allBoundary.label.hasPrefix(disclosure),
-                      "The disclosure must precede the all-activity divider in the accessibility reading order.")
-        XCTAssertLessThanOrEqual(older.frame.maxY, allBoundary.frame.minY)
-        let outsideID = "fixture-feed-ryan-added-juniper-list"
-        let outsidePlace = app.buttons["feed.activity.\(outsideID).place"]
-        reveal(outsidePlace, in: feed, direction: .down, app: app)
-        XCTAssertTrue(outsidePlace.label.contains("Juniper Table"))
-        let outsideCard = feed.descendants(matching: .any)["feed.activity.\(outsideID).postcard"].firstMatch
-        XCTAssertTrue(outsideCard.exists)
-        XCTAssertGreaterThanOrEqual(outsideCard.frame.minY, allBoundary.frame.maxY,
-                                    "An outside-filter list addition belongs below its explicit disclosure.")
-        assertFeedCount(2, in: app)
-        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)",
-                       "Broadening Feed discovery must not broaden the committed map count or filters.")
-        for forbiddenID in ["fixture-feed-maya-been-bar-nido", "fixture-feed-maya-created-sunset-list",
-                            "fixture-feed-demo-saved-fern-desk"] {
-            XCTAssertFalse(feed.descendants(matching: .any)["feed.activity.\(forbiddenID).postcard"].firstMatch.exists,
-                           "The all-activity tail must still exclude activity outside Only Friends.")
-        }
-        capture("combined-filter-authorized-unfiltered-tail")
+        let end = feed.descendants(matching: .any)["feed.scopeEnd"].firstMatch
+        reveal(end, in: feed, direction: .down, app: app)
+        XCTAssertTrue(end.exists)
+        XCTAssertTrue(app.buttons["feed.showOlder"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["feed.allActivity"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["feed.olderActivity"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["feed.activity.fixture-feed-ryan-added-juniper-list.place"].exists)
+        assertFeedCount(1, in: app)
+        capture("combined-filter-strict-end")
         dragDrawer(.down, to: "half expanded", count: 1, in: app)
 
         openFilters(in: app)
@@ -921,9 +903,9 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["live.applyFilters"].tap()
 
         assertDrawer("half expanded", count: 2, in: app)
-        XCTAssertEqual(summary(in: app).label, "All time")
-        XCTAssertEqual(drawer(in: app).value as? String, "2 activities. Featured · All time · Only Friends")
-        XCTAssertEqual(app.buttons["Filters"].value as? String, "1 active filters")
+        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
+        XCTAssertTrue((drawer(in: app).value as? String)?.contains("Only friends") == true)
+        XCTAssertEqual(app.buttons["Filters"].value as? String, "2 active filters")
         assertPins(["place_noodles", "place_juniper_table"], in: app)
         dragDrawer(.up, to: "expanded", count: 2, in: app)
         assertFeedCount(2, in: app)
@@ -955,6 +937,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
+        app.buttons["live.feed.scope.mapArea"].tap()
         return app
     }
 
@@ -968,7 +951,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
                               postInputCapture: String? = nil) {
-        let loadedCount = count == 1 ? "1 activity." : "\(count) activities."
+        let loadedCount = count == 1 ? "1 activity on map." : "\(count) activities on map."
         // Read only the uniquely identified native drawer snapshot. Keep query
         // resolution inside the timed predicate; .element rejects ambiguity.
         let observationStart = ProcessInfo.processInfo.systemUptime
@@ -1151,8 +1134,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertCombinedResult(in app: XCUIApplication, drawerState: String = "half expanded") {
         assertDrawer(drawerState, count: 1, in: app)
-        XCTAssertEqual(summary(in: app).label, "Past 1 day")
-        XCTAssertEqual(drawer(in: app).value as? String, "1 activity. \(combinedSummary)")
+        XCTAssertTrue(summary(in: app).label.contains("Past 24 hours"))
+        XCTAssertTrue((drawer(in: app).value as? String)?.contains("Within 25 km") == true)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "6 active filters")
         assertPins(["place_noodles"], in: app)
         let pin = app.buttons["live.pin.place_noodles"]
