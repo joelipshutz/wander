@@ -42,6 +42,8 @@ struct LiveNativeMap: UIViewRepresentable {
     let positionRevision: UInt64
     let proxy: LiveNativeMapProxy
     let pins: [LivePlacePin]
+    var questions: [CircleQuestion] = []
+    var onSelectQuestion: (CircleQuestion) -> Void = { _ in }
     // Callers without a projection generation retain the conservative refresh.
     var pinsRevision: UUID? = nil
     let selectedID: String?
@@ -88,6 +90,7 @@ struct LiveNativeMap: UIViewRepresentable {
         private var parent: LiveNativeMap
         private let basemapAppearance = MapBasemapAppearance()
         private var annotations: [String: LiveNativePinAnnotation] = [:]
+        private var questionAnnotations: [UUID: CircleQuestionMapAnnotation] = [:]
         private var annotationSnapshot: [AnnotationSnapshot] = []
         private var lastPinsRevision: UUID?
         private var densitySnapshot: DensitySnapshot?
@@ -169,10 +172,23 @@ struct LiveNativeMap: UIViewRepresentable {
                     map.deselectAnnotation(feature, animated: false)
                 }
             }
+            synchronizeQuestions(in: map)
             updateAreaOverlays(in: map)
             let pinsChanged = synchronizePins(in: map)
             applyCameraCommand(to: map, animated: animated)
             refreshDensity(in: map, force: pinsChanged)
+        }
+
+        private func synchronizeQuestions(in map: MKMapView) {
+            let visible = parent.questions.filter { $0.isOnMap(at: .now) && $0.draft.area != nil }
+            let ids = Set(visible.map(\.id))
+            for (id, annotation) in questionAnnotations where !ids.contains(id) {
+                map.removeAnnotation(annotation); questionAnnotations.removeValue(forKey: id)
+            }
+            for question in visible where questionAnnotations[question.id] == nil {
+                let annotation = CircleQuestionMapAnnotation(question)
+                questionAnnotations[question.id] = annotation; map.addAnnotation(annotation)
+            }
         }
 
         private func applyCameraCommand(to map: MKMapView, animated: Bool) {
@@ -363,6 +379,13 @@ struct LiveNativeMap: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: any MKAnnotation) -> MKAnnotationView? {
+            if let question = annotation as? CircleQuestionMapAnnotation {
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: CircleQuestionMapAnnotationView.reuseID)
+                    ?? CircleQuestionMapAnnotationView(annotation: annotation, reuseIdentifier: CircleQuestionMapAnnotationView.reuseID)
+                view.annotation = annotation
+                view.accessibilityLabel = "Question: \(question.title ?? "")"
+                return view
+            }
             guard let pin = annotation as? LiveNativePinAnnotation else { return nil }
             guard let view = mapView.dequeueReusableAnnotationView(withIdentifier: LiveNativePinView.reuseIdentifier,
                                                                   for: pin) as? LiveNativePinView else { return nil }
@@ -382,7 +405,10 @@ struct LiveNativeMap: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, didSelect annotation: any MKAnnotation) {
             guard !isUpdating, !parent.drawing else { return }
-            if let pin = annotation as? LiveNativePinAnnotation, let model = pinByID[pin.pinID] {
+            if let question = annotation as? CircleQuestionMapAnnotation {
+                mapView.deselectAnnotation(annotation, animated: false)
+                parent.onSelectQuestion(question.question)
+            } else if let pin = annotation as? LiveNativePinAnnotation, let model = pinByID[pin.pinID] {
                 mapView.deselectAnnotation(pin, animated: false)
                 parent.onSelectPin(model)
             } else if let feature = annotation as? MKMapFeatureAnnotation {

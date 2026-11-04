@@ -14,6 +14,9 @@ struct LiveScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    @State private var circleQuestions: [CircleQuestion] = []
+    @State private var selectedQuestion: CircleQuestion?
+    @State private var questionClock = Date()
     @State private var camera: MapCameraPosition = .region(LiveMapLaunchLocation.initialRegion())
     @State private var cameraRevision: UInt64 = 0
     @State private var launchLocation = LiveMapLaunchLocation()
@@ -149,7 +152,17 @@ struct LiveScreen: View {
     }
 
     var body: some View {
-        liveContent.modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
+        liveContent
+            .onReceive(backend.circleQuestions.$items) { circleQuestions = $0 }
+            .task(id: store.currentUser.id) {
+                backend.circleQuestions.analytics = store.productAnalytics
+                await backend.circleQuestions.load(userID: store.currentUser.id)
+            }
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { questionClock = $0 }
+            .sheet(item: $selectedQuestion) { question in
+                NavigationStack { CircleQuestionDetail(state: backend.circleQuestions, initial: question) }
+            }
+            .modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
             onDismiss: modalDidDismiss, lifecycle: modalLifecycle))
             .onChange(of: detent) { _, _ in saveBrowseState() }
             .onChange(of: selection) { _, _ in saveBrowseState() }
@@ -573,7 +586,7 @@ struct LiveScreen: View {
         let layout = LiveMapSearchLayout(size: size,
             controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
         return LiveNativeMap(
-            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, pinsRevision: mapProjection.revision, selectedID: selectedPlaceID,
+            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, questions: circleQuestions.filter { $0.isOnMap(at: questionClock) && !store.isBlockedBetweenCurrentUser(and: $0.author.id) }, onSelectQuestion: { selectedQuestion = $0 }, pinsRevision: mapProjection.revision, selectedID: selectedPlaceID,
             viewedPins: viewedPins, brand: brand, coloredMap: store.isColoredMapEnabled,
             drawing: drawing,
             contentInsets: EdgeInsets(top: drawing ? 8 : layout.controlsHeight + 8, leading: 8,
@@ -1695,6 +1708,10 @@ struct LiveScreen: View {
         showsMessages = false; replyTarget = nil
         changeDetent(2)
         switch context.kind {
+        case .question:
+            if let id = UUID(uuidString: context.id) {
+                Task { selectedQuestion = await backend.circleQuestions.refreshQuestion(id: id) }
+            }
         case .activity: queuedActivityID = context.id
         case .place: pushNotifications.route(to: .place(id: context.id))
         }

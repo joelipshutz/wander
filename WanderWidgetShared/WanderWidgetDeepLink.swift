@@ -89,6 +89,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case sharedProfile(profileID: String)
     case sharedPlace(placeID: String)
     case sharedActivity(activityID: String)
+    case sharedQuestion(questionID: String)
     // Internal notification route; existing pushes identify a visit, not its event.
     case checkInActivity(userPlaceID: String, visitID: String)
     case sharedList(listID: String)
@@ -117,6 +118,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             Self.sharedEntityURL(root: "profiles", identifier: profileID)
         case .sharedPlace(let placeID):
             Self.sharedEntityURL(root: "places", identifier: placeID)
+        case .sharedQuestion(let questionID):
+            URL(string: "recme://questions/\(questionID)")
         case .sharedActivity(let activityID):
             Self.sharedEntityURL(root: "activities", identifier: activityID)
         case .feed, .checkInActivity:
@@ -208,6 +211,11 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
                 return nil
             }
             return .profileCalendarDate(date)
+
+        case ("questions", let segments):
+            guard segments.count == 1, let id = segments.first, UUID(uuidString: id) != nil,
+                  hasNoQuery(in: components) else { return nil }
+            return .sharedQuestion(questionID: id)
 
         case ("profiles", let segments):
             guard segments.count == 1,

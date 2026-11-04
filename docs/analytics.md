@@ -382,3 +382,15 @@ allowlist is local to the inbox; this type is not a new push producer. A map-sav
 receipt representing the same activity retains `place_saved_from_your_map` and
 emits one open event. No actor, place, note, activity ID, or notification ID is
 included. Exposure/scroll acknowledgement emits no analytics event.
+
+## Circle Questions (implementation branch)
+
+`circle_question_posted` and `circle_question_answered` fire only after an
+acknowledged repository mutation, once per client request in the active session.
+They carry no properties. The matching normalized engagement events use
+Expression / `question_asked` and Connect / `question_answered`, with `surface=live`.
+Question text, places, location, selected recipients, Stealth audiences and reply
+content are never event properties. All question composers, conversations and
+notification rows are masked from session replay. Review fixtures use Noop analytics.
+The existing engagement dashboard includes these normalized events; no new dashboard
+resource or metric query is introduced. Hosted ingestion still requires release validation.
