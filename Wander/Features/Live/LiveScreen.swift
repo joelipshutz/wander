@@ -24,6 +24,7 @@ struct LiveScreen: View {
     @State private var mapProjection = LiveMapDisplayProjection()
     @State private var committedMapBoundary: LiveDrawnArea?
     @State private var committedMapViewport: MapViewport?
+    @State private var committedMapQuery: LiveFeedQuery?
     @State private var mapRefresh: UInt64 = 0
     @State private var mapRefreshDeferred = false
     @State private var didRestoreBrowse = false
@@ -55,6 +56,7 @@ struct LiveScreen: View {
     @State private var departedDetent = 1
     @State private var departedFeedWasScrolled = false
     @State private var nearbyLoading = false
+    @State private var nearbyRequest = UUID()
     @StateObject private var recentListAdd = RecentPlaceListAddController()
     @State private var didFrame = false
     @State private var detent = 1
@@ -128,7 +130,7 @@ struct LiveScreen: View {
             resultRevision: mapResults.revision, storeRevision: store.liveContentRevision)
     }
     private var mapRequest: LiveMapRequest? {
-        guard let query = store.liveFeedQuery else { return nil }
+        guard let query = committedMapQuery else { return nil }
         return LiveMapRequest(userID: store.currentUser.id, audience: store.feedAudience,
             query: query, featured: selection.scope == .featured,
             viewport: committedMapViewport, refresh: mapRefresh)
@@ -494,7 +496,7 @@ struct LiveScreen: View {
         var refreshed: [FeedActivity] = []
         for existing in mapActivity {
             let event: FeedActivity = enriched[existing.id] ?? existing
-            guard let query = store.liveFeedQuery, query.includes(event) else { continue }
+            guard let query = committedMapQuery, query.includes(event) else { continue }
             guard store.canDisplayLiveMapActivity(event) else { continue }
             refreshed.append(event)
         }
@@ -728,11 +730,11 @@ struct LiveScreen: View {
                     .font(.system(size: 20, weight: .medium))
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
                     .accessibilityIdentifier("live.draw")
-                if case .drawn? = area {
+                if area != nil {
                     Button {
                         area = nil; resetCommittedMapWindow(); mapSearch.didCommit(); commitSelection(selection)
                     } label: {
-                        Text("Clear")
+                        Text("Clear area")
                             .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
                             .astirGlassSurface(cornerRadius: 22, interactive: true)
                     }
@@ -785,15 +787,11 @@ struct LiveScreen: View {
         }
     }
 
-    private var drawerUpdateCount: some View {
-        Text(LiveMapPaging.countText(activity.count, complete: mapResults.complete)).font(AstirTypography.bodySmall.weight(.semibold))
-            .accessibilityLabel(LiveMapPaging.countText(activity.count, complete: mapResults.complete))
-    }
-
-    private var drawerFilterSummary: some View {
-        Text(selection.time == .all ? "All time" : "Past \(selection.time.rawValue) \(selection.time.rawValue == 1 ? "day" : "days")")
-            .font(.caption2).foregroundStyle(brand.secondaryText)
-            .accessibilityIdentifier("live.filter.summary")
+    private var feedScopeSummary: String {
+        let geography = selection.feedLocationScope == .everywhere ? "Everywhere"
+            : area?.summary ?? (selection.scope == .nearby ? "Within \(selection.radius.title)" : "Map area")
+        let terms = selection.sharedFilterTerms + (store.feedAudience == .everyone ? [] : [AppCopy.capitalizingInitial(store.feedAudience.title.lowercased())])
+        return ([geography] + (terms.isEmpty ? ["All activity"] : terms) + ["Newest first"]).joined(separator: " · ")
     }
 
     private func drawer(height: CGFloat) -> some View {
@@ -805,14 +803,28 @@ struct LiveScreen: View {
                        middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
                        detent: detent, enabled: !showsFeedDestination, onDetent: { changeDetent($0) }) {
             if !showsFeedDestination {
-                VStack(spacing: 8) {
-                    Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                    drawerUpdateCount
-                    drawerFilterSummary
+                VStack(spacing: 0) {
+                    VStack(spacing: 8) {
+                        Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
+                        Text("Activity").font(AstirTypography.bodySmall.weight(.semibold))
+                    }
+                    .padding(.horizontal, 64)
+                    .padding(.top, 10).padding(.bottom, 8)
+                    .frame(minHeight: 56)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
+                    .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)) on map. Feed: \(feedScopeSummary)")
+                    .accessibilityAdjustableAction { direction in
+                        changeDetent(detent + (direction == .increment ? 1 : -1))
+                    }
+                    .accessibilityIdentifier("live.drawerHandle")
+                    LiveFeedScopeControls(scope: selection.feedLocationScope,
+                        summary: feedScopeSummary, showsReset: sharedFilterCount > 0,
+                        onScope: selectFeedLocation, onReset: resetSharedFilters)
+                        .padding(.horizontal, 16).padding(.bottom, 10)
                 }
-                .padding(.horizontal, 64)
-                .padding(.top, 10).padding(.bottom, 12)
-                .frame(minHeight: 64)
                 .fixedSize(horizontal: false, vertical: true)
                 .background {
                     GeometryReader { headerGeometry in
@@ -822,14 +834,6 @@ struct LiveScreen: View {
                 .onPreferenceChange(LiveDrawerHeaderHeightKey.self) { height in
                     if height.isFinite, height > 0, drawerHeaderHeight != ceil(height) { drawerHeaderHeight = ceil(height) }
                 }
-                .contentShape(Rectangle())
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-                .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)). \(filterSummary)")
-                .accessibilityAdjustableAction { direction in
-                    changeDetent(detent + (direction == .increment ? 1 : -1))
-                }
-                .accessibilityIdentifier("live.drawerHandle")
             }
         } content: {
             VStack(spacing: 0) {
@@ -874,7 +878,7 @@ struct LiveScreen: View {
                     isEmbedded: true,
                     showsInviteEntry: false,
                     isEmbeddedFeedVisible: isActive && detent > 0 && selectedPin == nil && !showsFeedDestination && !drawing,
-                    filteredActivityIDs: mapProjection.activityIDs,
+                    filteredActivityIDs: nil,
                     activityFocusRequest: focusRequest, surfaceRequest: surfaceRequest,
                     onPrivateReply: openReply,
                     onEmbeddedDestinationActiveChange: { isFeedDestinationActive = $0 },
@@ -882,6 +886,9 @@ struct LiveScreen: View {
                         selection = selection.committed(at: .now)
                         installCommittedQuery(refresh: false)
                     },
+                    onShowActivityEverywhere: selection.feedLocationScope == .mapArea ? { selectFeedLocation(.everywhere) } : nil,
+                    onClearActivityFilters: sharedFilterCount > 0 ? { resetSharedFilters() } : nil,
+                    onShowOlderActivity: selection.time != .all ? { showOlderActivity() } : nil,
                     onEmbeddedScrollPositionChange: { feedIsScrolled = $0 },
                     embeddedScrollResetRequest: feedScrollResetRequest,
                     onAdd: onAdd
@@ -892,8 +899,10 @@ struct LiveScreen: View {
             .accessibilityHidden(!showsFeedDestination && detent == 0)
         }
         .frame(maxWidth: .infinity)
-        .background(brand.background, in: UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
-            topTrailingRadius: showsFeedDestination ? 0 : 26))
+        .background {
+            UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
+                topTrailingRadius: showsFeedDestination ? 0 : 26).fill(brand.background)
+        }
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
             topTrailingRadius: showsFeedDestination ? 0 : 26))
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
@@ -904,7 +913,7 @@ struct LiveScreen: View {
             LiveDrawerActions(eventsAvailable: eventsAvailable,
                 onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true })
                 .padding(.horizontal, 16)
-                .frame(height: max(64, drawerHeaderHeight))
+                .frame(height: 56)
         }
     }
 
@@ -994,7 +1003,7 @@ struct LiveScreen: View {
             guard let draftArea else { return }
             area = .drawn(draftArea); self.draftArea = nil; drawing = false; selectedPlaceID = nil
             mapSearch.didCommit()
-            commitSelection(selection)
+            commitSelection(selection.searchingMapArea())
         } label: {
             Text("Apply").fixedSize(horizontal: false, vertical: true)
         }.frame(minHeight: 44).disabled(draftArea == nil).buttonStyle(.borderedProminent)
@@ -1027,14 +1036,11 @@ struct LiveScreen: View {
                 categoryFilterSection
                 personFilterSection
                 Section {
-                    if let area, !(draftSelection.scope == .nearby && area.isMapViewport) {
+                    if let area, draftSelection.scope != .nearby {
                         Toggle(area.isMapViewport ? "Keep map area" : "Keep drawn area", isOn: Binding(get: { !draftClearsArea }, set: { draftClearsArea = !$0 }))
                     }
-                    Text("The map and recent Feed use these filters. Scroll further for older matches, then clearly labeled activity outside your filters.")
+                    Text("Filters apply to your map and activity. Choose Map area in the activity header to see activity only in that area.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Text("Time window ends \(selection.committedAt.formatted(date: .abbreviated, time: .shortened)). Apply or refresh updates the window.")
-                        .font(.footnote).foregroundStyle(.secondary)
-
                 }
             }
             .accessibilityIdentifier("live.filters.form")
@@ -1044,9 +1050,11 @@ struct LiveScreen: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Apply") {
                         guard draftSelection.isValid else { return }
+                        let applied = draftSelection.applyingFilters(from: selection,
+                            audienceChanged: draftAudience != store.feedAudience, at: .now)
                         store.selectFeedAudience(draftAudience)
                         if draftClearsArea { area = nil; resetCommittedMapWindow(); mapSearch.didCommit() }
-                        commitSelection(draftSelection)
+                        commitSelection(applied)
                         filtersPresented = false
                     }.disabled(!draftSelection.isValid).accessibilityIdentifier("live.applyFilters")
                 }
@@ -1074,7 +1082,7 @@ struct LiveScreen: View {
                 Picker("Radius", selection: $draftSelection.radius) {
                     ForEach(LiveBrowseSelection.Radius.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).accessibilityIdentifier("live.filter.radius")
-                Text("Nearby uses a 10 km radius around your location when available, otherwise the map center. You can choose a city or another radius here. A drawn area narrows it further.")
+                Text("Nearby uses a 10 km radius around your location when available, otherwise the map center. Drawing an area or using Search this area replaces this radius. Your activity follows this area only when Map area is selected.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -1196,14 +1204,35 @@ struct LiveScreen: View {
     #endif
 
     private func resetDraftFilters() {
-        let cityID = draftSelection.cityID
-        draftSelection = LiveBrowseSelection(now: selection.committedAt)
-        draftSelection.cityID = cityID
+        draftSelection = draftSelection.resettingSharedFilters()
         draftAudience = .everyone
-        draftClearsArea = true
+    }
+
+    private var sharedFilterCount: Int {
+        selection.sharedFilterCount + (store.feedAudience == .everyone ? 0 : 1)
+    }
+
+    private func resetSharedFilters() {
+        store.selectFeedAudience(.everyone)
+        commitSelection(selection.resettingSharedFilters(), refreshTime: true)
+    }
+
+    private func showOlderActivity() {
+        var next = selection
+        next.time = .all
+        commitSelection(next, refreshTime: true)
+    }
+
+    private func selectFeedLocation(_ scope: LiveFeedLocationScope) {
+        guard selection.feedLocationScope != scope else { return }
+        selection.feedLocationScope = scope
+        installCommittedQuery()
     }
 
     private func selectNearby() {
+        nearbyRequest = UUID()
+        let requestID = nearbyRequest
+        area = nil; resetCommittedMapWindow(); mapSearch.didCommit()
         var next = selection
         next.scope = .nearby; next.radius = .tenKilometers
         next.cityID = HomeMetro.find(homeMetroID)?.id ?? next.cityID
@@ -1220,9 +1249,12 @@ struct LiveScreen: View {
         let accountID = store.currentUser.id
         let requestedSelection = selection
         Task { @MainActor in
-            defer { nearbyLoading = false }
+            defer { if nearbyRequest == requestID { nearbyLoading = false } }
             guard let location = try? await CoreLocationProvider(purpose: .map).currentLocation(),
-                  store.currentUser.id == accountID, selection == requestedSelection, selection.scope == .nearby else { return }
+                  store.currentUser.id == accountID, nearbyRequest == requestID,
+                  selection.scope == .nearby, area == nil,
+                  selection.center == requestedSelection.center,
+                  selection.radius == requestedSelection.radius else { return }
             var located = selection
             located.nearbyCenter = .init(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
             located.nearbyCenterName = "Your location"
@@ -1231,17 +1263,18 @@ struct LiveScreen: View {
         }
     }
 
-    private func commitSelection(_ next: LiveBrowseSelection) {
+    private func commitSelection(_ next: LiveBrowseSelection, refreshTime: Bool = false) {
         guard next.isValid else { return }
         launchLocation.userDidChooseCamera()
         let changedNearby = next.scope == .nearby && (selection.scope != .nearby
             || next.center != selection.center || next.radius != selection.radius)
-        if next.scope == .nearby, area?.isMapViewport == true {
+        if next.scope == .nearby, area != nil {
             area = nil
             mapSearch.didCommit()
         }
         if next.scope == .featured && selection.scope == .nearby { resetCommittedMapWindow() }
-        selection = next.committed(at: .now)
+        // Geographic browsing must keep the Everywhere feed's query and cursor.
+        selection = refreshTime ? next.committed(at: .now) : next
         clearNativePlaceSelection()
         selectedPlaceID = nil
         cardMapOrigin = nil
@@ -1258,17 +1291,15 @@ struct LiveScreen: View {
         }
     }
 
-    private var filterSummary: String {
-        ([selection.summary] + (store.feedAudience == .everyone ? [] : [store.feedAudience.title])
-            + (area.map { [$0.summary] } ?? [])).joined(separator: " · ")
-    }
-
     private func installCommittedQuery(refresh: Bool = true, preservingContent: Bool = false) {
         guard selection.isValid else { return }
         let boundary = resolvedMapBoundary()
-        store.selectLiveFeedQuery(selection.query(area: boundary), preservingMatchingContent: preservingContent)
+        committedMapQuery = selection.query(area: boundary)
+        let nextFeedQuery = selection.feedQuery(area: boundary)
+        let changedFeed = store.liveFeedQuery != nextFeedQuery
+        store.selectLiveFeedQuery(nextFeedQuery, preservingMatchingContent: preservingContent)
         store.refreshLiveFeedDisplayLease()
-        if refresh {
+        if refresh && (changedFeed || store.followedFeedPage == nil || store.liveFeedSocialExpired) {
             let userID = store.currentUser.id, query = store.liveFeedQuery
             Task {
                 guard store.currentUser.id == userID, store.liveFeedQuery == query else { return }
@@ -1357,7 +1388,7 @@ struct LiveScreen: View {
         let interval = WanderDebugLog.beginPerformanceInterval(cause)
         defer { WanderDebugLog.endPerformanceInterval(cause, id: interval) }
         mapActivity = mapResults.activities.filter {
-            store.liveFeedQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
+            committedMapQuery?.includes($0) == true && store.canDisplayLiveMapActivity($0)
         }
         mapProjection = makeMapProjection(activities: mapActivity)
     }
@@ -1370,7 +1401,7 @@ struct LiveScreen: View {
         }
         return LiveMapDisplayProjection(pins: LiveMapProjection.pins(activities: activities, featured: mapResults.featuredPlaces,
                 ownCheckInPlaces: ownCheckInPlaces,
-                totemContext: store.liveTotemContext(query: store.liveFeedQuery ?? selection.query(),
+                totemContext: store.liveTotemContext(query: committedMapQuery ?? selection.query(),
                     currentStateIsComplete: usesTotemReviewFixture, authoritativeState: pinStateLoader.snapshot,
                     allowsCachedAssociations: usesTotemReviewFixture || !auth.isSignedIn),
                 previousPins: previousPinIdentities), activities: activities)

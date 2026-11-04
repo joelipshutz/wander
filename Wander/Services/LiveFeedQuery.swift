@@ -216,16 +216,9 @@ extension LiveFeedQuery {
     }
 
     func nextExpansion(after stage: LiveFeedExpansionStage) -> LiveFeedExpansionStage? {
-        guard isValid else { return nil }
-        switch stage {
-        case .selected:
-            if occurredAfter != nil { return .older }
-            return hasDiscoveryFilters ? .allActivity : nil
-        case .older:
-            return hasDiscoveryFilters ? .allActivity : nil
-        case .allActivity:
-            return nil
-        }
+        // Pagination must honor the selected scope. Broader results require an
+        // explicit UI action that installs a new query and discards its cursor.
+        nil
     }
 
     func expandedQuery(for stage: LiveFeedExpansionStage) -> LiveFeedQuery {

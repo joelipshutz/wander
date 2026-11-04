@@ -4,6 +4,64 @@ import XCTest
 @MainActor final class LiveBrowseSelectionTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 
+    func testEverywhereIgnoresMapGeometryButSharesEveryContentFilter() throws {
+        var selection = LiveBrowseSelection(now: now)
+        selection.scope = .nearby
+        selection.nearbyCenter = .init(latitude: 34.05, longitude: -118.24)
+        selection.activityType = .checkIns; selection.time = .week
+        selection.categoryIDs = [WanderPlaceCategory.coffeeTeaSweets]
+        selection.toggleCategoryOption("Italian", in: WanderPlaceCategory.restaurantsFood)
+        selection.personIDs = ["selected-person"]
+        let area = try XCTUnwrap(LiveDrawnArea(coordinates: [
+            .init(latitude: 34, longitude: -118.3), .init(latitude: 34, longitude: -118.2),
+            .init(latitude: 34.1, longitude: -118.2), .init(latitude: 34.1, longitude: -118.3)]))
+        let feed = selection.feedQuery(area: area)
+        XCTAssertEqual(selection.feedLocationScope, .everywhere)
+        XCTAssertNil(feed.polygon); XCTAssertNil(feed.center); XCTAssertNil(feed.radiusMeters)
+        XCTAssertEqual(feed.categoryIDs, selection.query().categoryIDs)
+        XCTAssertEqual(feed.categoryOptions, selection.query().categoryOptions)
+        XCTAssertEqual(feed.personIDs, ["selected-person"])
+        XCTAssertEqual(feed.activityType, .checkIns)
+        XCTAssertEqual(feed.occurredAfter, selection.occurredAfter)
+        XCTAssertEqual(feed.occurredBefore, now)
+        selection.feedLocationScope = .mapArea
+        XCTAssertEqual(selection.feedQuery(area: area), selection.query(area: area))
+        XCTAssertNotNil(selection.query(area: area).polygon)
+        XCTAssertNil(selection.query(area: area).radiusMeters, "A drawn area replaces an earlier radius")
+        XCTAssertEqual(selection.feedQuery(area: nil).radiusMeters, 10_000)
+    }
+
+    func testResetClearsAllSharedFiltersAndKeepsLocationChoices() {
+        var selection = LiveBrowseSelection(now: now)
+        selection.feedLocationScope = .mapArea
+        selection.scope = .nearby; selection.cityID = "los-angeles"
+        selection.radius = .twentyFiveKilometers
+        selection.activityType = .checkIns; selection.time = .day
+        selection.personIDs = ["person"]
+        selection.toggleCategoryOption("Italian", in: WanderPlaceCategory.restaurantsFood)
+        XCTAssertEqual(selection.sharedFilterCount, 4)
+        let reset = selection.resettingSharedFilters()
+        XCTAssertEqual(reset.sharedFilterCount, 0)
+        XCTAssertTrue(reset.sharedFilterTerms.isEmpty)
+        XCTAssertEqual(reset.feedLocationScope, .mapArea)
+        XCTAssertEqual(reset.scope, .nearby)
+        XCTAssertEqual(reset.cityID, selection.cityID)
+        XCTAssertEqual(reset.radius, .twentyFiveKilometers)
+        XCTAssertEqual(reset.occurredBefore, now)
+    }
+
+    func testScopeBookmarkRoundTripAndLegacyDefault() throws {
+        var selection = LiveBrowseSelection(now: now)
+        selection.feedLocationScope = .mapArea
+        let data = try JSONEncoder().encode(selection)
+        XCTAssertEqual(try JSONDecoder().decode(LiveBrowseSelection.self, from: data).feedLocationScope, .mapArea)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "storedFeedLocationScope")
+        let restored = try JSONDecoder().decode(LiveBrowseSelection.self,
+            from: JSONSerialization.data(withJSONObject: legacy))
+        XCTAssertEqual(restored.feedLocationScope, .everywhere)
+    }
+
     func testChildChoicesReplaceTheirParentAndRemainIndependentAcrossCategories() throws {
         let food = WanderPlaceCategory.restaurantsFood
         let coffee = WanderPlaceCategory.coffeeTeaSweets
@@ -286,8 +344,8 @@ import XCTest
         XCTAssertTrue(query.isValid)
         XCTAssertEqual(query.occurredBefore, now.addingTimeInterval(60))
         XCTAssertEqual(query.occurredAfter, now.addingTimeInterval(60 - 86_400))
-        XCTAssertEqual(query.center, committed.center)
-        XCTAssertEqual(query.radiusMeters, 25_000)
+        XCTAssertNil(query.center)
+        XCTAssertNil(query.radiusMeters, "The explicit area replaces the nearby radius")
         XCTAssertEqual(query.activityType, .wannas)
         XCTAssertEqual(query.categoryIDs, [WanderPlaceCategory.coffeeTeaSweets])
         XCTAssertEqual(query.personIDs, ["selected-person"])

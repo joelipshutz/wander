@@ -135,6 +135,9 @@ struct FeedScreen: View {
     private let onPrivateReply: ((FeedActivity) -> Void)?
     private let onEmbeddedDestinationActiveChange: (Bool) -> Void
     private let onRefreshRequested: () -> Void
+    private let onShowActivityEverywhere: (() -> Void)?
+    private let onClearActivityFilters: (() -> Void)?
+    private let onShowOlderActivity: (() -> Void)?
     private let onEmbeddedScrollPositionChange: (Bool) -> Void
     private let embeddedScrollResetRequest: UUID?
 
@@ -153,6 +156,9 @@ struct FeedScreen: View {
         onPrivateReply: ((FeedActivity) -> Void)? = nil,
         onEmbeddedDestinationActiveChange: @escaping (Bool) -> Void = { _ in },
         onRefreshRequested: @escaping () -> Void = {},
+        onShowActivityEverywhere: (() -> Void)? = nil,
+        onClearActivityFilters: (() -> Void)? = nil,
+        onShowOlderActivity: (() -> Void)? = nil,
         onEmbeddedScrollPositionChange: @escaping (Bool) -> Void = { _ in },
         embeddedScrollResetRequest: UUID? = nil,
         onAdd: @escaping () -> Void = {}
@@ -171,6 +177,9 @@ struct FeedScreen: View {
         self.onPrivateReply = onPrivateReply
         self.onEmbeddedDestinationActiveChange = onEmbeddedDestinationActiveChange
         self.onRefreshRequested = onRefreshRequested
+        self.onShowActivityEverywhere = onShowActivityEverywhere
+        self.onClearActivityFilters = onClearActivityFilters
+        self.onShowOlderActivity = onShowOlderActivity
         self.onEmbeddedScrollPositionChange = onEmbeddedScrollPositionChange
         self.embeddedScrollResetRequest = embeddedScrollResetRequest
         self.onAdd = onAdd
@@ -798,7 +807,28 @@ struct FeedScreen: View {
             }
             if !store.hasMoreFeed, store.liveFeedExpansionStage != .allActivity,
                store.feedLoadState == .loaded {
-                expansionDivider(title: "Showing all activity", identifier: "feed.allActivity")
+                VStack(alignment: .leading, spacing: 4) {
+                    if !projection.groups.isEmpty {
+                        Text("You’re caught up with this activity.")
+                            .font(AstirTypography.bodySmall).foregroundStyle(astirBrandMode.secondaryText)
+                    }
+                    if let onShowActivityEverywhere {
+                        Button("Show activity everywhere", action: onShowActivityEverywhere)
+                            .accessibilityIdentifier("feed.showEverywhere")
+                    }
+                    if let onShowOlderActivity {
+                        Button("Show older activity", action: onShowOlderActivity)
+                            .accessibilityIdentifier("feed.showOlder")
+                    }
+                    if let onClearActivityFilters {
+                        Button("Reset filters", action: onClearActivityFilters)
+                            .accessibilityIdentifier("feed.resetFilters")
+                    }
+                }
+                .buttonStyle(FeedScopeRecoveryButtonStyle())
+                .tint(astirBrandMode.accentText)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("feed.scopeEnd")
             }
             paginationControls
             if store.feedLoadState == .stale {
@@ -1336,6 +1366,14 @@ struct FeedScreen: View {
                 }
             }
         }
+    }
+}
+
+private struct FeedScopeRecoveryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(AstirTypography.bodySmall)
+            .frame(minHeight: 44)
+            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
 

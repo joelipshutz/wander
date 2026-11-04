@@ -1092,3 +1092,25 @@ GPS anchor. It contains no Feed rows, pins, social authorization, or pin-state
 facts. Invalid/oversized/expired bookmarks are ignored. Existing owner SwiftData
 persistence remains the source for owner data. No backend or schema change is
 required.
+
+## REC-678 — explicit Feed geography and shared filters, 2026-11-03
+
+Live Feed defaults to **Everywhere**, ordered newest first. Its header offers
+**Everywhere / Map area** and describes the active scope. People, audience,
+category/options, activity type and time filters apply to both map and Feed;
+Everywhere ignores geographic constraints only. Featured remains map discovery
+and does not change Feed ordering. Existing place metadata supplies city/region
+context for distant activity.
+
+Map area uses committed geography: Nearby radius, an applied drawn area, or
+Search this area. Panning alone does not commit a new area. Explicit areas
+replace Nearby and choosing Nearby clears an explicit area. Geographic changes
+preserve the Everywhere Feed query, pagination and scroll revision. Switching
+Feed scope explicitly starts the corresponding query; bookmarks retain the choice.
+
+Feed pagination never silently broadens time, geography or shared filters.
+Recovery actions explicitly offer Everywhere, older activity or filter reset
+when relevant. **Reset filters** is visible in the drawer whenever shared
+filters are active and clears them without changing the map area or Feed scope.
+**Clear area** removes an applied drawn/searched area separately. The Filters
+sheet follows the same reset contract, with changes staged until Apply.

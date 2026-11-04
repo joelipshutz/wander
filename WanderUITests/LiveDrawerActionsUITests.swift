@@ -5,6 +5,63 @@ import XCTest
 final class LiveDrawerActionsUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testFeedScopeAndInlineResetKeepLocationChoiceAndClearSharedFilters() {
+        let app = launch()
+        let everywhere = app.buttons["live.feed.scope.everywhere"]
+        let mapArea = app.buttons["live.feed.scope.mapArea"]
+        waitHittable(everywhere)
+        XCTAssertEqual(everywhere.value as? String, "Selected")
+        XCTAssertFalse(app.buttons["live.resetFilters"].exists)
+        mapArea.tap()
+        XCTAssertEqual(mapArea.value as? String, "Selected")
+
+        app.buttons["Filters"].tap()
+        let people = app.buttons["live.filter.people"]
+        waitHittable(people)
+        people.tap()
+        app.buttons["Only Friends"].tap()
+        app.buttons["live.applyFilters"].tap()
+        let reset = app.buttons["live.resetFilters"]
+        waitHittable(reset)
+        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("Only friends"))
+        capture("feed-scope-filtered", in: app)
+        everywhere.tap()
+        XCTAssertTrue(reset.exists, "Changing geography must keep shared filters")
+        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("Only friends"))
+        mapArea.tap()
+        reset.tap()
+        XCTAssertTrue(reset.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(mapArea.value as? String, "Selected", "Reset must preserve the feed's location choice")
+        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("All activity"))
+        capture("feed-scope-reset", in: app)
+
+        app.buttons["Filters"].tap()
+        waitHittable(people)
+        XCTAssertEqual(people.value as? String, "Everyone")
+        app.buttons["Cancel"].tap()
+        let handle = drawer(in: app)
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.90)))
+        waitForDrawer("collapsed", in: app)
+        waitHittable(everywhere)
+        everywhere.tap()
+        XCTAssertEqual(everywhere.value as? String, "Selected")
+        capture("feed-scope-collapsed", in: app)
+    }
+
+    func testFeedScopeControlsFitAtAccessibilitySize() {
+        let app = launch(largeText: true)
+        for identifier in ["live.feed.scope.everywhere", "live.feed.scope.mapArea"] {
+            let button = app.buttons[identifier]
+            waitHittable(button)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertTrue(app.frame.contains(button.frame))
+        }
+        app.buttons["live.feed.scope.mapArea"].tap()
+        XCTAssertEqual(app.buttons["live.feed.scope.mapArea"].value as? String, "Selected")
+        capture("feed-scope-accessibility", in: app)
+    }
+
     func testHeaderActionsOpenExistingDestinationsAndRestoreDrawer() {
         let app = launch()
         assertHeaderLayout(in: app)
@@ -50,7 +107,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let app = launch(largeText: true)
         assertHeaderLayout(in: app)
         let handle = drawer(in: app)
-        XCTAssertTrue((handle.value as? String)?.contains("All time") == true)
+        XCTAssertTrue((handle.value as? String)?.contains("Everywhere") == true)
         capture("accessibility-text", in: app)
         openAndCloseInvite(in: app)
         waitForDrawer("half expanded", in: app)
