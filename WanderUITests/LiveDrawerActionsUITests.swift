@@ -94,7 +94,10 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let option = app.buttons[title]
         waitHittable(option)
         option.tap()
-        XCTAssertEqual(menu.value as? String, title)
+        let selectionUpdated = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", title), object: menu)
+        XCTAssertEqual(XCTWaiter.wait(for: [selectionUpdated], timeout: 5), .completed,
+                       "Selecting \(title) should update the feed location")
     }
 
     private func applyFriends(in app: XCUIApplication) {
