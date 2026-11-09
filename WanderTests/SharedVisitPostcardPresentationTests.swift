@@ -54,6 +54,24 @@ final class SharedVisitPostcardPresentationTests: XCTestCase {
         XCTAssertNil(SharedVisitPostcardPresentation(collection: collection, viewerID: "viewer", permits: { $0.id != "alex" }))
     }
 
+    func testSharedCountUsesOnlyReadableOriginalsAndUpdatesAfterComment() async throws {
+        let source = post("source", actor: "alex", name: "Alex")
+        let accepted = post("accepted", actor: "sam", name: "Sam")
+        let collection = try XCTUnwrap(SharedVisitPostCollection(groupID: "group",
+            commentActivityID: source.id, posts: [source, accepted]))
+        let store = WanderStore(fixtures: .empty())
+        _ = await store.addActivityComment(activityID: source.id, body: "First", backend: nil)
+        _ = await store.addActivityComment(activityID: accepted.id, body: "Second", backend: nil)
+        let all = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection,
+            viewerID: "viewer", permits: { _ in true }))
+        XCTAssertEqual(store.activityCommentCount(activityIDs: all.posts.map(\.id)), 2)
+        let restricted = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection,
+            viewerID: "viewer", permits: { $0.id != "sam" }))
+        XCTAssertEqual(store.activityCommentCount(activityIDs: restricted.posts.map(\.id)), 1)
+        _ = await store.addActivityComment(activityID: source.id, body: "Third", backend: nil)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: all.posts.map(\.id)), 3)
+    }
+
     func testPhotoIdentityDeduplicatesWithoutGuessingSameContent() throws {
         let source = post("source", actor: "alex", name: "Alex Example", photos: ["same", "one"])
         let accepted = post("accepted", actor: "sam", name: "Sam Example", photos: ["same", "two"])

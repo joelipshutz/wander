@@ -376,6 +376,7 @@ function normalizedNotificationType(value: string): string {
       "calendar_reservation_follow_up",
       "calendar_reservation_live",
       "capture_ready",
+      "circle_question_tagged",
       "followed_activity_digest",
       "followed_place_visit",
       "followed_you",

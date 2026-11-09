@@ -2651,6 +2651,10 @@ final class WanderStore: ObservableObject {
         activityEngagementByID[activityID] ?? .empty(activityID: activityID)
     }
 
+    func activityCommentCount(activityIDs: [String]) -> Int {
+        Set(activityIDs).reduce(0) { $0 + activityEngagement(for: $1).commentCount }
+    }
+
     @MainActor
     func activity(
         id activityID: String, backend: WanderBackend?, authSession: AuthSessionStore? = nil
@@ -2973,6 +2977,10 @@ final class WanderStore: ObservableObject {
               let repository = backend?.activityEngagementRepository
         else { return }
 
+        let summariesAtStart = activityEngagementByID
+        let pendingCommentsAtStart = Set(activityCommentsByID.compactMap { id, comments in
+            comments.contains(where: \.isPending) ? id : nil
+        })
         do {
             var summaries: [ActivityEngagementSummary] = []
             // Grouped feed tiles can contain more events than the RPC's 100-ID cap.
@@ -2986,6 +2994,11 @@ final class WanderStore: ObservableObject {
             var refreshedEngagement = activityEngagementByID
             var refreshedErrors = activityEngagementErrorByID
             for summary in summaries where !pendingActivityLikeIDs.contains(summary.activityID) {
+                // A read begun before/during a comment write cannot roll back its visible count.
+                guard !pendingCommentsAtStart.contains(summary.activityID),
+                      !activityComments(for: summary.activityID).contains(where: \.isPending),
+                      activityEngagementByID[summary.activityID] == summariesAtStart[summary.activityID]
+                else { continue }
                 refreshedEngagement[summary.activityID] = summary
                 refreshedErrors[summary.activityID] = nil
             }

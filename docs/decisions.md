@@ -1096,7 +1096,11 @@ required.
 ## REC-678 — explicit Feed geography and shared filters, 2026-11-03
 
 Live Feed defaults to **Everywhere**, ordered newest first. Its header offers
-**Everywhere / Map area** and describes the active scope. People, audience,
+**Feed: Everywhere / Feed: Map area** in a compact menu headed **Show in feed**.
+The centered **X activities** count continues to describe map activity. The
+header keeps Events, Reset filters when active, and Invite in one row at normal
+text sizes; accessibility sizes reflow the actions. The complete scope summary
+remains available to VoiceOver without permanent visible subtext. People, audience,
 category/options, activity type and time filters apply to both map and Feed;
 Everywhere ignores geographic constraints only. Featured remains map discovery
 and does not change Feed ordering. Existing place metadata supplies city/region

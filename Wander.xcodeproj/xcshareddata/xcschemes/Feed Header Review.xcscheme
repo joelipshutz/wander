@@ -95,10 +95,6 @@
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
-            argument = "-WanderFeedHeaderReview"
-            isEnabled = "YES">
-         </CommandLineArgument>
-         <CommandLineArgument
             argument = "-WanderInitialTab discover"
             isEnabled = "YES">
          </CommandLineArgument>

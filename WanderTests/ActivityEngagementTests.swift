@@ -822,6 +822,52 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertEqual(store.activityBookmarkIndexBuildCount, 1)
     }
 
+    func testCombinedCommentCountUpdatesImmediatelyAndCountsEachOriginalOnce() async {
+        let store = WanderStore(fixtures: .empty())
+        let ids = ["source", "accepted", "source"]
+        XCTAssertEqual(store.activityCommentCount(activityIDs: ids), 0)
+        _ = await store.addActivityComment(activityID: "source", body: "First", backend: nil)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: ids), 1)
+        _ = await store.addActivityComment(activityID: "accepted", body: "Second", backend: nil)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: ids), 2)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: ["source"]), 1)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: []), 0)
+    }
+
+    func testRemoteCommentPublishesCountBeforeServerResponseAndDoesNotDoubleCount() async {
+        let store = WanderStore(fixtures: .empty())
+        let id = UUID().uuidString
+        let repository = ActivityEngagementRepositoryStub()
+        var checkedPendingCount = false
+        repository.onAddComment = {
+            checkedPendingCount = true
+            XCTAssertEqual(store.activityCommentCount(activityIDs: [id]), 1)
+            XCTAssertTrue(store.activityComments(for: id).contains(where: \.isPending))
+        }
+        let success = await store.addActivityComment(activityID: id, body: "New comment",
+            backend: WanderBackend(activityEngagementRepository: repository))
+        XCTAssertTrue(success)
+        XCTAssertTrue(checkedPendingCount)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: [id]), 1)
+        XCTAssertFalse(store.activityComments(for: id).contains(where: \.isPending))
+    }
+
+    func testSummaryReadCannotOverwriteNewCommentCount() async {
+        let store = WanderStore(fixtures: .empty())
+        let id = UUID().uuidString
+        let repository = ActivityEngagementRepositoryStub(suspendSummaries: true)
+        let read = Task {
+            await store.refreshActivityEngagement(activityIDs: [id],
+                backend: WanderBackend(activityEngagementRepository: repository))
+        }
+        while repository.summariesRequestCount == 0 { await Task.yield() }
+        _ = await store.addActivityComment(activityID: id, body: "New comment", backend: nil)
+        XCTAssertEqual(store.activityCommentCount(activityIDs: [id]), 1)
+        repository.finishSummaries()
+        await read.value
+        XCTAssertEqual(store.activityCommentCount(activityIDs: [id]), 1)
+    }
+
     func testLocalCommentAddsOneCommentAndOneVisibleCount() async {
         let store = WanderStore(fixtures: .empty())
         let activityID = "local-comment-activity"
@@ -2286,6 +2332,7 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     var authSession: AuthSessionStore?
     var onActivityRequest: (() -> Void)?
     var onCommentsRequest: (() -> Void)?
+    var onAddComment: (() -> Void)?
     let placeMatches: [PlaceActivityEngagementMatch]
     var placeError: Error?
     var placeFailuresRemaining = 0
@@ -2425,6 +2472,7 @@ final class ActivityEngagementRepositoryStub: ActivityEngagementRepository {
     }
 
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
+        onAddComment?()
         let comment = ActivityComment(
             id: UUID().uuidString.lowercased(),
             activityID: activityID,

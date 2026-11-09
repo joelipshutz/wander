@@ -279,6 +279,11 @@ struct WanderApp: App {
         #else
         let backendStore = WanderBackend(configuration: configuration, authSession: authStore)
         #endif
+        #if DEBUG && targetEnvironment(simulator)
+        if usesSimulatorTestSession && ProcessInfo.processInfo.arguments.contains("-WanderCircleQuestionLocalTest") {
+            backendStore.circleQuestionRepository = CircleQuestionReviewRepository()
+        }
+        #endif
         discoverParser = (usesSimulatorTestSession || usesNativeReview)
             ? DeterministicFilterParser()
             : Self.makeDiscoverParser(configuration: configuration, authStore: authStore)
@@ -305,6 +310,8 @@ struct WanderApp: App {
                 Color.clear
                     .accessibilityHidden(true)
                     .onAppear { ReplayFixtureHostPolicy.recordInertRootMounted() }
+            } else if ProcessInfo.processInfo.arguments.contains("-WanderCircleQuestionReview") {
+                CircleQuestionReviewRoot()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderFeedPhotoStackUITest") {
                 ActivityPostcardReviewRoot()
             } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {

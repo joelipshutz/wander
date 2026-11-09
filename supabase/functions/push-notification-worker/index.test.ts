@@ -195,6 +195,7 @@ Deno.test("delivery analytics allowlists every reservation and client reminder t
   for (
     const notificationType of [
       "calendar_reservation_live",
+      "circle_question_tagged",
       "calendar_reservation_follow_up",
       "import_finished",
       "save_streak_reminder",

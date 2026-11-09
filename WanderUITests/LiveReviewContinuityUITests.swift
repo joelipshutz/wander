@@ -353,7 +353,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
-        app.buttons["live.feed.scope.mapArea"].tap()
+        app.selectFeedLocation("Map area")
         return app
     }
 
@@ -740,7 +740,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         assertTabs(in: app)
         assertMapControls(in: app)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
-        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
+        XCTAssertTrue(summary(in: app).contains("Newest first"))
         assertFeedCount(4, in: app)
         capture("drawer-half-after-pan-and-return")
     }
@@ -762,7 +762,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(navigation.waitForNonExistence(timeout: 5))
         assertDrawer("half expanded", count: 4, in: app)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "0 active filters")
-        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
+        XCTAssertTrue(summary(in: app).contains("Newest first"))
     }
 
     func testCombinedFiltersApplyCancelAndResetKeepMapAndFeedInAgreement() {
@@ -903,7 +903,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.buttons["live.applyFilters"].tap()
 
         assertDrawer("half expanded", count: 2, in: app)
-        XCTAssertTrue(summary(in: app).label.contains("Newest first"))
+        XCTAssertTrue(summary(in: app).contains("Newest first"))
         XCTAssertTrue((drawer(in: app).value as? String)?.contains("Only friends") == true)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "2 active filters")
         assertPins(["place_noodles", "place_juniper_table"], in: app)
@@ -937,7 +937,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         waitHittable(app.buttons["live.draw"], timeout: 20)
         XCTAssertTrue(app.tabBars.buttons["Live"].isSelected)
-        app.buttons["live.feed.scope.mapArea"].tap()
+        app.selectFeedLocation("Map area")
         return app
     }
 
@@ -945,8 +945,8 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
         app.staticTexts["live.drawerHandle"]
     }
 
-    private func summary(in app: XCUIApplication) -> XCUIElement {
-        app.staticTexts["live.filter.summary"]
+    private func summary(in app: XCUIApplication) -> String {
+        drawer(in: app).value as? String ?? ""
     }
 
     private func assertDrawer(_ state: String, count: Int, in app: XCUIApplication,
@@ -1134,7 +1134,7 @@ final class LiveDrawerAndFilterUITests: XCTestCase {
 
     private func assertCombinedResult(in app: XCUIApplication, drawerState: String = "half expanded") {
         assertDrawer(drawerState, count: 1, in: app)
-        XCTAssertTrue(summary(in: app).label.contains("Past 24 hours"))
+        XCTAssertTrue(summary(in: app).contains("Past 24 hours"))
         XCTAssertTrue((drawer(in: app).value as? String)?.contains("Within 25 km") == true)
         XCTAssertEqual(app.buttons["Filters"].value as? String, "6 active filters")
         assertPins(["place_noodles"], in: app)

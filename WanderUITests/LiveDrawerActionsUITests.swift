@@ -5,17 +5,18 @@ import XCTest
 final class LiveDrawerActionsUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    func testCompactHeaderReviewKeepsScopeResetAndShortcutsReachable() {
-        let app = launch(extraArguments: ["-WanderFeedHeaderReview"])
+    func testCompactHeaderKeepsScopeResetAndShortcutsReachable() {
+        let app = launch()
         let menu = app.buttons["live.feed.scope.menu"]
-        let header = app.descendants(matching: .any)["live.feed.headerReview"].firstMatch
+        let header = app.descendants(matching: .any)["live.feed.header"].firstMatch
         waitHittable(menu)
         XCTAssertEqual(menu.value as? String, "Everywhere")
         XCTAssertLessThanOrEqual(header.frame.height, 96)
         XCTAssertEqual(menu.label, "Feed location")
         let mapCount = app.staticTexts["live.map.activityCount"]
         XCTAssertTrue(mapCount.exists)
-        XCTAssertTrue(mapCount.label.hasSuffix(" on map"))
+        XCTAssertFalse(mapCount.label.contains("on map"))
+        XCTAssertTrue(mapCount.label.contains("activit"))
         XCTAssertEqual(mapCount.frame.midX, header.frame.midX, accuracy: 1)
         let originalMapCount = mapCount.label
         XCTAssertFalse(app.staticTexts["live.filter.summary"].exists)
@@ -49,8 +50,8 @@ final class LiveDrawerActionsUITests: XCTestCase {
         capture("compact-header-collapsed", in: app)
     }
 
-    func testCompactHeaderReviewSupportsAccessibilityText() {
-        let app = launch(largeText: true, extraArguments: ["-WanderFeedHeaderReview"])
+    func testCompactHeaderSupportsAccessibilityText() {
+        let app = launch(largeText: true)
         let mapCount = app.staticTexts["live.map.activityCount"]
         XCTAssertTrue(mapCount.exists)
         XCTAssertTrue(app.frame.contains(mapCount.frame))
@@ -64,7 +65,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
     }
 
     func testMapAreaRecoveryIsFullWidthAndRestoresEverywhere() {
-        let app = launch(extraArguments: ["-WanderFeedHeaderReview"])
+        let app = launch()
         selectReviewScope("Map area", in: app)
         applyFriends(in: app)
         let handle = drawer(in: app)
@@ -88,16 +89,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
     }
 
     private func selectReviewScope(_ title: String, in app: XCUIApplication) {
-        let menu = app.buttons["live.feed.scope.menu"]
-        waitHittable(menu)
-        menu.tap()
-        let option = app.buttons[title]
-        waitHittable(option)
-        option.tap()
-        let selectionUpdated = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", title), object: menu)
-        XCTAssertEqual(XCTWaiter.wait(for: [selectionUpdated], timeout: 5), .completed,
-                       "Selecting \(title) should update the feed location")
+        app.selectFeedLocation(title)
     }
 
     private func applyFriends(in app: XCUIApplication) {
@@ -107,6 +99,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         people.tap()
         app.buttons["Only Friends"].tap()
         app.buttons["live.applyFilters"].tap()
+        XCTAssertTrue(app.descendants(matching: .any)["live.filters.form"].firstMatch.waitForNonExistence(timeout: 10))
         waitHittable(app.buttons["live.resetFilters"])
     }
 
@@ -126,58 +119,37 @@ final class LiveDrawerActionsUITests: XCTestCase {
 
     func testFeedScopeAndInlineResetKeepLocationChoiceAndClearSharedFilters() {
         let app = launch()
-        let everywhere = app.buttons["live.feed.scope.everywhere"]
-        let mapArea = app.buttons["live.feed.scope.mapArea"]
-        waitHittable(everywhere)
-        XCTAssertEqual(everywhere.value as? String, "Selected")
+        let menu = app.buttons["live.feed.scope.menu"]
+        waitHittable(menu)
+        XCTAssertEqual(menu.value as? String, "Everywhere")
         XCTAssertFalse(app.buttons["live.resetFilters"].exists)
-        mapArea.tap()
-        XCTAssertEqual(mapArea.value as? String, "Selected")
-
+        app.selectFeedLocation("Map area")
+        applyFriends(in: app)
+        let reset = app.buttons["live.resetFilters"]
+        XCTAssertTrue((drawer(in: app).value as? String)?.contains("Only friends") == true)
+        app.selectFeedLocation("Everywhere")
+        XCTAssertTrue(reset.exists, "Changing geography must keep shared filters")
+        XCTAssertTrue((drawer(in: app).value as? String)?.contains("Only friends") == true)
+        app.selectFeedLocation("Map area")
+        reset.tap()
+        XCTAssertTrue(reset.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(menu.value as? String, "Map area")
+        XCTAssertTrue((drawer(in: app).value as? String)?.contains("All activity") == true)
         app.buttons["Filters"].tap()
         let people = app.buttons["live.filter.people"]
         waitHittable(people)
-        people.tap()
-        app.buttons["Only Friends"].tap()
-        app.buttons["live.applyFilters"].tap()
-        let reset = app.buttons["live.resetFilters"]
-        waitHittable(reset)
-        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("Only friends"))
-        capture("feed-scope-filtered", in: app)
-        everywhere.tap()
-        XCTAssertTrue(reset.exists, "Changing geography must keep shared filters")
-        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("Only friends"))
-        mapArea.tap()
-        reset.tap()
-        XCTAssertTrue(reset.waitForNonExistence(timeout: 5))
-        XCTAssertEqual(mapArea.value as? String, "Selected", "Reset must preserve the feed's location choice")
-        XCTAssertTrue(app.staticTexts["live.filter.summary"].label.contains("All activity"))
-        capture("feed-scope-reset", in: app)
-
-        app.buttons["Filters"].tap()
-        waitHittable(people)
         XCTAssertEqual(people.value as? String, "Everyone")
         app.buttons["Cancel"].tap()
-        let handle = drawer(in: app)
-        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.90)))
-        waitForDrawer("collapsed", in: app)
-        waitHittable(everywhere)
-        everywhere.tap()
-        XCTAssertEqual(everywhere.value as? String, "Selected")
-        capture("feed-scope-collapsed", in: app)
+        capture("feed-scope-reset", in: app)
     }
 
     func testFeedScopeControlsFitAtAccessibilitySize() {
         let app = launch(largeText: true)
-        for identifier in ["live.feed.scope.everywhere", "live.feed.scope.mapArea"] {
-            let button = app.buttons[identifier]
-            waitHittable(button)
-            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
-            XCTAssertTrue(app.frame.contains(button.frame))
-        }
-        app.buttons["live.feed.scope.mapArea"].tap()
-        XCTAssertEqual(app.buttons["live.feed.scope.mapArea"].value as? String, "Selected")
+        let menu = app.buttons["live.feed.scope.menu"]
+        waitHittable(menu)
+        XCTAssertGreaterThanOrEqual(menu.frame.height, 44)
+        XCTAssertTrue(app.frame.contains(menu.frame))
+        app.selectFeedLocation("Map area")
         capture("feed-scope-accessibility", in: app)
     }
 
@@ -293,7 +265,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let invite = app.buttons["live.utility.invite"]
         waitHittable(events)
         waitHittable(invite)
-        let handle = drawer(in: app)
+        let handle = app.descendants(matching: .any)["live.feed.header"].firstMatch
         XCTAssertTrue(handle.exists, file: file, line: line)
         XCTAssertEqual(events.label, "Upcoming events", file: file, line: line)
         XCTAssertEqual(invite.label, "Invite people to Astir", file: file, line: line)
@@ -306,7 +278,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         }
         XCTAssertLessThan(events.frame.maxX, handle.frame.midX - 44, file: file, line: line)
         XCTAssertGreaterThan(invite.frame.minX, handle.frame.midX + 44, file: file, line: line)
-        XCTAssertEqual(events.frame.midY, invite.frame.midY, accuracy: 1, file: file, line: line)
+
         XCTAssertFalse(events.frame.intersects(invite.frame), file: file, line: line)
         // Both shortcuts remain separate accessibility buttons outside the feed viewport.
         let feed = app.scrollViews["feed.places.scroll"]

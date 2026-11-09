@@ -14,6 +14,9 @@ struct LiveScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
+    @State private var circleQuestions: [CircleQuestion] = []
+    @State private var selectedQuestion: CircleQuestion?
+    @State private var questionClock = Date()
     @State private var camera: MapCameraPosition = .region(LiveMapLaunchLocation.initialRegion())
     @State private var cameraRevision: UInt64 = 0
     @State private var launchLocation = LiveMapLaunchLocation()
@@ -117,13 +120,6 @@ struct LiveScreen: View {
     private var authorizedActivity: [FeedActivity] { mapActivity }
     private var activity: [FeedActivity] { mapActivity }
     private var pins: [LivePlacePin] { mapProjection.pins }
-    private var usesFeedHeaderReview: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-WanderFeedHeaderReview")
-        #else
-        false
-        #endif
-    }
     private var usesTotemReviewFixture: Bool {
         #if DEBUG && targetEnvironment(simulator)
         if LiveTotemUITestFixtures.isEnabled { return true }
@@ -158,7 +154,17 @@ struct LiveScreen: View {
     }
 
     var body: some View {
-        liveContent.modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
+        liveContent
+            .onReceive(backend.circleQuestions.$items) { circleQuestions = $0 }
+            .task(id: store.currentUser.id) {
+                backend.circleQuestions.analytics = store.productAnalytics
+                await backend.circleQuestions.load(userID: store.currentUser.id)
+            }
+            .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { questionClock = $0 }
+            .sheet(item: $selectedQuestion) { question in
+                NavigationStack { CircleQuestionDetail(state: backend.circleQuestions, initial: question) }
+            }
+            .modifier(LiveContactInvitePresentation(presented: $showsContactInvites,
             onDismiss: modalDidDismiss, lifecycle: modalLifecycle))
             .onChange(of: detent) { _, _ in saveBrowseState() }
             .onChange(of: selection) { _, _ in saveBrowseState() }
@@ -582,7 +588,7 @@ struct LiveScreen: View {
         let layout = LiveMapSearchLayout(size: size,
             controlsHeight: !drawing && detent < 2 ? mapControlsHeight : 0, drawerHeight: drawerHeight)
         return LiveNativeMap(
-            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, pinsRevision: mapProjection.revision, selectedID: selectedPlaceID,
+            position: $camera, positionRevision: cameraRevision, proxy: proxy, pins: pins, questions: circleQuestions.filter { $0.isOnMap(at: questionClock) && !store.isBlockedBetweenCurrentUser(and: $0.author.id) }, onSelectQuestion: { selectedQuestion = $0 }, pinsRevision: mapProjection.revision, selectedID: selectedPlaceID,
             viewedPins: viewedPins, brand: brand, coloredMap: store.isColoredMapEnabled,
             drawing: drawing,
             contentInsets: EdgeInsets(top: drawing ? 8 : layout.controlsHeight + 8, leading: 8,
@@ -802,47 +808,22 @@ struct LiveScreen: View {
     }
 
     private func drawer(height: CGFloat) -> some View {
-        drawerContent(height: height).overlay(alignment: .top) { drawerHeaderActions }
+        drawerContent(height: height)
     }
 
     private func drawerContent(height: CGFloat) -> some View {
         LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight),
                        middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
                        detent: detent, enabled: !showsFeedDestination,
-                       dragHandleHeight: usesFeedHeaderReview ? 24 : nil, onDetent: { changeDetent($0) }) {
+                       dragHandleHeight: 24, onDetent: { changeDetent($0) }) {
             if !showsFeedDestination {
                 VStack(spacing: 0) {
-                    if usesFeedHeaderReview {
-                        #if DEBUG
-                        LiveFeedHeaderReview(scope: selection.feedLocationScope, summary: feedScopeSummary,
-                            mapActivityCount: LiveMapPaging.countText(activity.count, complete: mapResults.complete),
-                            showsReset: sharedFilterCount > 0, eventsAvailable: eventsAvailable,
-                            detent: detent, onScope: selectFeedLocation, onReset: resetSharedFilters,
-                            onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true },
-                            onDetent: { changeDetent($0) })
-                        #endif
-                    } else {
-                        VStack(spacing: 8) {
-                            Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                            Text("Activity").font(AstirTypography.bodySmall.weight(.semibold))
-                        }
-                        .padding(.horizontal, 64)
-                        .padding(.top, 10).padding(.bottom, 8)
-                        .frame(minHeight: 56)
-                        .frame(maxWidth: .infinity)
-                        .contentShape(Rectangle())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-                        .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)) on map. Feed: \(feedScopeSummary)")
-                        .accessibilityAdjustableAction { direction in
-                            changeDetent(detent + (direction == .increment ? 1 : -1))
-                        }
-                        .accessibilityIdentifier("live.drawerHandle")
-                        LiveFeedScopeControls(scope: selection.feedLocationScope,
-                            summary: feedScopeSummary, showsReset: sharedFilterCount > 0,
-                            onScope: selectFeedLocation, onReset: resetSharedFilters)
-                            .padding(.horizontal, 16).padding(.bottom, 10)
-                    }
+                    LiveFeedHeader(scope: selection.feedLocationScope, summary: feedScopeSummary,
+                        mapActivityCount: LiveMapPaging.countText(activity.count, complete: mapResults.complete),
+                        showsReset: sharedFilterCount > 0, eventsAvailable: eventsAvailable,
+                        detent: detent, onScope: selectFeedLocation, onReset: resetSharedFilters,
+                        onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true },
+                        onDetent: { changeDetent($0) })
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .background {
@@ -925,15 +906,6 @@ struct LiveScreen: View {
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: showsFeedDestination ? 0 : 26,
             topTrailingRadius: showsFeedDestination ? 0 : 26))
         .shadow(color: .black.opacity(0.12), radius: 12, y: -3)
-    }
-
-    @ViewBuilder private var drawerHeaderActions: some View {
-        if !usesFeedHeaderReview, !showsFeedDestination, !hasPlacePreview, !drawing {
-            LiveDrawerActions(eventsAvailable: eventsAvailable,
-                onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true })
-                .padding(.horizontal, 16)
-                .frame(height: 56)
-        }
     }
 
     @ViewBuilder private var placePreviewContent: some View {
@@ -1745,6 +1717,10 @@ struct LiveScreen: View {
         showsMessages = false; replyTarget = nil
         changeDetent(2)
         switch context.kind {
+        case .question:
+            if let id = UUID(uuidString: context.id) {
+                Task { selectedQuestion = await backend.circleQuestions.refreshQuestion(id: id) }
+            }
         case .activity: queuedActivityID = context.id
         case .place: pushNotifications.route(to: .place(id: context.id))
         }

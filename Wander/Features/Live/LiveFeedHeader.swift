@@ -1,8 +1,7 @@
-#if DEBUG
 import SwiftUI
 
-/// Native review variant. Uses Live's real callbacks without changing its query contract.
-struct LiveFeedHeaderReview: View {
+/// Compact controls for Feed geography, shared filters, and drawer shortcuts.
+struct LiveFeedHeader: View {
     @Environment(\.astirBrandMode) private var brand
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -27,6 +26,7 @@ struct LiveFeedHeaderReview: View {
                 .frame(height: 24)
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
                 .accessibilityValue("\(mapActivityCount) on map. Feed: \(summary)")
                 .accessibilityAdjustableAction { direction in
@@ -34,7 +34,7 @@ struct LiveFeedHeaderReview: View {
                 }
                 .accessibilityIdentifier("live.drawerHandle")
 
-            Text("\(mapActivityCount) on map")
+            Text(mapActivityCount)
                 .font(AstirTypography.bodySmall.weight(.semibold))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -71,7 +71,7 @@ struct LiveFeedHeaderReview: View {
         .foregroundStyle(brand.primaryText)
         .buttonStyle(.plain)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("live.feed.headerReview")
+        .accessibilityIdentifier("live.feed.header")
     }
 
     private var scopeMenu: some View {
@@ -133,4 +133,3 @@ struct LiveFeedHeaderReview: View {
         .accessibilityIdentifier(identifier)
     }
 }
-#endif

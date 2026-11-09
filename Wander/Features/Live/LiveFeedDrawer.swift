@@ -58,7 +58,7 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
     @ViewBuilder private var draggableHeader: some View {
         if let dragHandleHeight {
             // Keep native Menu/Button taps outside the drag recognizer in the
-            // compact review header, as the existing overlaid shortcuts are.
+            // compact header.
             header()
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) {
@@ -88,79 +88,5 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
                     translation: value.translation.height, predicted: value.predictedEndTranslation.height,
                     heights: [minimum, middle, maximum]))
             }
-    }
-}
-
-/// Location is independent of the shared filters. Keep both the current scope
-/// and its reset action reachable even when the activity drawer is collapsed.
-struct LiveFeedScopeControls: View {
-    @Environment(\.astirBrandMode) private var brand
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let scope: LiveFeedLocationScope
-    let summary: String
-    let showsReset: Bool
-    let onScope: (LiveFeedLocationScope) -> Void
-    let onReset: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if dynamicTypeSize.isAccessibilitySize {
-                scopeButtons
-                if showsReset { resetButton }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        scopeButtons
-                        Spacer(minLength: 0)
-                        if showsReset { resetButton }
-                    }
-                    VStack(alignment: .leading, spacing: 0) {
-                        scopeButtons
-                        if showsReset { resetButton }
-                    }
-                }
-            }
-            Text(summary).font(AstirTypography.caption)
-                .foregroundStyle(brand.secondaryText)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("live.filter.summary")
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var scopeButtons: some View {
-        let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0))
-            : AnyLayout(HStackLayout(spacing: 16))
-        return layout {
-            ForEach(LiveFeedLocationScope.allCases) { option in
-                Button { onScope(option) } label: {
-                    Text(option.title)
-                        .font(AstirTypography.bodySmall.weight(scope == option ? .semibold : .regular))
-                        .foregroundStyle(scope == option ? brand.accentText : brand.primaryText)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(minHeight: 44)
-                        .overlay(alignment: .bottom) {
-                            if scope == option { Rectangle().fill(brand.accent).frame(height: 2) }
-                        }
-                }
-                .accessibilityAddTraits(scope == option ? .isSelected : [])
-                .accessibilityValue(scope == option ? "Selected" : "")
-                .accessibilityIdentifier("live.feed.scope.\(option.rawValue)")
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Activity location")
-    }
-
-    private var resetButton: some View {
-        Button("Reset filters", action: onReset)
-            .font(AstirTypography.bodySmall)
-            .foregroundStyle(brand.accentText)
-            .fixedSize(horizontal: true, vertical: false)
-            .frame(minHeight: 44)
-            .accessibilityHint("Clears people, category, activity and time filters. Keeps the selected area.")
-            .accessibilityIdentifier("live.resetFilters")
     }
 }
