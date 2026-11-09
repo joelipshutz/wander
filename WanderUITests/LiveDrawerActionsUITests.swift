@@ -5,6 +5,112 @@ import XCTest
 final class LiveDrawerActionsUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testCompactHeaderReviewKeepsScopeResetAndShortcutsReachable() {
+        let app = launch(extraArguments: ["-WanderFeedHeaderReview"])
+        let menu = app.buttons["live.feed.scope.menu"]
+        let header = app.descendants(matching: .any)["live.feed.headerReview"].firstMatch
+        waitHittable(menu)
+        XCTAssertEqual(menu.value as? String, "Everywhere")
+        XCTAssertLessThanOrEqual(header.frame.height, 76)
+        XCTAssertFalse(app.staticTexts["live.filter.summary"].exists)
+        capture("compact-header-everywhere", in: app)
+
+        selectReviewScope("Map area", in: app)
+        applyFriends(in: app)
+        assertReviewControls(in: app)
+        capture("compact-header-filtered", in: app)
+        selectReviewScope("Everywhere", in: app)
+        XCTAssertTrue(app.buttons["live.resetFilters"].exists)
+        selectReviewScope("Map area", in: app)
+        app.buttons["live.resetFilters"].tap()
+        XCTAssertTrue(app.buttons["live.resetFilters"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(menu.value as? String, "Map area")
+
+        app.buttons["live.utility.events"].tap()
+        let done = app.buttons["Done"]
+        waitHittable(done)
+        done.tap()
+        openAndCloseInvite(in: app)
+
+        let handle = drawer(in: app)
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.90)))
+        waitForDrawer("collapsed", in: app)
+        selectReviewScope("Everywhere", in: app)
+        openAndCloseInvite(in: app)
+        waitForDrawer("collapsed", in: app)
+        capture("compact-header-collapsed", in: app)
+    }
+
+    func testCompactHeaderReviewSupportsAccessibilityText() {
+        let app = launch(largeText: true, extraArguments: ["-WanderFeedHeaderReview"])
+        selectReviewScope("Map area", in: app)
+        applyFriends(in: app)
+        assertReviewControls(in: app)
+        capture("compact-header-accessibility-filtered", in: app)
+        app.buttons["live.resetFilters"].tap()
+        XCTAssertTrue(app.buttons["live.resetFilters"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
+    }
+
+    func testMapAreaRecoveryIsFullWidthAndRestoresEverywhere() {
+        let app = launch(extraArguments: ["-WanderFeedHeaderReview"])
+        selectReviewScope("Map area", in: app)
+        applyFriends(in: app)
+        let handle = drawer(in: app)
+        handle.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            .press(forDuration: 0.1, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.20)))
+        waitForDrawer("expanded", in: app)
+        let feed = app.scrollViews["feed.places.scroll"]
+        let button = app.buttons["feed.showEverywhere"]
+        for _ in 0..<16 {
+            if button.exists, button.isHittable, feed.frame.contains(button.frame) { break }
+            feed.swipeUp()
+        }
+        waitHittable(button)
+        XCTAssertEqual(button.frame.width, feed.frame.width - 32, accuracy: 2)
+        XCTAssertGreaterThanOrEqual(button.frame.height, 52)
+        capture("full-width-show-everywhere", in: app)
+        button.tap()
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Everywhere")
+        XCTAssertTrue(app.buttons["live.resetFilters"].exists, "Broadening geography preserves shared filters")
+        XCTAssertTrue(button.waitForNonExistence(timeout: 5))
+    }
+
+    private func selectReviewScope(_ title: String, in app: XCUIApplication) {
+        let menu = app.buttons["live.feed.scope.menu"]
+        waitHittable(menu)
+        menu.tap()
+        let option = app.buttons[title]
+        waitHittable(option)
+        option.tap()
+        XCTAssertEqual(menu.value as? String, title)
+    }
+
+    private func applyFriends(in app: XCUIApplication) {
+        app.buttons["Filters"].tap()
+        let people = app.buttons["live.filter.people"]
+        waitHittable(people)
+        people.tap()
+        app.buttons["Only Friends"].tap()
+        app.buttons["live.applyFilters"].tap()
+        waitHittable(app.buttons["live.resetFilters"])
+    }
+
+    private func assertReviewControls(in app: XCUIApplication) {
+        let controls = ["live.utility.events", "live.feed.scope.menu", "live.resetFilters", "live.utility.invite"]
+            .map { app.buttons[$0] }
+        for (index, button) in controls.enumerated() {
+            waitHittable(button)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 43.99)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 43.99)
+            XCTAssertTrue(app.frame.contains(button.frame))
+            for other in controls.dropFirst(index + 1) {
+                XCTAssertFalse(button.frame.intersects(other.frame))
+            }
+        }
+    }
+
     func testFeedScopeAndInlineResetKeepLocationChoiceAndClearSharedFilters() {
         let app = launch()
         let everywhere = app.buttons["live.feed.scope.everywhere"]

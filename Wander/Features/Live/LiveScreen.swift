@@ -117,6 +117,13 @@ struct LiveScreen: View {
     private var authorizedActivity: [FeedActivity] { mapActivity }
     private var activity: [FeedActivity] { mapActivity }
     private var pins: [LivePlacePin] { mapProjection.pins }
+    private var usesFeedHeaderReview: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-WanderFeedHeaderReview")
+        #else
+        false
+        #endif
+    }
     private var usesTotemReviewFixture: Bool {
         #if DEBUG && targetEnvironment(simulator)
         if LiveTotemUITestFixtures.isEnabled { return true }
@@ -801,29 +808,40 @@ struct LiveScreen: View {
     private func drawerContent(height: CGFloat) -> some View {
         LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight),
                        middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
-                       detent: detent, enabled: !showsFeedDestination, onDetent: { changeDetent($0) }) {
+                       detent: detent, enabled: !showsFeedDestination,
+                       dragHandleHeight: usesFeedHeaderReview ? 24 : nil, onDetent: { changeDetent($0) }) {
             if !showsFeedDestination {
                 VStack(spacing: 0) {
-                    VStack(spacing: 8) {
-                        Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
-                        Text("Activity").font(AstirTypography.bodySmall.weight(.semibold))
+                    if usesFeedHeaderReview {
+                        #if DEBUG
+                        LiveFeedHeaderReview(scope: selection.feedLocationScope, summary: feedScopeSummary,
+                            showsReset: sharedFilterCount > 0, eventsAvailable: eventsAvailable,
+                            detent: detent, onScope: selectFeedLocation, onReset: resetSharedFilters,
+                            onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true },
+                            onDetent: { changeDetent($0) })
+                        #endif
+                    } else {
+                        VStack(spacing: 8) {
+                            Capsule().fill(brand.secondaryText.opacity(0.45)).frame(width: 36, height: 5)
+                            Text("Activity").font(AstirTypography.bodySmall.weight(.semibold))
+                        }
+                        .padding(.horizontal, 64)
+                        .padding(.top, 10).padding(.bottom, 8)
+                        .frame(minHeight: 56)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
+                        .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)) on map. Feed: \(feedScopeSummary)")
+                        .accessibilityAdjustableAction { direction in
+                            changeDetent(detent + (direction == .increment ? 1 : -1))
+                        }
+                        .accessibilityIdentifier("live.drawerHandle")
+                        LiveFeedScopeControls(scope: selection.feedLocationScope,
+                            summary: feedScopeSummary, showsReset: sharedFilterCount > 0,
+                            onScope: selectFeedLocation, onReset: resetSharedFilters)
+                            .padding(.horizontal, 16).padding(.bottom, 10)
                     }
-                    .padding(.horizontal, 64)
-                    .padding(.top, 10).padding(.bottom, 8)
-                    .frame(minHeight: 56)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                    .accessibilityElement(children: .combine)
-                    .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-                    .accessibilityValue("\(LiveMapPaging.countText(activity.count, complete: mapResults.complete)) on map. Feed: \(feedScopeSummary)")
-                    .accessibilityAdjustableAction { direction in
-                        changeDetent(detent + (direction == .increment ? 1 : -1))
-                    }
-                    .accessibilityIdentifier("live.drawerHandle")
-                    LiveFeedScopeControls(scope: selection.feedLocationScope,
-                        summary: feedScopeSummary, showsReset: sharedFilterCount > 0,
-                        onScope: selectFeedLocation, onReset: resetSharedFilters)
-                        .padding(.horizontal, 16).padding(.bottom, 10)
                 }
                 .fixedSize(horizontal: false, vertical: true)
                 .background {
@@ -909,7 +927,7 @@ struct LiveScreen: View {
     }
 
     @ViewBuilder private var drawerHeaderActions: some View {
-        if !showsFeedDestination, !hasPlacePreview, !drawing {
+        if !usesFeedHeaderReview, !showsFeedDestination, !hasPlacePreview, !drawing {
             LiveDrawerActions(eventsAvailable: eventsAvailable,
                 onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true })
                 .padding(.horizontal, 16)

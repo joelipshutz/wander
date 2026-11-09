@@ -813,7 +813,8 @@ struct FeedScreen: View {
                             .font(AstirTypography.bodySmall).foregroundStyle(astirBrandMode.secondaryText)
                     }
                     if let onShowActivityEverywhere {
-                        Button("Show activity everywhere", action: onShowActivityEverywhere)
+                        WanderPrimaryButton(title: "Show activity everywhere", action: onShowActivityEverywhere)
+                            .padding(.top, 8)
                             .accessibilityIdentifier("feed.showEverywhere")
                     }
                     if let onShowOlderActivity {

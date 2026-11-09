@@ -258,6 +258,7 @@
 		585EF6A4AC3B56563BD53412 /* MapHitTestingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE64DFF9AC91875DFF2BD0E /* MapHitTestingTests.swift */; };
 		587926CE26BC9B721B90131C /* CommonGroundInvitationSharing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 944F2058E2A0E38CA006473C /* CommonGroundInvitationSharing.swift */; };
 		58986486438F908962A1B26E /* WanderWidgetConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0549476208CBEB1867788BEF /* WanderWidgetConstants.swift */; };
+		59A873DCEEF1C30777F05E14 /* LiveFeedHeaderReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A55DEFA661EFC7F16F2612E /* LiveFeedHeaderReview.swift */; };
 		5A218AC15023FD9DA8220E3C /* PlacePhotoDeliveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FFAD48FC4FBF130BF07DBA /* PlacePhotoDeliveryTests.swift */; };
 		5A2EA828AD976F076EAD53E5 /* rec-191-map-search-menu-pre.json in Resources */ = {isa = PBXBuildFile; fileRef = 0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */; };
 		5B948C49E1B6C7589F2CD9BC /* RetainedTabContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28F7B50B7EA2C7326CA652C /* RetainedTabContentTests.swift */; };
@@ -799,6 +800,7 @@
 		09D837A87E89F4BCFAD37490 /* rec-106-manual-place-search-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-106-manual-place-search-pre.json"; sourceTree = "<group>"; };
 		0A1F8E7A0A2CC0B728278439 /* AstirLaunchLockupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AstirLaunchLockupTests.swift; sourceTree = "<group>"; };
 		0A294B4D596A37D263243FAF /* SharedPlaceImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedPlaceImportInbox.swift; sourceTree = "<group>"; };
+		0A55DEFA661EFC7F16F2612E /* LiveFeedHeaderReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveFeedHeaderReview.swift; sourceTree = "<group>"; };
 		0ADB53F10E20C3DF1E481E8C /* events-coming-soon.mp4 */ = {isa = PBXFileReference; path = "events-coming-soon.mp4"; sourceTree = "<group>"; };
 		0B82E95F99088884DF1C0C97 /* rec-303-map-pin-entrance-bounce-post.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "rec-303-map-pin-entrance-bounce-post.png"; sourceTree = "<group>"; };
 		0BD000BDED99C3CD933A4FE3 /* rec-191-map-search-menu-pre.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "rec-191-map-search-menu-pre.json"; sourceTree = "<group>"; };
@@ -2108,6 +2110,7 @@
 				6AC1E6655C9B8E0729F6EF3B /* LiveCompactPinImageCache.swift */,
 				945A6EB8753B94E480F5FA4E /* LiveDrawerActions.swift */,
 				FDFCC8253966F71883A4A60F /* LiveFeedDrawer.swift */,
+				0A55DEFA661EFC7F16F2612E /* LiveFeedHeaderReview.swift */,
 				D282E7E70C814DC86F3EC48A /* LiveIntroductionMigrationStore.swift */,
 				681927D2BD6BA44D9EE754C1 /* LiveIntroductionOrientationStore.swift */,
 				54901841BFF245767870FA47 /* LiveIntroductionPolicy.swift */,
@@ -2989,6 +2992,7 @@
 				118FEC7F6440061DC44C0E90 /* LiveDrawerActions.swift in Sources */,
 				A4C5DEAE68D601CE0A77349E /* LiveFeedDisplayLease.swift in Sources */,
 				4B3E4F9068CCA2B9758B9B8A /* LiveFeedDrawer.swift in Sources */,
+				59A873DCEEF1C30777F05E14 /* LiveFeedHeaderReview.swift in Sources */,
 				8AAA17C46BAC9234BCBEA744 /* LiveFeedQuery.swift in Sources */,
 				19CCEBD6BD69E8A1C4CCEDC5 /* LiveIntroductionMigrationStore.swift in Sources */,
 				FD1F42C707C11ABE7D9EF004 /* LiveIntroductionOrientationStore.swift in Sources */,

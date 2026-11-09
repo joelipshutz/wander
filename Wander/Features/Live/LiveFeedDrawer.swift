@@ -33,6 +33,7 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
     let maximum: CGFloat
     let detent: Int
     let enabled: Bool
+    var dragHandleHeight: CGFloat? = nil
     let onDetent: (Int) -> Void
     @ViewBuilder var header: () -> Header
     @ViewBuilder var content: () -> Content
@@ -40,21 +41,7 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
     @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.3))) private var translation: CGFloat = 0
     var body: some View {
         VStack(spacing: 0) {
-            header()
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .simultaneousGesture(DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                    .updating($translation) { value, state, transaction in
-                        guard enabled else { return }
-                        transaction.animation = nil
-                        state = value.translation.height
-                    }
-                    .onEnded { value in
-                        guard enabled else { return }
-                        onDetent(LiveDrawerDragPolicy.target(start: detent,
-                            translation: value.translation.height, predicted: value.predictedEndTranslation.height,
-                            heights: [minimum, middle, maximum]))
-                    })
+            draggableHeader
             content()
         }
         // Keep the expensive Feed viewport stable during touch samples. Only
@@ -66,6 +53,41 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
         .transaction { transaction in
             if reduceMotion { transaction.animation = nil; transaction.disablesAnimations = true }
         }
+    }
+
+    @ViewBuilder private var draggableHeader: some View {
+        if let dragHandleHeight {
+            // Keep native Menu/Button taps outside the drag recognizer in the
+            // compact review header, as the existing overlaid shortcuts are.
+            header()
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .top) {
+                    Color.clear.frame(height: dragHandleHeight)
+                        .contentShape(Rectangle())
+                        .gesture(drawerDrag)
+                        .accessibilityHidden(true)
+                }
+        } else {
+            header()
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .simultaneousGesture(drawerDrag)
+        }
+    }
+
+    private var drawerDrag: some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .global)
+            .updating($translation) { value, state, transaction in
+                guard enabled else { return }
+                transaction.animation = nil
+                state = value.translation.height
+            }
+            .onEnded { value in
+                guard enabled else { return }
+                onDetent(LiveDrawerDragPolicy.target(start: detent,
+                    translation: value.translation.height, predicted: value.predictedEndTranslation.height,
+                    heights: [minimum, middle, maximum]))
+            }
     }
 }
 
