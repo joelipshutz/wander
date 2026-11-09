@@ -102,15 +102,13 @@ struct NativeOnboardingReviewHost: View {
                     finish: { completed = true }
                 )
             } else if completed {
-                FoundersWelcomeGate(userID: Self.session.userID, isEligible: route != .founders) {
-                    WanderRootView(
-                        initialSession: auth.state.session,
-                        isFirstVisitWalkthroughEligible: true,
-                        analytics: NoopAnalyticsClient(),
-                        parser: DeterministicFilterParser()
-                    )
-                    .environmentObject(WanderApp.makeMapCaptureBackend())
-                }
+                WanderRootView(
+                    initialSession: auth.state.session,
+                    isFirstVisitWalkthroughEligible: true,
+                    analytics: NoopAnalyticsClient(),
+                    parser: DeterministicFilterParser()
+                )
+                .environmentObject(WanderApp.makeMapCaptureBackend())
             } else if let step = route.initialStep ?? (startsOnboarding ? .identity : nil) {
                 OnboardingFlowView(
                     session: Self.session, initialStep: step,

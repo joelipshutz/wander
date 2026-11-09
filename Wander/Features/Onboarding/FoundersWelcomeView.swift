@@ -34,40 +34,7 @@ final class FoundersWelcomeStore {
     }
 }
 
-struct FoundersWelcomeGate<Content: View>: View {
-    let userID: String
-    let isEligible: Bool
-    private let store: FoundersWelcomeStore
-    private let content: () -> Content
-    @State private var handled: Bool
-
-    init(userID: String, isEligible: Bool, store: FoundersWelcomeStore = FoundersWelcomeStore(),
-         @ViewBuilder content: @escaping () -> Content) {
-        self.userID = userID
-        self.isEligible = isEligible
-        self.store = store
-        self.content = content
-        _handled = State(initialValue: store.progress(for: userID).handled)
-    }
-
-    var body: some View {
-        // Do not construct WanderRootView while the film is showing: the Map
-        // walkthrough's timers and automatic Feed transition must wait for exit.
-        if isEligible && !handled {
-            FoundersWelcomeView(
-                initialPosition: store.progress(for: userID).seconds,
-                savePosition: { store.save(seconds: $0, for: userID) },
-                finish: {
-                    store.finish(for: userID)
-                    handled = true
-                }
-            )
-        } else {
-            content()
-        }
-    }
-}
-
+/// Standalone debug review content; the production onboarding flow enters NUX directly.
 struct FoundersWelcomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
