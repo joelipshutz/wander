@@ -87,16 +87,16 @@ struct SharedVisitReviewRoot: View {
             author: post.actor, body: post.actor.id == "user_joe" ? "Happy we finally made it here." : "Count me in for another visit.",
             createdAt: post.occurredAt.addingTimeInterval(60))
         return .init(comments: [comment] + posted.filter { $0.activityID == activityID }, nextCursor: nil,
-            engagement: .init(activityID: activityID, commentCount: 1))
+            engagement: .init(activityID: activityID, commentCount: 1 + posted.filter { $0.activityID == activityID }.count))
     }
-    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] { activityIDs.map { .init(activityID: $0, commentCount: 1) } }
+    func summaries(activityIDs: [String]) async throws -> [ActivityEngagementSummary] { activityIDs.map { id in .init(activityID: id, commentCount: 1 + posted.filter { $0.activityID == id }.count) } }
     func placeActivitySummaries(userPlaceIDs: [String]) async throws -> [PlaceActivityEngagementMatch] { [] }
     func setLike(activityID: String, isLiked: Bool) async throws -> ActivityEngagementSummary { .init(activityID: activityID, likeCount: isLiked ? 1 : 0, viewerHasLiked: isLiked) }
     func addComment(activityID: String, body: String) async throws -> ActivityCommentPostResult {
         let comment = ActivityComment(id: UUID().uuidString.lowercased(), activityID: activityID,
             author: Self.posts[0].actor, body: body, createdAt: .now)
         posted.append(comment)
-        return .init(comment: comment, engagement: .init(activityID: activityID, commentCount: 2))
+        return .init(comment: comment, engagement: .init(activityID: activityID, commentCount: 1 + posted.filter { $0.activityID == activityID }.count))
     }
     func deleteComment(commentID: String) async throws -> ActivityEngagementSummary {
         let activityID = posted.first { $0.id == commentID }?.activityID ?? Self.ids[0]

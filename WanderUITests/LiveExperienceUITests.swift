@@ -537,7 +537,11 @@ final class LiveExperienceUITests: XCTestCase {
         for _ in 0..<6 where !comments.isHittable { app.swipeUp() }
         XCTAssertTrue(comments.isHittable)
         XCTAssertEqual(app.buttons.matching(identifier: "Open comments").count, 1)
-        XCTAssertEqual(comments.staticTexts.count, 0, "The comment action uses an icon, without a visible text label.")
+        let count = comments.staticTexts["activity.comment.count"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, "2")
+        XCTAssertEqual(comments.value as? String, "2 comments")
+        capture("shared-check-in-comment-count")
         comments.tap()
         let header = app.descendants(matching: .any)["comments.activity.postcard"].firstMatch
         XCTAssertTrue(header.waitForExistence(timeout: 10))
@@ -557,6 +561,19 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["activity.comment.send"].exists)
         XCTAssertTrue(theirs.isHittable)
         capture("shared-check-in-comments-example")
+        let input = app.textViews["activity.comment.input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("Another visit soon")
+        app.buttons["activity.comment.send"].tap()
+        XCTAssertTrue(app.staticTexts["Another visit soon"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(comments.waitForExistence(timeout: 10))
+        for _ in 0..<6 where !comments.isHittable { app.swipeUp() }
+        let updatedCount = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "3"), object: count)
+        XCTAssertEqual(XCTWaiter.wait(for: [updatedCount], timeout: 5), .completed)
+        XCTAssertEqual(comments.value as? String, "3 comments")
+        capture("shared-check-in-comment-count-after-post")
     }
 
     /// Exercise the production destination, not the detached demo route. Fixture

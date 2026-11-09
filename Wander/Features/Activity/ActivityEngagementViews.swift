@@ -27,6 +27,7 @@ struct ActivityEngagementActionRow: View {
     let context: ActivityEngagementContext
     let visiblePlace: VisiblePlace?
     var sharedVisitGroupID: String? = nil
+    var commentActivityIDs: [String]? = nil
     var showsCommentButton = true
     var showsWannaButton = true
     var isEngagementEnabled = true
@@ -110,6 +111,10 @@ struct ActivityEngagementActionRow: View {
         }
     }
 
+    private var commentCount: Int {
+        store.activityCommentCount(activityIDs: commentActivityIDs ?? [context.activityID])
+    }
+
     private var engagement: ActivityEngagementSummary {
         store.activityEngagement(for: context.activityID)
     }
@@ -166,12 +171,12 @@ struct ActivityEngagementActionRow: View {
                     .font(.system(size: 21, weight: .semibold))
                     .foregroundStyle(primaryColor)
 
-                if sharedVisitGroupID == nil {
-                    Text(engagement.commentCount.formatted())
-                        .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(primaryColor)
-                }
+                Text(commentCount.formatted())
+                    .font(visualStyle == .astir ? AstirTypography.label : .system(size: 13, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(primaryColor)
+                    .fixedSize()
+                    .accessibilityIdentifier("activity.comment.count")
             }
             .frame(minWidth: 44, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -180,7 +185,7 @@ struct ActivityEngagementActionRow: View {
         .disabled(!canAttemptEngagement || isResolvingAction)
         .opacity(canAttemptEngagement ? 1 : 0.45)
         .accessibilityLabel("Open comments")
-        .accessibilityValue(sharedVisitGroupID == nil ? "\(engagement.commentCount) comments" : "All readable shared check-in discussions")
+        .accessibilityValue("\(commentCount) comments")
     }
 
     private var activityMenu: some View {
@@ -447,6 +452,10 @@ struct ActivityPostcardView: View {
                 privateProfile: profile.isPrivateProfile == true || store.isProfilePrivate(profile.id))
         }
     }
+    private var sharedCommentActivityIDs: [String] {
+        sharedPresentation?.posts.map(\.id).sorted() ?? []
+    }
+
     private var displayContext: ActivityEngagementContext { sharedPresentation?.context ?? context }
 
     var body: some View {
@@ -505,6 +514,7 @@ struct ActivityPostcardView: View {
                         context: displayContext,
                         visiblePlace: visiblePlace,
                         sharedVisitGroupID: activeSharedGroupID,
+                        commentActivityIDs: activeSharedGroupID == nil ? nil : sharedCommentActivityIDs,
                         showsCommentButton: showsCommentButton,
                         onPrivateReply: onPrivateReply,
                         onSharePreviewPresentation: onSharePreviewPresentation
@@ -554,6 +564,10 @@ struct ActivityPostcardView: View {
             if resetID != nil { photoViewerRoute = nil }
         }
         .onChange(of: context.activityID) { _, _ in photoViewerRoute = nil }
+        .task(id: sharedCommentActivityIDs) {
+            guard activeSharedGroupID != nil, auth.isSignedIn else { return }
+            await store.refreshActivityEngagement(activityIDs: sharedCommentActivityIDs, backend: backend)
+        }
         .task(id: sharedAccessKey) {
             guard activeSharedGroupID != nil, sharedPostCollection == nil else { return }
             sharedModel.invalidate()
@@ -2341,6 +2355,9 @@ struct SharedVisitCommentsScreen: View {
             let success = await model.update(comment, deleting: deleting, repository: repository,
                 isCurrent: { key == accessKey })
             guard key == accessKey, !Task.isCancelled else { return }
+            if success && deleting {
+                await store.refreshActivityEngagement(activityIDs: [comment.activityID], backend: backend)
+            }
             if !success { error = "The comment couldn’t update. Try again." }
             else if !deleting {
                 let liked = !comment.viewerHasLiked
