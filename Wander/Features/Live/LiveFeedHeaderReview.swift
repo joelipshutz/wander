@@ -8,6 +8,7 @@ struct LiveFeedHeaderReview: View {
 
     let scope: LiveFeedLocationScope
     let summary: String
+    let mapActivityCount: String
     let showsReset: Bool
     let eventsAvailable: Bool
     let detent: Int
@@ -27,11 +28,18 @@ struct LiveFeedHeaderReview: View {
                 .contentShape(Rectangle())
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")
-                .accessibilityValue(summary)
+                .accessibilityValue("\(mapActivityCount) on map. Feed: \(summary)")
                 .accessibilityAdjustableAction { direction in
                     onDetent(detent + (direction == .increment ? 1 : -1))
                 }
                 .accessibilityIdentifier("live.drawerHandle")
+
+            Text("\(mapActivityCount) on map")
+                .font(AstirTypography.bodySmall.weight(.semibold))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity)
+                .accessibilityIdentifier("live.map.activityCount")
 
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(spacing: 0) {
@@ -68,14 +76,16 @@ struct LiveFeedHeaderReview: View {
 
     private var scopeMenu: some View {
         Menu {
-            Picker("Activity location", selection: Binding(get: { scope }, set: { onScope($0) })) {
-                ForEach(LiveFeedLocationScope.allCases) { option in
-                    Text(option.title).tag(option)
+            Section("Show in feed") {
+                Picker("Feed location", selection: Binding(get: { scope }, set: { onScope($0) })) {
+                    ForEach(LiveFeedLocationScope.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
                 }
             }
         } label: {
             HStack(spacing: 6) {
-                Text(scope.title).font(AstirTypography.bodySmall.weight(.semibold))
+                Text("Feed: \(scope.title)").font(AstirTypography.bodySmall.weight(.semibold))
                 Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
             }
             .foregroundStyle(brand.accentText)
@@ -83,9 +93,9 @@ struct LiveFeedHeaderReview: View {
             .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel("Activity location")
+        .accessibilityLabel("Feed location")
         .accessibilityValue(scope.title)
-        .accessibilityHint(summary)
+        .accessibilityHint("Changes feed activity only. \(summary)")
         .accessibilityIdentifier("live.feed.scope.menu")
     }
 

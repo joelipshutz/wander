@@ -11,11 +11,18 @@ final class LiveDrawerActionsUITests: XCTestCase {
         let header = app.descendants(matching: .any)["live.feed.headerReview"].firstMatch
         waitHittable(menu)
         XCTAssertEqual(menu.value as? String, "Everywhere")
-        XCTAssertLessThanOrEqual(header.frame.height, 76)
+        XCTAssertLessThanOrEqual(header.frame.height, 96)
+        XCTAssertEqual(menu.label, "Feed location")
+        let mapCount = app.staticTexts["live.map.activityCount"]
+        XCTAssertTrue(mapCount.exists)
+        XCTAssertTrue(mapCount.label.hasSuffix(" on map"))
+        XCTAssertEqual(mapCount.frame.midX, header.frame.midX, accuracy: 1)
+        let originalMapCount = mapCount.label
         XCTAssertFalse(app.staticTexts["live.filter.summary"].exists)
         capture("compact-header-everywhere", in: app)
 
         selectReviewScope("Map area", in: app)
+        XCTAssertEqual(mapCount.label, originalMapCount, "Changing feed geography preserves the map count")
         applyFriends(in: app)
         assertReviewControls(in: app)
         capture("compact-header-filtered", in: app)
@@ -44,6 +51,9 @@ final class LiveDrawerActionsUITests: XCTestCase {
 
     func testCompactHeaderReviewSupportsAccessibilityText() {
         let app = launch(largeText: true, extraArguments: ["-WanderFeedHeaderReview"])
+        let mapCount = app.staticTexts["live.map.activityCount"]
+        XCTAssertTrue(mapCount.exists)
+        XCTAssertTrue(app.frame.contains(mapCount.frame))
         selectReviewScope("Map area", in: app)
         applyFriends(in: app)
         assertReviewControls(in: app)

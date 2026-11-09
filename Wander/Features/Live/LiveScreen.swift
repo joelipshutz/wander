@@ -815,6 +815,7 @@ struct LiveScreen: View {
                     if usesFeedHeaderReview {
                         #if DEBUG
                         LiveFeedHeaderReview(scope: selection.feedLocationScope, summary: feedScopeSummary,
+                            mapActivityCount: LiveMapPaging.countText(activity.count, complete: mapResults.complete),
                             showsReset: sharedFilterCount > 0, eventsAvailable: eventsAvailable,
                             detent: detent, onScope: selectFeedLocation, onReset: resetSharedFilters,
                             onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true },
