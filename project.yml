@@ -33,6 +33,26 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  Feed Header Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        -WanderUnifiedLiveUITest: true
+        -WanderNUXFeedFixture: true
+        "-WanderInitialTab discover": true
+        "-astir.live.introduction.v1.user_joe.acknowledged YES": true
+        "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1 3": true
+    test:
+      config: Debug
+      targets:
+        - WanderTests
+        - WanderUITests
   Circle Questions Review:
     build:
       targets:

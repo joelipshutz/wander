@@ -72,7 +72,7 @@ final class LiveManualPaginationUITestRepositoryTests: XCTestCase {
         }
     }
 
-    func testViewportPolygonContinuesThroughProductionStoreAndDeduplicatesAllExpansionStages() async throws {
+    func testViewportPolygonContinuesThroughProductionStoreAndStopsAtSelectedScope() async throws {
         let boundedQuery = LiveFeedQuery(occurredAfter: query.occurredAfter, occurredBefore: query.occurredBefore,
             polygon: [
                 .init(latitude: 34.0, longitude: -118.4), .init(latitude: 34.1, longitude: -118.4),
@@ -109,22 +109,16 @@ final class LiveManualPaginationUITestRepositoryTests: XCTestCase {
         XCTAssertEqual(activity.place?.userPlace.userID, store.currentUser.id)
         XCTAssertTrue(boundedQuery.includes(activity))
 
-        var visitedStages: Set<LiveFeedExpansionStage> = [store.liveFeedExpansionStage]
-        for _ in 0..<6 where store.hasMoreFeed {
-            let loaded = await store.loadMoreFeed(backend: backend)
-            XCTAssertTrue(loaded)
-            XCTAssertFalse(store.feedPaginationFailed)
-            visitedStages.insert(store.liveFeedExpansionStage)
-            XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [LiveManualPaginationUITestRepository.activityID])
-            XCTAssertEqual(store.visibleLiveFeedSections.flatMap(\.groups).flatMap(\.activities).map(\.id),
-                           [LiveManualPaginationUITestRepository.activityID])
-        }
-        XCTAssertEqual(visitedStages, [.selected, .older, .allActivity])
-        XCTAssertEqual(store.liveFeedExpansionStage, .allActivity)
+        let loaded = await store.loadMoreFeed(backend: backend)
+        XCTAssertFalse(loaded, "Exhaustion must not start an older or unfiltered query")
+        XCTAssertFalse(store.feedPaginationFailed)
+        XCTAssertEqual(store.followedFeedPage?.activity.map(\.id), [LiveManualPaginationUITestRepository.activityID])
+        XCTAssertEqual(store.visibleLiveFeedSections.flatMap(\.groups).flatMap(\.activities).map(\.id),
+                       [LiveManualPaginationUITestRepository.activityID])
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected)
         XCTAssertFalse(store.hasMoreFeed)
         XCTAssertNil(store.followedFeedPage?.nextCursor)
-        XCTAssertEqual(store.followedFeedPage?.activity.first?.kind, .listItemAdded,
-                       "Overlapping later copies must not replace the authorized original activity.")
+        XCTAssertEqual(store.followedFeedPage?.activity.first?.kind, .listItemAdded)
     }
 
     func testIndependentMapRouteRejectsUnexpectedCursorAudienceAndLimit() async throws {

@@ -164,6 +164,19 @@ final class LiveExperienceUITests: XCTestCase {
         app.buttons["live.clearArea"].tap()
         XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
         capture("draw-clear-hidden-after-clear")
+
+        app.buttons["live.draw"].tap()
+        app.buttons["Use visible area"].tap()
+        app.buttons["live.applyArea"].tap()
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForExistence(timeout: 5))
+        app.buttons["Filters"].tap()
+        app.buttons["live.filter.scope"].tap()
+        app.buttons["live.filter.option.Scope.Nearby"].tap()
+        XCTAssertFalse(app.switches["Keep drawn area"].exists,
+                       "Nearby replaces the drawn area; the sheet must not promise to retain it")
+        app.buttons["live.applyFilters"].tap()
+        XCTAssertTrue(app.buttons["live.clearArea"].waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
     }
 
     func testDrawingAfterSearchDoesNotReplaySearch() {
@@ -248,7 +261,7 @@ final class LiveExperienceUITests: XCTestCase {
         let handle = app.descendants(matching: .any)["live.drawerHandle"].firstMatch
         XCTAssertTrue(handle.waitForExistence(timeout: 30))
         XCTAssertTrue((handle.value as? String)?.range(
-            of: #"^(?:1 activity|[0-9]+\+? activities)\. "#,
+            of: #"^(?:1 activity|[0-9]+\+? activities) on map\. "#,
             options: .regularExpression
         ) != nil,
                       "The combined drawer element must retain its loaded count for VoiceOver.")
@@ -287,7 +300,7 @@ final class LiveExperienceUITests: XCTestCase {
         app.buttons["Filters"].tap()
         tapResetFilters(in: app)
         app.buttons["live.applyFilters"].tap()
-        XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        XCTAssertTrue(app.buttons["live.clearArea"].exists, "Reset filters preserves the drawn area even after Apply")
     }
 
     func testCommittedPeopleFilterSurvivesTabReturn() {
@@ -718,8 +731,8 @@ final class LiveExperienceUITests: XCTestCase {
         }
         let committed = try XCTUnwrap(liveState(in: app))
         XCTAssertTrue(app.buttons["live.searchArea"].waitForNonExistence(timeout: 5))
-        XCTAssertFalse(app.buttons["live.clearArea"].exists,
-                       "A viewport search must not show the drawn-area Clear button.")
+        XCTAssertTrue(app.buttons["live.clearArea"].exists,
+                      "A viewport search has a visible Clear area action.")
         XCTAssertEqual(app.buttons["live.draw"].label, "Draw area")
         let retainedPin = try XCTUnwrap(app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", "live.pin.")).allElementsBoundByIndex.first {
@@ -759,14 +772,11 @@ final class LiveExperienceUITests: XCTestCase {
         revealFully(reset, in: form, app: app)
         reset.tap()
         app.buttons["live.applyFilters"].tap()
-        // Reset uses the current viewport, which can differ after place and
-        // tab returns; it must clear the explicit area without losing pins.
-        waitForCondition {
-            guard let state = self.liveState(in: app) else { return false }
-            return state.count > 0 && state.count <= before.count && !state.value.contains("Map area")
-        }
-        XCTAssertFalse(try XCTUnwrap(liveState(in: app)).value.contains("Map area"))
+        XCTAssertTrue(app.buttons["live.clearArea"].exists, "Reset filters preserves the selected area")
+        app.buttons["live.clearArea"].tap()
+        waitForCondition { (self.liveState(in: app)?.count ?? 0) > 0 }
         XCTAssertFalse(app.buttons["live.clearArea"].exists)
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
         XCTAssertFalse(app.buttons["live.searchArea"].exists)
         capture("search-area-reset")
     }
@@ -828,7 +838,7 @@ final class LiveExperienceUITests: XCTestCase {
                 if node.elementType == .tabBar, root.frame.intersects(node.frame) {
                     tabTop = min(tabTop, node.frame.minY)
                 }
-                if node.identifier == "feed.allActivity" { terminalDivider = node.frame }
+                if node.identifier == "feed.scopeEnd" { terminalDivider = node.frame }
                 if node.identifier.hasPrefix("feed.activity."),
                    node.identifier.hasSuffix(".postcard"), !node.frame.isEmpty {
                     cards[node.identifier] = node.frame
@@ -940,8 +950,8 @@ final class LiveExperienceUITests: XCTestCase {
     func testLiveManualLoadMoreContinuesAnEmptyAuthorizedPage() throws {
         executionTimeAllowance = 300
         let app = launch(extraArguments: ["-WanderFeedPaginationUITest", "-WanderLiveManualPaginationUITest"])
-        // All time deliberately skips the older stage. Select a bounded window
-        // through the real filter UI so this test exercises every expansion.
+        // Select a bounded window through the real filter UI. Empty authorized
+        // pages continue inside that window without silently expanding it.
         openCategoryFilters(in: app)
         let timeFilter = app.buttons["live.filter.time"]
         timeFilter.tap()
@@ -970,16 +980,13 @@ final class LiveExperienceUITests: XCTestCase {
         waitFeedCount(1, in: app, timeout: 15)
         waitLiveCount(0, in: app)
         XCTAssertTrue(app.descendants(matching: .any)["feed.activity.fixture-live-manual-next.postcard"].firstMatch.exists)
-        // The fixture's older page overlaps the same event ID. Exhausting it
-        // must retain one authorized card, rather than duplicate or drop it.
-        let older = app.descendants(matching: .any)["feed.olderActivity"].firstMatch
-        revealFully(older, in: feed, app: app)
-        XCTAssertTrue(older.waitForExistence(timeout: 15))
-        let terminal = app.descendants(matching: .any)["feed.allActivity"].firstMatch
+        let terminal = app.descendants(matching: .any)["feed.scopeEnd"].firstMatch
         revealFully(terminal, in: feed, app: app)
         XCTAssertTrue(terminal.waitForExistence(timeout: 15))
-        // The divider marks the expansion stage; its duplicate-only final page
-        // must finish before asserting that pagination is idle.
+        XCTAssertTrue(app.buttons["feed.showOlder"].exists)
+        XCTAssertFalse(app.descendants(matching: .any)["feed.olderActivity"].firstMatch.exists)
+        XCTAssertFalse(app.descendants(matching: .any)["feed.allActivity"].firstMatch.exists)
+        // The selected window ends without an automatic broader request.
         XCTAssertTrue(app.descendants(matching: .any)["feed.loadingMore"].firstMatch.waitForNonExistence(timeout: 15))
         waitFeedCount(1, in: app)
         waitLiveCount(0, in: app)
@@ -989,7 +996,7 @@ final class LiveExperienceUITests: XCTestCase {
         feed.swipeUp()
         waitFeedCount(1, in: app)
         XCTAssertFalse(app.buttons["feed.filteredLoadMore"].exists)
-        capture("live-empty-page-and-older-stage-exhausted")
+        capture("live-empty-page-selected-window-exhausted")
     }
 
     private func scrollToAutomaticPage(in app: XCUIApplication, feed: XCUIElement, previousCount: Int) {
@@ -1198,6 +1205,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons["live.draw"].isHittable }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
+        app.selectFeedLocation("Map area")
         return app
     }
 

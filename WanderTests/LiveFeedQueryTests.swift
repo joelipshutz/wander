@@ -209,8 +209,8 @@ final class LiveFeedQueryTests: XCTestCase {
         XCTAssertEqual(all.occurredBefore, query.occurredBefore)
         XCTAssertNil(all.occurredAfter)
         XCTAssertFalse(all.hasDiscoveryFilters)
-        XCTAssertEqual(query.nextExpansion(after: .selected), .older)
-        XCTAssertEqual(query.nextExpansion(after: .older), .allActivity)
+        XCTAssertNil(query.nextExpansion(after: .selected))
+        XCTAssertNil(query.nextExpansion(after: .older))
         XCTAssertNil(query.nextExpansion(after: .allActivity))
     }
 
