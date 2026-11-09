@@ -8,6 +8,41 @@ final class NativeOnboardingFlowUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    func testSetupEntersWalkthroughWithoutIntroVideo() {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
+            "-WanderOnboardingUITestStep", "notifications",
+            "-WanderNotificationAuthorizationDeniedFixture",
+            "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs", "-WanderHoldWalkthroughStep"
+        ]
+        app.launchEnvironment["WANDER_PRODUCT_UPSELL_TEST_SUITE"] = "ProductUpsellUITests.NUXHandoff.\(UUID().uuidString)"
+        app.launch()
+        assertSetupEntersWalkthrough(app)
+    }
+
+    func testReviewSetupEntersWalkthroughWithoutIntroVideo() {
+        let app = launchReview("notifications", extraArguments: [
+            "-WanderAuthenticatedUITest",
+            "-WanderNotificationAuthorizationDeniedFixture",
+            "-WanderBypassProductUpsellFrequencyCap",
+            "-WanderEnableWalkthroughs", "-WanderResetWalkthroughs", "-WanderHoldWalkthroughStep"
+        ])
+        assertSetupEntersWalkthrough(app)
+    }
+
+    private func assertSetupEntersWalkthrough(_ app: XCUIApplication) {
+        let notNow = app.buttons["productUpsell.secondary"]
+        XCTAssertTrue(notNow.waitForExistence(timeout: 15))
+        notNow.tap()
+        let firstStep = app.descendants(matching: .any)["walkthrough.map.mapFeatured"]
+        XCTAssertTrue(firstStep.waitForExistence(timeout: 20), "Setup must enter the existing walkthrough directly.")
+        XCTAssertFalse(app.buttons["onboarding.founders.play"].exists)
+        XCTAssertFalse(app.buttons["onboarding.founders.skip"].exists)
+        XCTAssertTrue(app.buttons["Map"].isSelected)
+        keepScreenshot("Setup-direct-to-NUX", app: app)
+    }
+
     func testWelcomeToLoginVerificationSurvivesBackground() {
         let app = launchReview("welcome")
         let next = app.buttons["onboarding.next"]

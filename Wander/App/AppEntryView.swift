@@ -100,38 +100,36 @@ struct AppEntryView: View {
                     complete: { coordinator.completeOnboarding(for: session, serverConfirmed: $0) }
                 )
             case .ready(let session, let firstVisitWalkthroughEligible):
-                FoundersWelcomeGate(userID: session.userID, isEligible: firstVisitWalkthroughEligible) {
-                    WanderRootView(
-                        // Only seed the root selection; the mounted tab state and
-                        // onboarding/NUX routing continue to own later navigation.
-                        initialTab: WanderRootView.resolvedInitialTab(
-                            defaultTab: firstVisitWalkthroughEligible ? .map : .discover
-                        ),
-                        initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
-                        initialSession: session,
-                        isSessionValidated: auth.isSessionValidated,
-                        isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
-                        onFirstVisitWalkthroughCompleted: { completedUserID in
-                            coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)
-                        },
-                        deepLinkLaunchRequest: deepLinkInbox.request(
-                            ifSessionValidated: auth.isSessionValidated
-                        ),
-                        onDeepLinkLaunchRequestHandled: { requestID in
-                            deepLinkInbox.consume(requestID)
-                            if appClipRequestID == requestID {
-                                AppClipHandoff.clear()
-                                appClipRequestID = nil
-                            }
-                        },
-                        analytics: analytics,
-                        parser: parser,
-                        socialImportUnderstandingRepository: backend.socialImportUnderstandingProvider(
-                            for: session.userID,
-                            authSession: auth
-                        )
+                WanderRootView(
+                    // Only seed the root selection; the mounted tab state and
+                    // onboarding/NUX routing continue to own later navigation.
+                    initialTab: WanderRootView.resolvedInitialTab(
+                        defaultTab: firstVisitWalkthroughEligible ? .map : .discover
+                    ),
+                    initialSharedProfileRoute: coordinator.pendingSharedProfileRoute,
+                    initialSession: session,
+                    isSessionValidated: auth.isSessionValidated,
+                    isFirstVisitWalkthroughEligible: firstVisitWalkthroughEligible,
+                    onFirstVisitWalkthroughCompleted: { completedUserID in
+                        coordinator.completeFirstVisitWalkthrough(forUserID: completedUserID)
+                    },
+                    deepLinkLaunchRequest: deepLinkInbox.request(
+                        ifSessionValidated: auth.isSessionValidated
+                    ),
+                    onDeepLinkLaunchRequestHandled: { requestID in
+                        deepLinkInbox.consume(requestID)
+                        if appClipRequestID == requestID {
+                            AppClipHandoff.clear()
+                            appClipRequestID = nil
+                        }
+                    },
+                    analytics: analytics,
+                    parser: parser,
+                    socialImportUnderstandingRepository: backend.socialImportUnderstandingProvider(
+                        for: session.userID,
+                        authSession: auth
                     )
-                }
+                )
                 .id(session.userID)
             case .recoverableFailure(_, let message, let canContinueOffline):
                 AppEntryRecoveryView(

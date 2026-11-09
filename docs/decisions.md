@@ -1,6 +1,14 @@
 # Decisions
 
-Last updated: 2026-10-28
+Last updated: 2026-11-09
+
+## 2026-11-09 — Setup enters NUX without the intro video (REC-681)
+
+Account setup now opens the existing first-visit walkthrough directly. The
+founders welcome video no longer gates app entry, including for users who left
+the video unfinished in an earlier build. Walkthrough eligibility, completion,
+and the pre-account film treatment stay unchanged. The original media and
+standalone debug preview remain available.
 
 ## 2026-10-18 — Contextual link previews are deliberate copies (REC-647)
 
