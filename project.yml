@@ -33,6 +33,24 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  Circle Questions Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderUseDemoFixtures: true
+        -WanderDisableWalkthroughs: true
+        -WanderUnifiedLiveUITest: true
+        -WanderCircleQuestionLocalTest: true
+        "-WanderInitialTab discover": true
+    test:
+      config: Debug
+      targets:
+        - WanderTests
+        - WanderUITests
   Live Experience Review:
     build:
       targets:

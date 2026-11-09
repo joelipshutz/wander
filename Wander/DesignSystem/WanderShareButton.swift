@@ -50,6 +50,11 @@ struct WanderShareContent: Equatable {
         WanderShareContent(item: item, subject: name, message: message)
     }
 
+    static func question(id: UUID) -> WanderShareContent {
+        WanderShareContent(item: URL(string: "recme://questions/\(id.uuidString)")!,
+            subject: "A question for your circle", message: "")
+    }
+
     static func place(serverID: String?, name: String, message: String) -> WanderShareContent? {
         guard let serverID,
               UUID(uuidString: serverID) != nil,

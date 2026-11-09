@@ -220,6 +220,8 @@ enum AnalyticsEngagementAction: String {
     case placeSaved = "place_saved"
     case placePlanShared = "place_plan_shared"
     case privateMessageSent = "private_message_sent"
+    case questionAsked = "question_asked"
+    case questionAnswered = "question_answered"
     case recommendationShared = "recommendation_shared"
     case saveStreakAdvanced = "save_streak_advanced"
     case sharedVisitAccepted = "shared_visit_accepted"
@@ -339,6 +341,8 @@ struct AcquisitionAttribution: Equatable {
 }
 
 enum WanderAnalyticsEvents {
+    static let circleQuestionPosted = "circle_question_posted"
+    static let circleQuestionAnswered = "circle_question_answered"
     static let appClipOpened = "app_clip_opened"
     static let appClipAuthCompleted = "app_clip_auth_completed"
     static let placeListInviteAccepted = "place_list_invite_accepted"

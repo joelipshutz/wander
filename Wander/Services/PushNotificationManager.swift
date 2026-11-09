@@ -288,6 +288,7 @@ enum NotificationDestination: Equatable {
     case listInvite(token: String)
     case place(id: String)
     case activityComments(id: String)
+    case question(id: String)
     case checkInComments(userPlaceID: String, visitID: String)
     case sharedVisit(participantID: String, generation: Int)
     case calendarReservation(id: String)
@@ -987,6 +988,7 @@ final class PushNotificationManager: ObservableObject {
     ) -> String {
         let value = (userInfo["recme"] as? [String: Any])?["notification_type"] as? String
         let allowedTypes: Set<String> = [
+            "circle_question_tagged",
             "activity_commented",
             "activity_liked",
             "capture_ready",
@@ -1027,6 +1029,7 @@ final class PushNotificationManager: ObservableObject {
             return "list_invite"
         case .place:
             return "place"
+        case .question: return "question"
         case .activityComments, .checkInComments:
             return "activity_comments"
         case .sharedVisit:
@@ -1054,6 +1057,8 @@ final class PushNotificationManager: ObservableObject {
                 return .profile(id: profileID)
             case .sharedPlace(let placeID):
                 return .place(id: placeID)
+            case .sharedQuestion(let id):
+                return .question(id: id)
             case .sharedActivity(let activityID):
                 return .activityComments(id: activityID)
             case .sharedList(let listID):

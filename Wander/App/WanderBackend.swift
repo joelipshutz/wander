@@ -234,6 +234,8 @@ final class WanderBackend: ObservableObject {
     let shareCardPreviewRepository: (any ShareCardPreviewRepository)?
     let placePlanInvitationRepository: (any PlacePlanInvitationRepository)?
     let privateMessageRepository: (any PrivateMessageRepository)?
+    var circleQuestionRepository: (any CircleQuestionRepository)?
+    lazy var circleQuestions = CircleQuestionStore(repository: circleQuestionRepository)
     @Published private(set) var featureFlagResolution: FeatureFlagResolution = .unresolved
     private var featureFlagRefreshGeneration = 0
     private var inFlightFeatureFlagRefreshes: [String: InFlightFeatureFlagRefresh] = [:]
@@ -279,6 +281,7 @@ final class WanderBackend: ObservableObject {
             self.communityReportRepository = SupabaseCommunityReportRepository(rpc: client)
             self.placeRepository = SupabasePlaceRepository(rpc: client, functions: client)
             self.feedRepository = SupabaseFeedRepository(rpc: client)
+            self.circleQuestionRepository = SupabaseCircleQuestionRepository(rpc: client)
             self.activityEngagementRepository = SupabaseActivityEngagementRepository(rpc: client)
             let userPlaceRepository = SupabaseUserPlaceRepository(rpc: client)
             self.userPlaceRepository = userPlaceRepository
@@ -424,6 +427,7 @@ final class WanderBackend: ObservableObject {
         photoSessionTask = Task { @MainActor [weak self, photoAuthSession] in
             for await _ in photoAuthSession.sessionChanges() {
                 guard !Task.isCancelled, let self else { return }
+                self.circleQuestions.reset(userID: photoAuthSession.state.session?.userID ?? "")
                 self.photoSessionRevision += 1
                 self.placePhotoCache.removeAll()
                 self.placePhotoCacheRecency.removeAll()

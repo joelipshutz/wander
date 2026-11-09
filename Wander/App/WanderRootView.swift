@@ -374,6 +374,7 @@ struct WanderRootView: View {
     @State private var handledDeepLinkLaunchRequestID: UUID?
     @State private var initialPresentation: WanderInitialPresentation?
     @State private var sharedProfile: SharedProfileRoute?
+    @State private var sharedQuestion: CircleQuestionLink?
     @State private var sharedPlan: PlacePlanInvitationRoute?
     @State private var signedInMaintenanceTask: Task<Void, Never>?
     @State private var signedInMaintenanceRunID: UUID?
@@ -999,6 +1000,7 @@ struct WanderRootView: View {
                 }
             }
         }
+        .fullScreenCover(item: $sharedQuestion) { CircleQuestionDestination(id: $0.id).environmentObject(store).environmentObject(backend) }
         .fullScreenCover(item: $sharedPlan) { route in
             WanderRootPresentationLifecycle(
                 surface: .placePlanInvitation,
@@ -2392,6 +2394,11 @@ struct WanderRootView: View {
             beginDeepLinkHandoff(to: .sharedProfile(profileID: profileID))
             return
         }
+        if case .question(let id) = request.destination {
+            pushNotifications.consumeNavigationRequest(id: request.id)
+            beginDeepLinkHandoff(to: .sharedQuestion(questionID: id))
+            return
+        }
         if case .activityComments(let activityID) = request.destination {
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .sharedActivity(activityID: activityID))
@@ -2448,7 +2455,7 @@ struct WanderRootView: View {
         case .importReview: .map
         case .list, .listInvite: .lists
         case .place, .sharedVisit, .calendarReservation: .map
-        case .activityComments, .checkInComments: .discover
+        case .activityComments, .checkInComments, .question: .discover
         case .discover: .discover
         }
     }
@@ -3269,6 +3276,9 @@ struct WanderRootView: View {
         case .sharedPlace(let placeID):
             selectedTab = .map
             pushNotifications.route(to: .place(id: placeID))
+        case .sharedQuestion(let questionID):
+            selectedTab = .discover
+            sharedQuestion = UUID(uuidString: questionID).map(CircleQuestionLink.init)
         case .sharedActivity(let activityID):
             selectedTab = .discover
             activityNavigation.openComments(activityID: activityID)
