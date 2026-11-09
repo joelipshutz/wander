@@ -15,21 +15,23 @@ struct CircleQuestionRecommendations: View {
     @State private var loading = false
     @State private var failed = false
     @State private var next = false
+    @FocusState private var searchFocused: Bool
+    private var activeQuery: String { source == "Search" ? query.trimmingCharacters(in: .whitespacesAndNewlines) : "" }
     private var quick: [CircleQuestionPlace] { Array(store.visiblePlaces(for: store.currentUser.id).prefix(30)).map(CircleQuestionPlace.init) }
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("You know a place.\nOr a few.").font(.system(.largeTitle, design: .serif).weight(.semibold))
-                Text("Pick your recommendations. Add a little local knowledge next.").font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
-                Picker("Find places", selection: $source) {
-                    Text("Quick picks").tag("Quick picks"); Text("Search").tag("Search"); Text("Lists").tag("Lists")
-                }.pickerStyle(.segmented)
+                Text("Recommend a place or two").font(.system(.largeTitle, design: .serif).weight(.semibold))
+                searchField
+                HStack(spacing: 24) {
+                    sourceButton("Quick picks")
+                    sourceButton("Lists")
+                }
                 if basket.places.count == 50 {
                     Text("50 places selected. Send these first, then add more to the question.")
                         .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                 }
                 if source == "Search" {
-                    TextField("Search places", text: $query).textFieldStyle(.roundedBorder).submitLabel(.search)
                     if loading { ProgressView("Finding places…") }
                     if failed { Text("Couldn’t search places. Try again.").font(AstirTypography.bodySmall) }
                     ForEach(results) { row($0) }
@@ -56,7 +58,7 @@ struct CircleQuestionRecommendations: View {
                     ForEach(quick) { row($0) }
                 }
             }.padding(22)
-        }.astirScreen().navigationTitle("Recommend places").navigationBarTitleDisplayMode(.inline)
+        }.astirScreen().navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 CircleQuestionAction(title: "Next · \(basket.places.count) selected", disabled: basket.places.isEmpty) { next = true }
                     .padding(18).background(brand.background)
@@ -64,13 +66,18 @@ struct CircleQuestionRecommendations: View {
             .navigationDestination(isPresented: $next) {
                 CircleQuestionKnowledge(state: state, question: question, onFinish: onCompleted, basket: $basket)
             }
-            .task(id: query) {
+            .onChange(of: query) { _, value in
+                if !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { source = "Search" }
+                else if source == "Search" { source = "Quick picks" }
+            }
+            .task(id: activeQuery) {
                 results = []; failed = false
-                guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { loading = false; return }
+                let search = activeQuery
+                guard !search.isEmpty else { loading = false; return }
                 loading = true
                 do {
                     try await Task.sleep(for: .milliseconds(350))
-                    let request = MKLocalSearch.Request(); request.naturalLanguageQuery = query; request.resultTypes = [.pointOfInterest]
+                    let request = MKLocalSearch.Request(); request.naturalLanguageQuery = search; request.resultTypes = [.pointOfInterest]
                     if let area = question.draft.area { request.region = .init(center: area.coordinate, latitudinalMeters: 30_000, longitudinalMeters: 30_000) }
                     let response = try await MKLocalSearch(request: request).start()
                     guard !Task.isCancelled else { return }
@@ -81,6 +88,31 @@ struct CircleQuestionRecommendations: View {
                     }; loading = false
                 } catch { if !Task.isCancelled { failed = true; loading = false } }
             }
+    }
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(brand.secondaryText)
+            TextField("Search places", text: $query)
+                .font(AstirTypography.body).submitLabel(.search).focused($searchFocused)
+                .accessibilityIdentifier("circleQuestion.placeSearch")
+                .onSubmit { if !query.isEmpty { source = "Search" }; searchFocused = false }
+            if !query.isEmpty {
+                Button { query = "" } label: { Image(systemName: "xmark.circle.fill").frame(width: 44, height: 44) }
+                    .accessibilityLabel("Clear place search").foregroundStyle(brand.secondaryText)
+            }
+        }.padding(.leading, 16).padding(.trailing, query.isEmpty ? 16 : 0).frame(minHeight: 52)
+            .background(brand.raisedBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+    private func sourceButton(_ title: String) -> some View {
+        Button { source = title; searchFocused = false } label: {
+            Text(title).font(AstirTypography.control)
+                .foregroundStyle(source == title ? brand.primaryText : brand.secondaryText)
+                .frame(minHeight: 44)
+                .overlay(alignment: .bottom) {
+                    if source == title { Capsule().fill(brand.accent).frame(height: 3) }
+                }
+        }.buttonStyle(.plain).accessibilityIdentifier("circleQuestion.source.\(title)")
+            .accessibilityAddTraits(source == title ? [.isSelected] : [])
     }
     private func row(_ place: CircleQuestionPlace) -> some View {
         Button { basket.toggle(place) } label: {

@@ -13,6 +13,7 @@ import XCTest
         let question = app.buttons["circleQuestion.create"]
         XCTAssertTrue(question.waitForExistence(timeout: 8)); capture(app, "live-plus"); question.tap()
         XCTAssertTrue(app.staticTexts["Ask your circle."].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["for a recommendation"].exists)
         capture(app, "composer-entry")
         XCTAssertFalse(app.staticTexts["Astir Circle Question"].exists)
     }
@@ -33,7 +34,7 @@ import XCTest
 
     func testEntireListCanBeSelectedThenEdited() {
         let app = review("recommend")
-        app.segmentedControls.buttons["Lists"].tap()
+        app.buttons["circleQuestion.source.Lists"].tap()
         let list = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Choose all or a few")).firstMatch
         XCTAssertTrue(list.waitForExistence(timeout: 5)); list.tap()
         let all = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Select all ")).firstMatch
@@ -42,6 +43,27 @@ import XCTest
         XCTAssertTrue(row.exists); row.tap()
         capture(app, "lists-selected")
         XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Next · ")).firstMatch.exists)
+    }
+
+    func testSearchCanSwitchBackToQuickPicksAndListsWithoutLosingSelection() {
+        let app = review("recommend")
+        XCTAssertTrue(app.staticTexts["Recommend a place or two"].waitForExistence(timeout: 8))
+        let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "circleQuestion.place."))
+        rows.firstMatch.tap()
+        let search = app.textFields["circleQuestion.placeSearch"]
+        search.tap(); search.typeText("coffee")
+        let quick = app.buttons["circleQuestion.source.Quick picks"]
+        let lists = app.buttons["circleQuestion.source.Lists"]
+        XCTAssertFalse(quick.isSelected); XCTAssertFalse(lists.isSelected)
+        XCTAssertTrue(quick.isEnabled); XCTAssertTrue(lists.isEnabled)
+        lists.tap()
+        XCTAssertTrue(lists.isSelected)
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Choose all or a few")).firstMatch.exists)
+        quick.tap()
+        XCTAssertTrue(quick.isSelected)
+        XCTAssertTrue(rows.firstMatch.isSelected)
+        XCTAssertTrue(app.buttons["Next · 1 selected"].exists)
+        capture(app, "search-source-switching")
     }
 
     func testSelectedPlacesArePostedBackToQuestion() {

@@ -92,6 +92,9 @@ declare viewer text:=app.current_user_id(); qid uuid; days integer; target text;
 begin
   if viewer is null or not exists(select 1 from public.profiles where id=viewer and deleted_at is null) then raise exception 'not_authenticated'; end if;
   qid:=(input_draft->>'id')::uuid;
+  if qid is null then raise exception 'invalid_question'; end if;
+  -- Serialize the idempotency check as well as the write, including overlapping retries.
+  perform pg_advisory_xact_lock(hashtextextended('circle_question:'||viewer,0));
   -- An ambiguous transport retry cannot duplicate a post or its notifications.
   if exists(select 1 from public.circle_questions where id=qid and author_id=viewer) then
     if not exists(select 1 from public.circle_questions q where q.id=qid
@@ -119,8 +122,18 @@ begin
     or jsonb_array_length(input_draft->'categories') > 20 or jsonb_array_length(input_draft->'subcategories') > 50
     or jsonb_array_length(input_draft->'recipientIDs') > 500
     or octet_length(input_draft::text) > 32000 then raise exception 'invalid_question'; end if;
+  -- Persist the exact Codable shape consumed by every authorized viewer.
+  if jsonb_typeof(input_draft#>'{area,name}') is distinct from 'string'
+    or jsonb_typeof(input_draft#>'{area,detail}') is distinct from 'string'
+    or jsonb_typeof(input_draft#>'{area,latitude}') is distinct from 'number'
+    or jsonb_typeof(input_draft#>'{area,longitude}') is distinct from 'number'
+    or char_length(input_draft#>>'{area,detail}') > 1000
+    or exists(select 1 from jsonb_each(input_draft->'area') where key in ('city','region','countryCode')
+      and jsonb_typeof(value) not in ('string','null'))
+    or exists(select 1 from jsonb_array_elements((input_draft->'categories')||(input_draft->'subcategories')) value
+      where jsonb_typeof(value) <> 'string' or char_length(value#>>'{}') not between 1 and 100)
+    then raise exception 'invalid_question'; end if;
   if coalesce((input_draft->>'stealth')::boolean,false) and mode='all' then raise exception 'stealth_requires_tags'; end if;
-  perform pg_advisory_xact_lock(hashtextextended('circle_question:'||viewer,0));
   if (select count(*) from public.circle_questions where author_id=viewer and created_at>now()-interval '1 day')>=20 then raise exception 'rate_limited'; end if;
   -- Store the sentence/area only. Client recipient arrays never become authority.
   draft:=jsonb_build_object('id',qid,'categories',input_draft->'categories','subcategories',input_draft->'subcategories',
@@ -155,23 +168,26 @@ returns jsonb language plpgsql volatile security definer set search_path=pg_cata
 declare viewer text:=app.current_user_id(); item jsonb; prior public.circle_question_replies;
 begin
   if not app.can_read_circle_question(viewer,input_question_id) then raise exception 'question_unavailable'; end if;
-  if jsonb_typeof(input_places) is distinct from 'array' or jsonb_array_length(input_places)>50
+  if input_client_id is null or jsonb_typeof(input_places) is distinct from 'array' or jsonb_array_length(input_places)>50
     or char_length(coalesce(input_note,''))>1000 or octet_length(input_places::text)>100000
     or (jsonb_array_length(input_places)=0 and char_length(btrim(coalesce(input_note,'')))=0) then raise exception 'invalid_reply'; end if;
   for item in select * from jsonb_array_elements(input_places) loop
-    if char_length(coalesce(item->>'id','')) not between 1 and 500 or char_length(coalesce(item->>'name','')) not between 1 and 200
+    if jsonb_typeof(item->'id') is distinct from 'string' or jsonb_typeof(item->'name') is distinct from 'string'
+      or jsonb_typeof(item->'detail') is distinct from 'string' or jsonb_typeof(item->'note') is distinct from 'string'
+      or jsonb_typeof(item->'latitude') is distinct from 'number' or jsonb_typeof(item->'longitude') is distinct from 'number'
+      or char_length(coalesce(item->>'id','')) not between 1 and 500 or char_length(coalesce(item->>'name','')) not between 1 and 200
       or char_length(coalesce(item->>'detail',''))>1000 or char_length(coalesce(item->>'note',''))>1000
       or item->>'latitude' is null or item->>'longitude' is null
       or (item->>'latitude')::numeric not between -90 and 90 or (item->>'longitude')::numeric not between -180 and 180
       then raise exception 'invalid_place'; end if;
   end loop;
+  perform pg_advisory_xact_lock(hashtextextended('circle_reply:'||viewer,0));
   select * into prior from public.circle_question_replies where id=input_client_id;
   if found then
     if prior.author_id<>viewer or prior.question_id<>input_question_id or prior.places<>input_places
       or prior.note<>btrim(coalesce(input_note,'')) then raise exception 'idempotency_conflict'; end if;
     return app.circle_question_json(input_question_id,viewer);
   end if;
-  perform pg_advisory_xact_lock(hashtextextended('circle_reply:'||viewer,0));
   if (select count(*) from public.circle_question_replies where author_id=viewer and created_at>now()-interval '1 minute')>=20 then raise exception 'rate_limited'; end if;
   insert into public.circle_question_replies(id,question_id,author_id,places,note)
     values(input_client_id,input_question_id,viewer,input_places,btrim(coalesce(input_note,'')));

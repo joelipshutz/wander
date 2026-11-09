@@ -8,13 +8,25 @@ enum CircleQuestionStyle {
 }
 
 struct CircleQuestionPin: View {
+    @Environment(\.colorScheme) private var colorScheme
     var body: some View {
-        VStack(spacing: 0) {
-            Text("?").font(.system(size: 25, weight: .bold, design: .serif))
+        // Match the Live place tile's 29 × 40 body, 10pt footing and 44pt target.
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CircleQuestionStyle.lilac)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(colorScheme == .dark ? Color.white.opacity(0.35) : CircleQuestionStyle.plum.opacity(0.2), lineWidth: 0.6)
+                }
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.4 : 0.23), radius: 2, y: 2)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(CircleQuestionStyle.plum)
+                .mask(alignment: .bottom) { Rectangle().frame(height: 10) }
+            Image(systemName: "questionmark")
+                .resizable().scaledToFit().font(.system(size: 20, weight: .medium))
                 .foregroundStyle(CircleQuestionStyle.plum)
-                .frame(width: 30, height: 31).background(CircleQuestionStyle.lilac)
-            CircleQuestionStyle.plum.frame(width: 30, height: 10)
-        }.clipShape(RoundedRectangle(cornerRadius: 8)).frame(width: 44, height: 44)
+                .frame(width: 20, height: 20).frame(width: 29, height: 30).offset(y: -5)
+        }.frame(width: 29, height: 40).frame(width: 44, height: 44)
             .accessibilityLabel("Question")
     }
 }
@@ -53,7 +65,7 @@ struct CircleQuestionComposer: View {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Ask your circle.").font(.system(.largeTitle, design: .serif).weight(.semibold))
-                            Text("Ask your followers for a recommendation")
+                            Text("for a recommendation")
                                 .font(AstirTypography.bodySmall).foregroundStyle(brand.secondaryText)
                         }
                         Spacer(minLength: 0)

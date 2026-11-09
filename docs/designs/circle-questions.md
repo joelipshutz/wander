@@ -2,7 +2,8 @@
 
 Implementation branch: `codex/circle-questions`.
 
-The Live plus menu opens **Ask your circle**. The composer uses the existing
+The Live plus menu opens **Ask your circle**, with the subtitle **for a recommendation**.
+The composer uses the existing
 category taxonomy with Everything, multiple primary categories, and a separate
 optional subcategory selector. A searchable city/state/country supplies the pin
 center. Supporting text is optional. The ask is the largest text on the feed card;
@@ -13,11 +14,15 @@ tag recipients. Stealth questions are visible only to their author and tagged
 recipients. Blocks revoke access. The current hometown selector uses the existing
 public profile home-area field; private contact details are not exposed.
 
-Question pins use a lilac tile and plum footing, with a question mark. Duration is
+Question pins match the Live place tile's 29 × 40 shape, 10pt footing, rounded
+corners, border, shadow and inset monochrome symbol. They use a lilac body and
+plum footing with a question mark. Duration is
 1–30 days, default seven. Expiration removes the map pin while retaining the
 question and conversation in the feed.
 
-Recommendations use one deduplicated basket across place search, quick picks from
+**Recommend a place or two** keeps its search field directly below the title.
+Typing activates search and dims Quick picks and Lists; both remain tappable to
+switch sources without losing the basket. Recommendations use one deduplicated basket across place search, quick picks from
 the person's map, and saved lists. A list can supply all its places or a subset.
 The following page, **A little local knowledge**, contains the entire selection,
 optional notes per place, and an optional overall note. No list title, visibility,
@@ -31,11 +36,9 @@ The repository boundary uses authenticated Supabase RPCs. The database owns
 visibility, tag validation, likes, replies, expiration and idempotency. Client
 success is shown only after a repository acknowledgment.
 
-The migration is additive and has not been deployed. Its test runs through
-`scripts/supabase-smoke-test.mjs --migration-preview ... --migration-test
-supabase/tests/circle_questions.sql`; the transaction is rolled back. Real
-cross-account and APNs delivery testing requires deploying the reviewed migration
-and using eligible test accounts. Existing private messaging retains its mutual
+The additive migration `20261109202154_circle_questions.sql` and push worker v22
+were deployed on November 9, 2026. The smoke tool exercises question contracts in
+both direct and linked modes, inside a rolled-back transaction. Existing private messaging retains its mutual
 friend and account-enablement rules.
 
 For isolated UI review, launch the Wander scheme with
@@ -51,8 +54,9 @@ The scheme supplies
 The local-test argument selects an explicit in-memory repository in simulator test
 sessions only. It sends no push notifications or remote mutations.
 
-Linear tracking and release classification are deferred until the later tracking
-pass. This branch is not approved to merge or release.
+Use the ordinary **Wander** scheme and sign in for shared-account testing. The
+review scheme remains a local fixture tool. PR #780 references the existing
+REC-395 question-feature record for release classification.
 
 ## Validation — November 4, 2026
 
@@ -76,7 +80,24 @@ pass. This branch is not approved to merge or release.
 - Analytics dashboard contract checks and all 12 dashboard tooling tests passed.
   Review storage and whitespace checks passed.
 
-Before shared-account testing, review and deploy the additive migration, run the
-normal hosted smoke test again, and verify actual APNs delivery with test accounts.
+## Deployment validation — November 9, 2026
+
+- All 3,609 native tests passed, including six Circle Question UI flows.
+- All 12 worker tests and 12 analytics tooling tests passed. Captures were
+  reviewed on iPhone 17 Pro and iPhone 17e.
+- Hosted smoke passed before and after migration deployment. Coverage includes
+  follower/tag/Stealth access, cross-account publication and replies, blocked
+  users, read state, malformed payload rejection, idempotency, expiry, grants,
+  private-message context and final push authorization/payload minimization.
+- A temporary Stealth question published through the authenticated RPC was
+  readable by its tagged account. The live worker sent its notification and APNs
+  accepted all three active device deliveries. The temporary question, profile
+  and associated graph rows were removed. Provider acceptance does not establish
+  whether iOS displayed or the user opened the alert.
+- The CLI detected pre-existing hosted migration versions absent from local
+  history. Only this migration was deployed through the connected Supabase
+  migration API; its generated version is preserved in the filename. No history
+  repair or unrelated migration was applied.
+
 The local review scheme exercises an in-memory repository; data resets on launch.
 The initial question feed fetch is capped at the newest 100 authorized questions.

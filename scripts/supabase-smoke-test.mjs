@@ -2875,6 +2875,10 @@ savepoint private_messages_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/private_contextual_messages.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint private_messages_smoke;
 release savepoint private_messages_smoke;
+savepoint circle_question_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/circle_questions.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint circle_question_smoke;
+release savepoint circle_question_smoke;
 savepoint shared_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint shared_feed_smoke;

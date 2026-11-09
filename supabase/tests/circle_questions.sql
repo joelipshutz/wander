@@ -28,6 +28,12 @@ do $$ begin
  begin perform public.circle_question_publish((select draft from circle_test)||'{"recipientIDs":["user_codex_circle_follower"]}'::jsonb); raise exception 'changed tags were accepted';
  exception when raise_exception then if sqlerrm<>'idempotency_conflict' then raise; end if; end;
 end $$;
+do $$ declare invalid jsonb; begin
+ for invalid in select value from jsonb_array_elements('[{"categories":[{}]},{"subcategories":[42]},{"area":{"name":"Test","detail":[],"latitude":34,"longitude":-118}},{"area":{"name":"Test","detail":"Test","latitude":"34","longitude":-118}},{"area":{"name":"Test","latitude":34,"longitude":-118}}]'::jsonb) loop
+  begin perform public.circle_question_publish((select draft from circle_test)||jsonb_build_object('id',gen_random_uuid())||invalid); raise exception 'malformed question accepted';
+  exception when raise_exception then if sqlerrm<>'invalid_question' then raise; end if; end;
+ end loop;
+end $$;
 select public.circle_question_publish(draft||jsonb_build_object('id',stealth_id,'stealth',true)) is not null as stealth_created from circle_test;
 select set_config('request.jwt.claim.sub','user_codex_circle_follower',true);
 do $$ begin
@@ -46,7 +52,10 @@ do $$ declare q jsonb; begin
  perform public.circle_question_reply((select stealth_id from circle_test),'eeecc001-0000-4000-8000-000000000003','[{"id":"place1","name":"Cafe","detail":"Main St","latitude":34,"longitude":-118,"note":"Try the patio"}]','A couple favorites');
  q:=public.circle_question_reply((select stealth_id from circle_test),'eeecc001-0000-4000-8000-000000000003','[{"id":"place1","name":"Cafe","detail":"Main St","latitude":34,"longitude":-118,"note":"Try the patio"}]','A couple favorites');
  if jsonb_array_length(q->'replies')<>1 then raise exception 'reply retry duplicated'; end if;
+ begin perform public.circle_question_reply((select stealth_id from circle_test),gen_random_uuid(),'[{"id":"bad","name":"Cafe","latitude":34,"longitude":-118}]',''); raise exception 'malformed recommendation accepted';
+ exception when raise_exception then if sqlerrm<>'invalid_place' then raise; end if; end;
  perform public.circle_question_read((select stealth_id from circle_test));
+ if exists(select 1 from jsonb_array_elements(public.circle_question_inbox()) value where value#>>'{question,draft,id}'=(select stealth_id::text from circle_test) and not (value->>'isRead')::boolean) then raise exception 'read state not persisted'; end if;
 end $$;
 select set_config('request.jwt.claim.sub','user_codex_circle_stranger',true);
 do $$ begin
@@ -66,6 +75,20 @@ do $$ declare name text; begin
  if has_function_privilege('anon','public.circle_questions()','execute') or has_function_privilege('authenticated','app.circle_question_json(uuid,text)','execute') then raise exception 'function grant leak'; end if;
  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname like 'circle_question%' and (not prosecdef or not ('search_path=pg_catalog, public, app'=any(proconfig)))) then raise exception 'definer posture drift'; end if;
 end $$;
+-- The worker reauthorizes a claimed question immediately before APNs and keeps
+-- only the question routing ID in the delivery payload.
+update public.notification_events set status='claimed',claim_token='eeecc001-0000-4000-8000-000000000010',
+ claim_expires_at=now()+interval '5 minutes',data=data||'{"private_note":"must not reach APNs"}'::jsonb
+ where actor_user_id='user_codex_circle_owner' and data->>'question_id'=(select stealth_id::text from circle_test);
+set local role service_role;
+do $$ declare envelope jsonb; begin
+ envelope:=public.authorize_push_notification_delivery((select id from public.notification_events
+   where actor_user_id='user_codex_circle_owner' and data->>'question_id'='eeecc001-0000-4000-8000-000000000002'),
+   'eeecc001-0000-4000-8000-000000000010');
+ if envelope is null or envelope#>>'{data,question_id}'<>'eeecc001-0000-4000-8000-000000000002'
+   or envelope->'data' ? 'private_note' then raise exception 'question APNs authorization contract failed'; end if;
+end $$;
+reset role;
 insert into public.blocks(blocker_user_id,blocked_user_id) values('user_codex_circle_owner','user_codex_circle_tag');
 do $$ begin
  if app.can_read_circle_question('user_codex_circle_tag',(select stealth_id from circle_test)) then raise exception 'block did not revoke'; end if;

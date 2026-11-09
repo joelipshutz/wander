@@ -14,7 +14,7 @@ struct CircleQuestionEntry: View {
                 CircleQuestionPin()
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ask your circle").font(AstirTypography.sheetTitle)
-                    Text("Good places start with a question.").font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
+                    Text("for a recommendation").font(AstirTypography.caption).foregroundStyle(brand.secondaryText)
                 }
                 Spacer(); Image(systemName: "arrow.up.right").font(.body.weight(.semibold))
             }.foregroundStyle(brand.primaryText).padding(14)
