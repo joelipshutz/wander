@@ -97,6 +97,9 @@ struct InviteEntryPointButton: View {
 }
 
 struct ContactInviteSheet: View {
+    #if DEBUG
+    @Environment(\.peopleDiscoveryMockup) private var peopleDiscoveryMockup
+    #endif
     @Environment(\.astirBrandMode) private var brandMode
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -411,6 +414,12 @@ struct ContactInviteSheet: View {
                     ZStack(alignment: .trailing) {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3, pinnedViews: [.sectionHeaders]) {
+                                #if DEBUG
+                                if let peopleDiscoveryMockup, surface == .feedPeople, query.isEmpty {
+                                    PeopleDiscoveryMockupShelf(model: peopleDiscoveryMockup)
+                                        .padding(.bottom, WanderTheme.spacing3)
+                                }
+                                #endif
                                 ForEach(sections) { section in
                                     Section {
                                         contactGroup(section.contacts)
@@ -974,6 +983,12 @@ struct ContactInviteSheet: View {
     }
 
     private func beginInviteDelivery() {
+        #if DEBUG
+        if let peopleDiscoveryMockup {
+            peopleDiscoveryMockup.showsDeliveryNotice = true
+            return
+        }
+        #endif
         let recipients = selectedContacts
         guard !recipients.isEmpty else { return }
 

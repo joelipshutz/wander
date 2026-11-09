@@ -33,6 +33,20 @@ packages:
     url: https://github.com/tiktok/tiktok-opensdk-ios
     from: 2.5.0
 schemes:
+  People Placement Review:
+    build:
+      targets:
+        Wander: all
+    run:
+      config: Debug
+      commandLineArguments:
+        -WanderAuthenticatedUITest: true
+        -WanderDisableWalkthroughs: true
+        "-WanderPeopleMockup expanded": true
+    test:
+      config: Debug
+      targets:
+        - WanderUITests
   Circle Questions Review:
     build:
       targets:

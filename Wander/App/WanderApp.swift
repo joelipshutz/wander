@@ -169,7 +169,7 @@ struct WanderApp: App {
     init() {
         let configuration = WanderBackendConfiguration.current()
         #if DEBUG
-        let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil
+        let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil || PeopleDiscoveryMockupModel.route != nil
         #else
         let usesNativeReview = false
         #endif
@@ -321,6 +321,8 @@ struct WanderApp: App {
                 SenderNotificationReviewHost(route: senderReviewRoute)
             } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {
                 NativeOnboardingReviewHost(route: nativeReviewRoute)
+            } else if let peopleRoute = PeopleDiscoveryMockupModel.route {
+                PeopleDiscoveryMockupRoot(route: peopleRoute)
             } else if let motion = ProfileHeaderMotionVariant.resolved() {
                 ProfileHeaderMotionPreview(variant: motion)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderOnboardingCommentsCapture") {

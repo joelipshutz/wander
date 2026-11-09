@@ -253,6 +253,9 @@ struct ProfileMemberActions {
 }
 
 struct ProfileOwnerHome: View {
+    #if DEBUG
+    @Environment(\.peopleDiscoveryMockup) private var peopleDiscoveryMockup
+    #endif
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
@@ -572,7 +575,17 @@ struct ProfileOwnerHome: View {
                     }
                     .buttonStyle(.plain)
                     profileShareButton
+                    #if DEBUG
+                    if let peopleDiscoveryMockup {
+                        PeopleDiscoveryMockupToggle(model: peopleDiscoveryMockup)
+                    }
+                    #endif
                 }
+                #if DEBUG
+                if let peopleDiscoveryMockup {
+                    PeopleDiscoveryMockupShelf(model: peopleDiscoveryMockup, collapsible: true)
+                }
+                #endif
             }
 
             if let relationship = mode.relationship {
