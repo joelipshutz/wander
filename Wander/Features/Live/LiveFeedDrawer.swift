@@ -33,15 +33,15 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
     let maximum: CGFloat
     let detent: Int
     let enabled: Bool
-    var dragHandleHeight: CGFloat? = nil
     let onDetent: (Int) -> Void
-    @ViewBuilder var header: () -> Header
+    @ViewBuilder var header: (AnyGesture<DragGesture.Value>) -> Header
     @ViewBuilder var content: () -> Content
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.3))) private var translation: CGFloat = 0
     var body: some View {
         VStack(spacing: 0) {
-            draggableHeader
+            header(AnyGesture(drawerDrag))
+                .frame(maxWidth: .infinity)
             content()
         }
         // Keep the expensive Feed viewport stable during touch samples. Only
@@ -55,27 +55,7 @@ struct LiveFeedDrawer<Header: View, Content: View>: View {
         }
     }
 
-    @ViewBuilder private var draggableHeader: some View {
-        if let dragHandleHeight {
-            // Keep native Menu/Button taps outside the drag recognizer in the
-            // compact header.
-            header()
-                .frame(maxWidth: .infinity)
-                .overlay(alignment: .top) {
-                    Color.clear.frame(height: dragHandleHeight)
-                        .contentShape(Rectangle())
-                        .gesture(drawerDrag)
-                        .accessibilityHidden(true)
-                }
-        } else {
-            header()
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .simultaneousGesture(drawerDrag)
-        }
-    }
-
-    private var drawerDrag: some Gesture {
+    private var drawerDrag: some Gesture<DragGesture.Value> {
         DragGesture(minimumDistance: 3, coordinateSpace: .global)
             .updating($translation) { value, state, transaction in
                 guard enabled else { return }
