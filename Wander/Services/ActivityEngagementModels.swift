@@ -475,6 +475,32 @@ final class ActivityNavigationCoordinator: ObservableObject {
         commentsRoute = nil
     }
 
+    /// Feed and presented place profiles resolve through the same access path.
+    /// A late response must not replace a newer route or cross an account change.
+    @discardableResult
+    func resolveCurrentRoute(store: WanderStore, auth: AuthSessionStore, backend: WanderBackend) async -> FeedActivity? {
+        guard let route = commentsRoute else { return nil }
+        let requestUserID = store.currentUser.id
+        let allowsCachedContext = !auth.isSignedIn
+            || backend.activityEngagementRepository == nil
+            || UUID(uuidString: route.activityID) == nil
+        if !allowsCachedContext {
+            resolve(requestID: route.id, activity: nil)
+        }
+
+        let activity: FeedActivity?
+        if let target = route.checkInTarget {
+            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil, authSession: auth)
+        } else {
+            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil, authSession: auth)
+        }
+        guard !Task.isCancelled, store.currentUser.id == requestUserID,
+              allowsCachedContext || ActivitySessionReadiness(auth: auth) != .validating,
+              commentsRoute?.id == route.id else { return nil }
+        resolve(requestID: route.id, activity: activity, allowsCachedContext: allowsCachedContext)
+        return activity
+    }
+
     func resolve(
         requestID: UUID,
         activity: FeedActivity?,

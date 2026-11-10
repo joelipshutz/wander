@@ -16,6 +16,8 @@ enum WanderDeepLinkPresentationSurface: Hashable, Sendable {
     case activityShare
     case activityReport
     case activitySave
+    case activityComments
+    case activityProfile
     case liveModal
     case legacyMapDestination
 }
@@ -726,6 +728,12 @@ struct WanderRootView: View {
         .environmentObject(placeSaveDraftStore)
         .environmentObject(walkthroughs)
         .environmentObject(activityNavigation)
+        .environment(\.activityPresentationHandoff, ActivityPresentationHandoff(
+            resetID: presentationResetRequest?.id,
+            onPresent: handleDeepLinkPresentation,
+            onWillDismiss: handleDeepLinkPresentationWillDismiss,
+            onDidDismiss: { handleDeepLinkPresentationDismissal(of: $0) }
+        ))
         .modifier(NotificationInboxHost(store: store))
         .task(id: selectedTab) {
             // Let the native tab selection render before analytics work begins

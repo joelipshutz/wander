@@ -174,6 +174,7 @@ struct PlaceProfileFullScreen: View {
     @Binding private var attachedSaveContext: MapPlaceSaveContext?
     let attachedSaveDraft: PlaceSaveDraft?
     let presentsAttachedSaveSheet: Bool
+    let presentsActivityComments: Bool
     let onAttachedDraftChange: @MainActor (UUID, PlaceSaveDraftForm, Date?) -> Void
     let onAttachedSave: @MainActor (MapPlaceSaveSubmission) async -> SaveResult?
     let onAttachedRemove: @MainActor (MapPlaceSaveContext) async -> Bool
@@ -189,6 +190,7 @@ struct PlaceProfileFullScreen: View {
     @State private var remoteSaves: [VisiblePlace]?
     @State private var remoteSnapshotStartedAt: Date?
     @StateObject private var historyRefresh = PlaceProfileHistoryRefreshState()
+    @StateObject private var activityNavigation = ActivityNavigationCoordinator()
     @State private var localSaveContext: MapPlaceSaveContext?
     @State private var localListTarget: MapPlaceListTarget?
     @StateObject private var recentListAdd = RecentPlaceListAddController()
@@ -206,6 +208,7 @@ struct PlaceProfileFullScreen: View {
         attachedSaveContext: Binding<MapPlaceSaveContext?> = .constant(nil),
         attachedSaveDraft: PlaceSaveDraft? = nil,
         presentsAttachedSaveSheet: Bool = true,
+        presentsActivityComments: Bool = true,
         initialSection: PlaceProfileInitialSection = .top,
         usesInteractiveHorizontalDismissal: Bool = false,
         hidesTabBar: Bool = true,
@@ -234,6 +237,7 @@ struct PlaceProfileFullScreen: View {
         _attachedSaveContext = attachedSaveContext
         self.attachedSaveDraft = attachedSaveDraft
         self.presentsAttachedSaveSheet = presentsAttachedSaveSheet
+        self.presentsActivityComments = presentsActivityComments
         self.onAttachedDraftChange = onAttachedDraftChange
         self.onAttachedSave = onAttachedSave
         self.onAttachedRemove = onAttachedRemove
@@ -284,6 +288,11 @@ struct PlaceProfileFullScreen: View {
             guard !presentsAttachedSaveSheet, previousID != nil, currentID == nil else { return }
             Task { await refreshHistory() }
         }
+        .modifier(PlaceProfileActivityPresentation(
+            navigation: activityNavigation,
+            isEnabled: presentsActivityComments,
+            onLeavePlace: onBack
+        ))
     }
 
     private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {

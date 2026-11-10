@@ -971,29 +971,9 @@ struct FeedScreen: View {
     @MainActor
     private func resolveCommentsRouteIfNeeded() async {
         guard let route = activityNavigation.commentsRoute else { return }
-        let requestUserID = store.currentUser.id
-        let allowsCachedContext = !auth.isSignedIn
-            || backend.activityEngagementRepository == nil
-            || UUID(uuidString: route.activityID) == nil
-        if !allowsCachedContext {
-            activityNavigation.resolve(requestID: route.id, activity: nil)
-        }
-
-        let activity: FeedActivity?
-        if let target = route.checkInTarget {
-            activity = await store.activity(checkIn: target, backend: auth.isSignedIn ? backend : nil, authSession: auth)
-        } else {
-            activity = await store.activity(id: route.activityID, backend: auth.isSignedIn ? backend : nil, authSession: auth)
-        }
-        guard !Task.isCancelled, store.currentUser.id == requestUserID else { return }
-        guard allowsCachedContext || ActivitySessionReadiness(auth: auth) != .validating else { return }
+        let activity = await activityNavigation.resolveCurrentRoute(store: store, auth: auth, backend: backend)
         guard activityNavigation.commentsRoute?.id == route.id else { return }
         focusedActivityID = activity?.id
-        activityNavigation.resolve(
-            requestID: route.id,
-            activity: activity,
-            allowsCachedContext: allowsCachedContext
-        )
     }
 
     private func scrollToFocusedActivity(_ activityID: String?, proxy: ScrollViewProxy) {
