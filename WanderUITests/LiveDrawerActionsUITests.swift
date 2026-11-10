@@ -80,7 +80,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         }
         waitHittable(button)
         XCTAssertEqual(button.frame.width, feed.frame.width - 32, accuracy: 2)
-        XCTAssertGreaterThanOrEqual(button.frame.height, 52)
+        XCTAssertGreaterThanOrEqual(button.frame.height, 51.99, "Allow subpixel rounding of the 52-point minimum")
         capture("full-width-show-everywhere", in: app)
         button.tap()
         XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Everywhere")
