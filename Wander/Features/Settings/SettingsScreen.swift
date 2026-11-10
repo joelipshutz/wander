@@ -411,6 +411,9 @@ struct NotificationSettingsSheet: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    #if DEBUG
+    @State private var reviewDetailRemindersEnabled = true
+    #endif
     @State private var preferences = NotificationPreferences.allDisabled
     @State private var isLoading = false
     @State private var isSaving = false
@@ -451,6 +454,12 @@ struct NotificationSettingsSheet: View {
                             systemImage: "person.2.badge.plus",
                             binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
+                        #if DEBUG
+                        if QuickCaptureReviewRoute.resolved() == .reminders {
+                            notificationToggle(title: "Check-in reminders", systemImage: "ticket",
+                                binding: $reviewDetailRemindersEnabled)
+                        }
+                        #endif
                         notificationToggle(
                             title: "Saves from your map",
                             systemImage: "map",

@@ -13640,7 +13640,14 @@ private struct MapCheckInDateSection: View {
 }
 
 struct MapPlaceSaveFlowSheet: View {
-    static let compactHeight: CGFloat = 560
+    static var compactHeight: CGFloat {
+        #if DEBUG
+        if let route = QuickCaptureReviewRoute.resolved(), route.proposesChanges {
+            return route == .wanna ? 390 : 480
+        }
+        #endif
+        return 560
+    }
     static let compactDetent = PresentationDetent.height(compactHeight)
 
     @Environment(\.dismiss) private var dismiss
@@ -13670,6 +13677,12 @@ struct MapPlaceSaveFlowSheet: View {
         self.onRemove = onRemove
         self.onClose = onClose
         self.onSaveCompleted = onSaveCompleted
+        #if DEBUG
+        if let route = QuickCaptureReviewRoute.resolved(), route.proposesChanges,
+           route.startsExpanded || context.editedVisit != nil {
+            _selectedDetent = State(initialValue: .large)
+        }
+        #endif
     }
 
     var body: some View {
@@ -13789,6 +13802,33 @@ struct MapPlaceSaveEditor: View {
     @State private var hasSelectedStatus: Bool
     @State private var selectedVisibility: PlaceVisibility
     @State private var selectedRatingScore: Double
+    #if DEBUG
+    @State private var reviewDetailsExpanded = false
+    @State private var reviewRatingWasSet = false
+    #endif
+
+    private var isQuickCaptureReview: Bool {
+        #if DEBUG
+        return QuickCaptureReviewRoute.resolved()?.proposesChanges == true
+        #else
+        return false
+        #endif
+    }
+
+    private var showsCompactReview: Bool {
+        #if DEBUG
+        return isQuickCaptureReview && !reviewDetailsExpanded
+        #else
+        return false
+        #endif
+    }
+
+    private var submissionRatingScore: Double? {
+        #if DEBUG
+        if isQuickCaptureReview && !reviewRatingWasSet { return nil }
+        #endif
+        return MapPlaceSaveSubmissionPolicy.checkInValue(selectedRatingScore, status: selectedStatus)
+    }
     @State private var customQuestionAnswers: [String: String]
     @State private var privateAnswersOwnerID: String?
     @State private var editorOwnerID: String?
@@ -13905,6 +13945,12 @@ struct MapPlaceSaveEditor: View {
         )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)
+        #if DEBUG
+        if let route = QuickCaptureReviewRoute.resolved(), route.proposesChanges {
+            _reviewDetailsExpanded = State(initialValue: route.startsExpanded || context.editedVisit != nil)
+            _reviewRatingWasSet = State(initialValue: context.editedVisit?.ratingScore != nil)
+        }
+        #endif
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
         _questionBlocksCache = State(
@@ -13947,6 +13993,11 @@ struct MapPlaceSaveEditor: View {
         _selectedListIDs = State(initialValue: restoredForm?.selectedListIDs ?? [])
         let initialShowsOptionalDetails = restoredForm?.isShowingOptionalDetails ?? false
         _isShowingOptionalDetails = State(initialValue: initialShowsOptionalDetails)
+        #if DEBUG
+        if QuickCaptureReviewRoute.resolved() == .options {
+            _isShowingOptionalDetails = State(initialValue: true)
+        }
+        #endif
         var initialModeDrafts = MapPlaceSaveModeDraftCache<MapPlaceSaveModeDraft<MapPlaceSavePhotoAttachment>>()
         if restoredForm != nil {
             initialModeDrafts.store(
@@ -14066,10 +14117,7 @@ struct MapPlaceSaveEditor: View {
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
-                selectedRatingScore,
-                status: selectedStatus
-            ),
+            ratingScore: submissionRatingScore,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
             photoAttachments: MapPlaceSaveSubmissionPolicy.checkInValues(
@@ -14193,6 +14241,14 @@ struct MapPlaceSaveEditor: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .accessibilityIdentifier("save.editorScroll")
+                #if DEBUG
+                .task {
+                    if QuickCaptureReviewRoute.resolved() == .options {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        walkthroughScrollProxy.scrollTo("quick-review.extras", anchor: .top)
+                    }
+                }
+                #endif
                 .background(editorBackground)
                 .safeAreaInset(edge: .top, spacing: 0) {
                     header
@@ -14481,12 +14537,66 @@ struct MapPlaceSaveEditor: View {
             }
 
             if isReadyForDetails {
+                #if DEBUG
+                if showsCompactReview {
+                    compactReviewContent
+                } else {
+                    detailsContent
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                #else
                 detailsContent
                     .transition(.move(edge: .top).combined(with: .opacity))
+                #endif
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isReadyForDetails)
     }
+
+    #if DEBUG
+    private var compactReviewContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            if selectedStatus == .been {
+                HStack {
+                    Text("When").font(AstirTypography.label)
+                    Spacer()
+                    DatePicker("Check-in date", selection: $visitedAt, in: ...Date.now,
+                        displayedComponents: [.date])
+                        .datePickerStyle(.compact)
+                        .labelsHidden().tint(astirBrandMode.accent)
+                        .accessibilityIdentifier("quick-review.date")
+                }
+                .frame(minHeight: 44)
+            }
+            Button {
+                withAnimation(.snappy) { reviewDetailsExpanded = true }
+                onContentExpansionRequested()
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: "plus.circle").font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(astirBrandMode.accentText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Add details").font(AstirTypography.control)
+                            .foregroundStyle(astirBrandMode.primaryText)
+                        Text(selectedStatus == .been ? "Rating, photos, friends & more" : "Notes, lists, plans & more")
+                            .font(AstirTypography.caption).foregroundStyle(astirBrandMode.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold))
+                }
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+                .background(astirBrandMode.recessedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(astirBrandMode.border))
+            }
+            .buttonStyle(.plain).accessibilityIdentifier("quick-review.expand")
+            Text("You can add details anytime.")
+                .font(AstirTypography.caption).foregroundStyle(astirBrandMode.secondaryText)
+            visibilitySection
+        }
+    }
+    #endif
 
     private var checkInStatusChoice: some View {
         MapSaveChoiceButton(
@@ -14553,6 +14663,7 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(.saveQuestions)
 
                 visitParticipationSections
+                    .id("quick-review.extras")
                     .id(WalkthroughTargetID.saveFriends)
                     .walkthroughTarget(.saveFriends)
             }
@@ -15103,9 +15214,26 @@ struct MapPlaceSaveEditor: View {
         .padding(.top, WanderTheme.spacing1)
     }
 
-    private var ratingSection: some View {
+    @ViewBuilder private var ratingSection: some View {
+        #if DEBUG
+        if isQuickCaptureReview {
+            VStack(alignment: .trailing, spacing: 0) {
+                PlaceRatingSlider(score: $selectedRatingScore, isCompact: true,
+                    isUnrated: !reviewRatingWasSet, onInteraction: { reviewRatingWasSet = true })
+                if reviewRatingWasSet {
+                    Button("Remove rating") { reviewRatingWasSet = false }
+                        .font(AstirTypography.caption).foregroundStyle(astirBrandMode.accentText)
+                        .frame(minHeight: 44).accessibilityIdentifier("quick-review.removeRating")
+                }
+            }
+        } else {
+            PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
+                .disabled(isWalkthroughAutomating(.saveRating))
+        }
+        #else
         PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
             .disabled(isWalkthroughAutomating(.saveRating))
+        #endif
     }
 
     private func isWalkthroughAutomating(_ target: WalkthroughTargetID) -> Bool {
@@ -15190,7 +15318,12 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var candidateSubtitle: String {
-        selectedCandidate.previewSubtitle(
+        #if DEBUG
+        if isQuickCaptureReview, let visit = context.editedVisit {
+            return "Check-in · " + visit.visitedAt.formatted(date: .abbreviated, time: .shortened)
+        }
+        #endif
+        return selectedCandidate.previewSubtitle(
             includeDistance: false,
             includeCategory: false
         )
@@ -19398,6 +19531,18 @@ private struct PlaceActivityCard: View {
                 }
             }
 
+            #if DEBUG
+            if QuickCaptureReviewRoute.resolved()?.proposesChanges == true,
+               entry.isCurrentUser, entry.visit?.ratingScore == nil {
+                Button(action: onEdit) {
+                    Label("Add details", systemImage: "plus.circle")
+                        .font(AstirTypography.control).frame(minHeight: 44)
+                }
+                .foregroundStyle(astirBrandMode.accentText)
+                .accessibilityIdentifier("quick-review.visitDetails.\(entry.id)")
+            }
+            #endif
+
             photoThumbnails
 
             addPhotoControl
@@ -20300,7 +20445,7 @@ private struct PlaceFactPill: View {
     }
 }
 
-private struct CategoryThumb: View {
+struct CategoryThumb: View {
     let emoji: String
     var status: PlaceStatus? = nil
     var size: CGFloat = 46

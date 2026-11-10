@@ -393,6 +393,16 @@ struct ProfileScreen: View {
                 }
                 .onAppear {
                     openRequestedVisitInvitationInbox()
+                    #if DEBUG
+                    if QuickCaptureReviewRoute.resolved() == .history {
+                        activityListFilter = .checkIns
+                    } else if QuickCaptureReviewRoute.resolved() == .placeHistory {
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(900))
+                            selectedActivityItemID = profileActivityItems.first { $0.visitID == "quick-review-recent" }?.id
+                        }
+                    }
+                    #endif
                 }
                 .onChange(of: visitInvitationInboxRequestID) { _, _ in
                     openRequestedVisitInvitationInbox()
