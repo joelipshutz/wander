@@ -726,7 +726,7 @@ jobs:
                       required_continuity = [
                           'LiveReviewContinuityUITests/testLiveFilterSurvivesProfileYourMapSavedPlaceAndPatternsReturn()',
                           'LiveReviewContinuityUITests/testPinShowsItsOriginalFeedActivityAndOpensItsPlaceWithReturn()',
-                          'LiveReviewContinuityUITests/testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn()',
+                          'LiveReviewContinuityUITests/testEmbeddedFeedKeepsInviteAndActivityWithoutRecommendations()',
                           'LiveReviewContinuityUITests/testLiveSearchNotificationsAndAddCancelReturnToSameSurface()',
                           'LiveDrawerAndFilterUITests/testEveryDrawerDetentAndNativeMapPanKeepTheLoadedActivity()',
                           'LiveDrawerAndFilterUITests/testFiltersLeadingEdgeOfMinimumHitTargetOpensSheet()',

@@ -224,14 +224,13 @@ final class InviteFrameworkTests: XCTestCase {
         XCTAssertTrue(source.contains("senderProfileID: store.currentUser.id"))
     }
 
-    func testConsolidatedFeedPlacesContactInviteBeforeRecommendations() throws {
+    func testConsolidatedFeedKeepsInviteEntryWithoutRecommendationCards() throws {
         let source = try projectSource("Wander/Features/Feed/FeedScreen.swift")
         let inviteSection = try projectSource("Wander/Features/Feed/FeedInviteSection.swift")
         let content = try XCTUnwrap(source.components(separatedBy: "private var content: some View").last)
-        let invite = try XCTUnwrap(content.range(of: "FeedInviteSection()"))
-        let recommendations = try XCTUnwrap(content.range(of: "peopleRail"))
-
-        XCTAssertLessThan(invite.lowerBound, recommendations.lowerBound)
+        XCTAssertTrue(content.contains("FeedInviteSection()"))
+        XCTAssertFalse(content.contains("peopleRail"))
+        XCTAssertFalse(content.contains("DiscoverPeopleRecommendation"))
         XCTAssertTrue(inviteSection.contains("InviteEntryPointButton(surface: .feedPeople)"))
         XCTAssertTrue(inviteSection.contains("contactProvider: store.contactProvider"))
         XCTAssertTrue(inviteSection.contains("senderProfileID: store.currentUser.id"))

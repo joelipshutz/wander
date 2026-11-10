@@ -27,8 +27,8 @@ import XCTest
         XCTAssertTrue(invite.exists)
         XCTAssertGreaterThan(invite.frame.minY, search.frame.maxY)
         let people = app.staticTexts["People worth following"]
-        XCTAssertTrue(people.waitForExistence(timeout: 5))
-        XCTAssertGreaterThan(people.frame.minY, invite.frame.maxY)
+        XCTAssertFalse(people.exists)
+        XCTAssertFalse(app.scrollViews["people.recommendations.scroll"].exists)
         capture("REC-597 consolidated Feed")
         search.tap()
         let field = app.textViews["discover.placesSearchField"]

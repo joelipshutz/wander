@@ -187,6 +187,8 @@ struct ProfileScreen: View {
     @State private var settingsPresentationToken: WanderDeepLinkPresentationToken?
     @State private var showsYourMapPrototype = false
     @State private var showsMessages = false
+    @State private var showsPeopleInvites = false
+    private let isProfileTabActive: Bool
 
     @Binding private var visitInvitationInboxRequestID: UUID?
     private let presentationResetRequest: WanderPresentationResetRequest?
@@ -198,6 +200,7 @@ struct ProfileScreen: View {
     let onFindFriends: () -> Void
 
     init(
+        isProfileTabActive: Bool = true,
         visitInvitationInboxRequestID: Binding<UUID?> = .constant(nil),
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         calendarLaunchRequest: WanderProfileCalendarLaunchRequest? = nil,
@@ -207,6 +210,7 @@ struct ProfileScreen: View {
         onSettingsDidDismiss: @escaping () -> Void = {},
         onFindFriends: @escaping () -> Void = {}
     ) {
+        self.isProfileTabActive = isProfileTabActive
         _visitInvitationInboxRequestID = visitInvitationInboxRequestID
         self.presentationResetRequest = presentationResetRequest
         self.calendarLaunchRequest = calendarLaunchRequest
@@ -269,6 +273,9 @@ struct ProfileScreen: View {
                 },
                 calendarScrollRequestID: activeCalendarLaunchRequest?.id,
                 onCalendarScrollRequestHandled: completeCalendarLaunchRequest,
+                showsPeopleRecommendations: true,
+                isProfileTabActive: isProfileTabActive,
+                invitePeopleAction: { showsPeopleInvites = true },
                 feedbackAction: isFeedbackEnabled ? { showsFeedback = true } : nil,
                 messagesAction: liveExperienceEnabled
                     ? { showsMessages = true } : nil
@@ -393,6 +400,13 @@ struct ProfileScreen: View {
         }
         .tint(brandMode.accent)
         .background(brandMode.background.ignoresSafeArea())
+        .sheet(isPresented: $showsPeopleInvites) {
+            ContactInviteSheet(surface: .feedPeople, contactProvider: store.contactProvider,
+                               senderProfileID: store.currentUser.id, analytics: store.productAnalytics)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .blocksProductUpsells(while: showsPeopleInvites)
         .task(id: presentationResetRequest?.id) {
             handlePresentationResetRequest(presentationResetRequest)
         }
@@ -456,6 +470,7 @@ struct ProfileScreen: View {
         placeCollectionRoute = nil
         showsVisitInvitations = false
         showsEditProfile = false
+        showsPeopleInvites = false
     }
 
     private func presentSettings() {

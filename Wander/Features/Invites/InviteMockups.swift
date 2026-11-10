@@ -12,6 +12,7 @@ enum InviteMockupPage: String, CaseIterable {
     case empty
     case denied
     case success
+    case peoplePermission, peopleDenied, peopleEmpty
 
     static func resolved(from arguments: [String] = ProcessInfo.processInfo.arguments) -> InviteMockupPage? {
         guard let flagIndex = arguments.firstIndex(of: "-WanderInviteMockup") else {
@@ -24,11 +25,16 @@ enum InviteMockupPage: String, CaseIterable {
 }
 
 struct InviteMockupRoot: View {
+    @StateObject private var store = WanderStore(fixtures: WanderFixtures.seed())
     let page: InviteMockupPage
 
     var body: some View {
         Group {
             switch page {
+            case .peoplePermission, .peopleDenied, .peopleEmpty:
+                ContactInviteSheet(surface: .feedPeople, contacts: [],
+                    accessState: page == .peoplePermission ? .primer : page == .peopleDenied ? .denied : .authorized,
+                    showsPeopleRecommendations: true)
             case .checkInEntry:
                 SharedVisitFriendPickerMockup()
             case .feedPeopleEntry:
@@ -86,6 +92,7 @@ struct InviteMockupRoot: View {
                 )
             }
         }
+        .environmentObject(store)
         .preferredColorScheme(.light)
     }
 }

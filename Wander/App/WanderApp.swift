@@ -333,6 +333,9 @@ struct WanderApp: App {
                 FutureDateSaveMockupRoot(page: futureDateMockupPage)
             } else if let inviteMockupPage = InviteMockupPage.resolved() {
                 InviteMockupRoot(page: inviteMockupPage)
+                    .environmentObject(auth)
+                    .environmentObject(backend)
+                    .environmentObject(productUpsells)
             } else if ProcessInfo.processInfo.arguments.contains("-WanderAuthUITest") {
                 ClerkNativeAuthView(mode: .signIn)
                     .environmentObject(auth)

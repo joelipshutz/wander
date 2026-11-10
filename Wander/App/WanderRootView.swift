@@ -637,6 +637,7 @@ struct WanderRootView: View {
 
                 WanderRetainedTabContent(isSelected: selectedTab == .profile) {
                     ProfileScreen(
+                        isProfileTabActive: selectedTab == .profile,
                         visitInvitationInboxRequestID: $visitInvitationInboxRequestID,
                         presentationResetRequest: presentationResetRequest,
                         calendarLaunchRequest: profileCalendarLaunchRequest,

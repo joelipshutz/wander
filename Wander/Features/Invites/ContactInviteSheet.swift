@@ -111,6 +111,7 @@ struct ContactInviteSheet: View {
     let onPermissionDenied: (() -> Void)?
     let onWalkthroughSelectionChange: ((Set<String>) -> Void)?
     let analytics: AnalyticsClient
+    let showsPeopleRecommendations: Bool
 
     @State private var contacts: [InviteContact]
     @State private var accessState: ContactInviteAccessState
@@ -141,7 +142,8 @@ struct ContactInviteSheet: View {
         onWalkthroughDismiss: (() -> Void)? = nil,
         onPermissionDenied: (() -> Void)? = nil,
         onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
-        analytics: AnalyticsClient = NoopAnalyticsClient()
+        analytics: AnalyticsClient = NoopAnalyticsClient(),
+        showsPeopleRecommendations: Bool = false
     ) {
         self.surface = surface
         contactProvider = nil
@@ -152,6 +154,7 @@ struct ContactInviteSheet: View {
         self.onPermissionDenied = onPermissionDenied
         self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
+        self.showsPeopleRecommendations = surface == .feedPeople && showsPeopleRecommendations
         _contacts = State(initialValue: contacts)
         _accessState = State(initialValue: accessState)
         _presentationState = State(initialValue: presentationState)
@@ -169,7 +172,8 @@ struct ContactInviteSheet: View {
         onPermissionDenied: (() -> Void)? = nil,
         selectedContactIDs: Set<String> = [],
         onWalkthroughSelectionChange: ((Set<String>) -> Void)? = nil,
-        analytics: AnalyticsClient = NoopAnalyticsClient()
+        analytics: AnalyticsClient = NoopAnalyticsClient(),
+        showsPeopleRecommendations: Bool = true
     ) {
         self.surface = surface
         self.contactProvider = contactProvider
@@ -180,6 +184,7 @@ struct ContactInviteSheet: View {
         self.onPermissionDenied = onPermissionDenied
         self.onWalkthroughSelectionChange = onWalkthroughSelectionChange
         self.analytics = analytics
+        self.showsPeopleRecommendations = surface == .feedPeople && showsPeopleRecommendations
         _contacts = State(initialValue: [])
         _accessState = State(initialValue: .primer)
         _presentationState = State(initialValue: .choosing)
@@ -217,11 +222,25 @@ struct ContactInviteSheet: View {
                 case .choosing:
                     switch accessState {
                     case .primer:
-                        permissionPrimer
+                        if showsPeopleRecommendations {
+                            ScrollView {
+                                VStack(spacing: WanderTheme.spacing6) {
+                                    inviteRecommendations.padding(.horizontal, WanderTheme.spacing4)
+                                    permissionPrimer
+                                }.padding(.vertical, WanderTheme.spacing4)
+                            }
+                        } else { permissionPrimer }
                     case .authorized:
                         contactsContent
                     case .denied:
-                        deniedContent
+                        if showsPeopleRecommendations {
+                            ScrollView {
+                                VStack(spacing: WanderTheme.spacing6) {
+                                    inviteRecommendations.padding(.horizontal, WanderTheme.spacing4)
+                                    deniedContent
+                                }.padding(.vertical, WanderTheme.spacing4)
+                            }
+                        } else { deniedContent }
                     }
                 }
             }
@@ -387,30 +406,34 @@ struct ContactInviteSheet: View {
         .padding(.bottom, WanderTheme.spacing2)
     }
 
+    @ViewBuilder
+    private var inviteRecommendations: some View {
+        if showsPeopleRecommendations && query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            PeopleRecommendationsSection(horizontalInset: 0)
+                .padding(.bottom, WanderTheme.spacing3)
+        }
+    }
+
     private var contactsContent: some View {
         VStack(spacing: 0) {
             if let walkthroughSelectionGoal {
-                ContactInviteWalkthroughGoalBanner(
-                    selectedCount: selection.count,
-                    goal: walkthroughSelectionGoal
-                )
-                .padding(.horizontal, WanderTheme.spacing3)
-                .padding(.bottom, WanderTheme.spacing3)
+                ContactInviteWalkthroughGoalBanner(selectedCount: selection.count, goal: walkthroughSelectionGoal)
+                    .padding(.horizontal, WanderTheme.spacing3)
+                    .padding(.bottom, WanderTheme.spacing3)
             }
-
             searchField
-
-            if isLoadingContacts {
-                loadingContacts
-            } else if didFailLoadingContacts {
-                failedContacts
-            } else if sections.isEmpty {
-                emptyResults
-            } else {
-                ScrollViewReader { proxy in
-                    ZStack(alignment: .trailing) {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3, pinnedViews: [.sectionHeaders]) {
+            ScrollViewReader { proxy in
+                ZStack(alignment: .trailing) {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: WanderTheme.spacing3, pinnedViews: [.sectionHeaders]) {
+                            inviteRecommendations
+                            if isLoadingContacts {
+                                loadingContacts.frame(minHeight: 200)
+                            } else if didFailLoadingContacts {
+                                failedContacts.frame(minHeight: 200)
+                            } else if sections.isEmpty {
+                                emptyResults.frame(minHeight: 200)
+                            } else {
                                 ForEach(sections) { section in
                                     Section {
                                         contactGroup(section.contacts)
@@ -425,21 +448,21 @@ struct ContactInviteSheet: View {
                                     }
                                 }
                             }
-                            .padding(.horizontal, WanderTheme.spacing3)
-                            .padding(.trailing, WanderTheme.spacing4)
-                            .padding(.bottom, WanderTheme.spacing8)
                         }
-                        .scrollDismissesKeyboard(.interactively)
+                        .padding(.horizontal, WanderTheme.spacing3)
+                        .padding(.trailing, showsPeopleRecommendations ? WanderTheme.tapMinimum : WanderTheme.spacing4)
+                        .padding(.bottom, WanderTheme.spacing8)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .accessibilityIdentifier("invite.contacts.scroll")
 
-                        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            AlphabetScrubber(letters: alphabetLetters) { letter in
-                                guard let targetID = scrollTargetID(for: letter) else { return }
-                                withAnimation(.snappy(duration: 0.18)) {
-                                    proxy.scrollTo(targetID, anchor: .top)
-                                }
-                            }
-                            .padding(.trailing, 2)
+                    if !isLoadingContacts && !didFailLoadingContacts && !sections.isEmpty,
+                       query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        AlphabetScrubber(letters: alphabetLetters) { letter in
+                            guard let targetID = scrollTargetID(for: letter) else { return }
+                            withAnimation(.snappy(duration: 0.18)) { proxy.scrollTo(targetID, anchor: .top) }
                         }
+                        .padding(.trailing, 2)
                     }
                 }
             }

@@ -253,6 +253,7 @@ struct ProfileMemberActions {
 }
 
 struct ProfileOwnerHome: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
@@ -284,6 +285,10 @@ struct ProfileOwnerHome: View {
     let yourMapAction: (() -> Void)?
     let calendarScrollRequestID: UUID?
     let onCalendarScrollRequestHandled: (UUID) -> Void
+    var showsPeopleRecommendations = false
+    var isProfileTabActive = true
+    var invitePeopleAction: (() -> Void)? = nil
+    @State private var peopleExpanded = true
     var feedbackAction: (() -> Void)? = nil
     var messagesAction: (() -> Void)? = nil
     @State private var showsMemberActions = ProcessInfo.processInfo.arguments.contains("-WanderShowProfileActions")
@@ -312,6 +317,7 @@ struct ProfileOwnerHome: View {
                 if mode.isOwner {
                     if let saveStreak {
                         ProfileSaveStreakRow(summary: saveStreak)
+                            .accessibilityIdentifier("profile.saveStreak")
                     }
                 }
                 ProfileRecentActivitySection(
@@ -356,6 +362,14 @@ struct ProfileOwnerHome: View {
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
         .scrollIndicators(.hidden)
+        .onAppear { peopleExpanded = true }
+        .onChange(of: isProfileTabActive) { _, active in
+            if active { peopleExpanded = true }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { peopleExpanded = true }
+        }
+        .onChange(of: profile.id) { _, _ in peopleExpanded = true }
         .scrollPosition(id: $profileScrollPosition, anchor: .top)
         .profileHeaderMotionOverlay(
             avatar: profileAvatarControl,
@@ -572,6 +586,13 @@ struct ProfileOwnerHome: View {
                     }
                     .buttonStyle(.plain)
                     profileShareButton
+                    if showsPeopleRecommendations {
+                        ProfilePeopleDisclosure(isExpanded: $peopleExpanded)
+                    }
+                }
+                if showsPeopleRecommendations && peopleExpanded {
+                    PeopleRecommendationsSection(seeAll: invitePeopleAction)
+                        .transition(.opacity)
                 }
             }
 

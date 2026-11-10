@@ -69,7 +69,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
     }
 
     @MainActor
-    func testPeopleReplaceFeaturedAndFollowFailureCanRetry() {
+    func testProfilePeopleAndFollowFailureCanRetry() {
         let app = launch()
         XCTAssertTrue(app.staticTexts["People worth following"].waitForExistence(timeout: 15))
         XCTAssertFalse(app.staticTexts["Featured for you"].exists)
@@ -91,7 +91,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
         expectation(for: failed, evaluatedWith: follow)
         waitForExpectations(timeout: 10)
         profile.tap()
-        XCTAssertTrue(app.buttons["Back"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["profile.back"].waitForExistence(timeout: 5))
         XCTAssertFalse(profile.isHittable)
     }
 
@@ -112,6 +112,14 @@ final class CompactPeopleCardsUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
+        // Wait for the native accessibility tree to publish the tap's state
+        // change before taking the atomic snapshot. This stays well inside the
+        // fixture's five-second request, so a missed tap still fails.
+        let pendingState = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@ AND enabled == false", "Following Alex Rivera"),
+            object: follow
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [pendingState], timeout: 2), .completed, file: file, line: line)
         // Separate accessibility requests can straddle the fixture's five-second
         // completion. Assert the label, duplicate-request guard, and spinner from
         // one snapshot of the same pending state.
@@ -132,7 +140,7 @@ final class CompactPeopleCardsUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderMapCapture", "-WanderUseStorefrontFixtures",
             "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
-            "-WanderCompactPeopleUITest", "-WanderInitialTab", "discover"]
+            "-WanderCompactPeopleUITest", "-WanderInitialTab", "profile"]
         if largeText {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
         }
@@ -140,6 +148,11 @@ final class CompactPeopleCardsUITests: XCTestCase {
             app.launchArguments.append("-WanderDelayedFollowUITest")
         }
         app.launch()
+        dismissStartupNotificationPromptIfNeeded(in: app)
+        let toggle = app.buttons["profile.people.toggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 15))
+        let follow = app.buttons["people.recommendation.user_compact_alex.follow"]
+        for _ in 0..<5 where !follow.isHittable { app.swipeUp() }
         return app
     }
 

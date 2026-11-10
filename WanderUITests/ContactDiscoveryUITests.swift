@@ -94,7 +94,9 @@ import XCTest
         XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
-        let friend = app.scrollViews["feed.places.scroll"].buttons["people.recommendation.user_contact_friend.follow"]
+        app.tabBars.buttons["Profile"].tap()
+        let friend = app.buttons["people.recommendation.user_contact_friend.follow"]
+        for _ in 0..<5 where !friend.isHittable { app.swipeUp() }
         XCTAssertTrue(friend.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.exists)
         capture("Following screen contact suggestions")
@@ -105,7 +107,9 @@ import XCTest
         app.buttons["contacts.settings.disable"].tap()
         XCTAssertTrue(app.buttons["contacts.settings.enable"].waitForExistence(timeout: 10))
         backToFeed(app)
+        app.tabBars.buttons["Profile"].tap()
         XCTAssertFalse(app.staticTexts["In your contacts"].firstMatch.exists)
+        app.tabBars.buttons["Feed"].tap()
         app.buttons["feed.searchLauncher"].tap()
         let search = app.textViews["discover.placesSearchField"]
         XCTAssertTrue(search.waitForExistence(timeout: 5)); search.tap()
@@ -123,11 +127,13 @@ import XCTest
         XCTAssertTrue(enable.waitForExistence(timeout: 5)); enable.tap()
         XCTAssertTrue(app.buttons["contacts.settings.disable"].waitForExistence(timeout: 10))
         backToFeed(app)
+        app.tabBars.buttons["Profile"].tap()
         XCTAssertTrue(app.staticTexts["In your contacts"].firstMatch.waitForExistence(timeout: 10))
         backgroundApplication(app)
         app.activate()
         completeNotificationPromptIfPresented(app)
-        XCTAssertTrue(app.buttons["feed.searchLauncher"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Profile"].tap()
+        XCTAssertTrue(app.buttons["profile.people.toggle"].waitForExistence(timeout: 10))
         let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: app.staticTexts["In your contacts"].firstMatch)
         wait(for: [gone], timeout: 10)
         openContactSettings(app)

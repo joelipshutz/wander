@@ -10,7 +10,7 @@ struct FeedInviteSection: View {
             walkthroughs.perform(.feedInvite)
             isPresentingContactInvites = true
         }
-        .walkthroughTarget(.feedInvite)
+        .walkthroughTargets([.feedInvite, .feedCircle])
         .onChange(of: walkthroughs.isRequestingContactInvite, initial: true) { _, requested in
             if requested { isPresentingContactInvites = true }
         }
