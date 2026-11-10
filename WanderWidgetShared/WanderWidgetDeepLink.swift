@@ -91,6 +91,7 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
     case sharedActivity(activityID: String)
     case sharedQuestion(questionID: String)
     // Internal notification route; existing pushes identify a visit, not its event.
+    case checkInDetails(userPlaceID: String, visitID: String)
     case checkInActivity(userPlaceID: String, visitID: String)
     case sharedList(listID: String)
     case listInvite(token: String)
@@ -122,6 +123,8 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
             URL(string: "recme://questions/\(questionID)")
         case .sharedActivity(let activityID):
             Self.sharedEntityURL(root: "activities", identifier: activityID)
+        case .checkInDetails(let parentID, let visitID):
+            URL(string: "recme://check-in-details/\(parentID)/\(visitID)")
         case .feed, .checkInActivity:
             nil
         case .sharedList(let listID):
@@ -211,6 +214,11 @@ enum WanderDeepLinkRoute: Equatable, Sendable {
                 return nil
             }
             return .profileCalendarDate(date)
+
+        case ("check-in-details", let segments):
+            guard segments.count == 2, hasNoQuery(in: components),
+                  UUID(uuidString: segments[0]) != nil, UUID(uuidString: segments[1]) != nil else { return nil }
+            return .checkInDetails(userPlaceID: segments[0], visitID: segments[1])
 
         case ("questions", let segments):
             guard segments.count == 1, let id = segments.first, UUID(uuidString: id) != nil,

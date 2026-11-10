@@ -169,7 +169,7 @@ struct WanderApp: App {
     init() {
         let configuration = WanderBackendConfiguration.current()
         #if DEBUG
-        let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil
+        let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil || QuickCaptureUITestRoute.resolved() != nil
         #else
         let usesNativeReview = false
         #endif
@@ -317,6 +317,8 @@ struct WanderApp: App {
             } else if ProcessInfo.processInfo.arguments.contains("-WanderShareCardMockup") {
                 ShareCardDesignMockupRoot()
                     .environmentObject(mapCaptureBackend)
+            } else if let captureRoute = QuickCaptureUITestRoute.resolved() {
+                QuickCaptureUITestHost(route: captureRoute)
             } else if let senderReviewRoute = SenderNotificationReviewRoute.resolved() {
                 SenderNotificationReviewHost(route: senderReviewRoute)
             } else if let nativeReviewRoute = NativeOnboardingReviewRoute.resolved() {

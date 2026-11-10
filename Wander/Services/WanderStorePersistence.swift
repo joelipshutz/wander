@@ -905,6 +905,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
     }
 
     struct PlaceVisitRecord: Codable, Equatable {
+        let detailsPending: Bool?
         let senderNotificationJSON: String?
         let localID: String
         let serverID: String?
@@ -925,6 +926,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let deletedAt: Date?
 
         init(_ visit: LocalPlaceVisit) {
+            detailsPending = visit.detailsPending
             senderNotificationJSON = visit.senderNotificationJSON
             localID = visit.localID
             serverID = visit.serverID
@@ -969,7 +971,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 deletedAt: deletedAt,
                 attributeAnswersAreComplete: attributeAnswersAreComplete
                     ?? (!localID.hasPrefix("remote_profile_visit_") && serverID == nil || isUnsentLocalDraft || attributeAnswersJSON != "[]"),
-                senderNotificationJSON: senderNotificationJSON ?? (SyncState(rawValue: syncStateRaw) != .synced ? SenderNotificationPolicy.silent.persistedJSON : nil)
+                senderNotificationJSON: senderNotificationJSON ?? (SyncState(rawValue: syncStateRaw) != .synced ? SenderNotificationPolicy.silent.persistedJSON : nil),
+                detailsPending: detailsPending ?? false
             )
         }
     }

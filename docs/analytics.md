@@ -394,3 +394,16 @@ content are never event properties. All question composers, conversations and
 notification rows are masked from session replay. Review fixtures use Noop analytics.
 The existing engagement dashboard includes these normalized events; no new dashboard
 resource or metric query is introduced. Hosted ingestion still requires release validation.
+
+Quick Check-in/Wanna (REC-680) keeps the existing save-flow events. A quick
+check-in emits `check_in_created` once when the durable local visit is created;
+adding details edits that visit and never emits a second creation. A local quick
+save can complete with `outcome=pending`; this is not confirmed remote persistence.
+An untouched slider is null and is excluded from rating aggregates. No score,
+place, visit identity, date, note, answer or friend content is added to analytics.
+
+Check-in reminder opens use `notification_type=check_in_reminder`,
+`delivery_channel=remote`, and `route=check_in_details`. The existing event-ID
+deduplication prevents duplicate opens; neither the event ID nor the destination
+IDs are exported. The push worker allowlists the same type in the existing
+aggregate delivery/frequency metrics. The dashboard structure is unchanged.

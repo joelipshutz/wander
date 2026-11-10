@@ -137,6 +137,8 @@ struct PlaceRatingLiquidState: Equatable {
 struct PlaceRatingSlider: View {
     @Binding var score: Double
     var isCompact = false
+    var isUnrated = false
+    var onInteraction: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.astirBrandMode) private var brandMode
@@ -171,15 +173,15 @@ struct PlaceRatingSlider: View {
                 Spacer(minLength: WanderTheme.spacing1)
 
                 HStack(spacing: WanderTheme.spacing1) {
-                    Text("\(PlaceRating.display(reaction.score))/5")
+                    Text(isUnrated ? "Not rated" : "\(PlaceRating.display(reaction.score))/5")
                         .font(AstirTypography.cardTitle)
                         .monospacedDigit()
                         .foregroundStyle(brandMode.primaryText)
                         .contentTransition(.numericText(value: reaction.score))
 
-                    Text(reaction.label)
+                    Text(isUnrated ? "" : reaction.label)
                         .font(reaction.isExtreme ? AstirTypography.cardTitle : AstirTypography.control)
-                        .foregroundStyle(liquidState.color)
+                        .foregroundStyle((isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color))
                 }
                 .layoutPriority(1)
             }
@@ -191,7 +193,7 @@ struct PlaceRatingSlider: View {
                     Text("\(value)")
                         .frame(maxWidth: .infinity)
                         .foregroundStyle(scaleLabelColor(for: value))
-                        .fontWeight(abs(Double(value) - reaction.score) < 0.001 ? .black : .bold)
+                        .fontWeight(!isUnrated && abs(Double(value) - reaction.score) < 0.001 ? .black : .bold)
                 }
             }
             .font(AstirTypography.caption)
@@ -201,7 +203,7 @@ struct PlaceRatingSlider: View {
         .background {
             ZStack {
                 brandMode.raisedBackground
-                BoilingRatingLiquid(state: liquidState, reduceMotion: reduceMotion)
+                if !isUnrated { BoilingRatingLiquid(state: liquidState, reduceMotion: reduceMotion) }
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -209,7 +211,7 @@ struct PlaceRatingSlider: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
                     LinearGradient(
-                        colors: [brandMode.border, liquidState.color.opacity(0.34)],
+                        colors: [brandMode.border, (isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color).opacity(0.34)],
                         startPoint: .leading,
                         endPoint: .trailing
                     ),
@@ -223,7 +225,7 @@ struct PlaceRatingSlider: View {
         .accessibilityElement(children: .ignore)
         .accessibilityIdentifier("place-rating-slider")
         .accessibilityLabel("Rating")
-        .accessibilityValue(reaction.accessibilityValue)
+        .accessibilityValue(isUnrated ? "Not rated" : reaction.accessibilityValue)
         .accessibilityHint("Swipe up or down to change the rating by half a point.")
         .accessibilityAdjustableAction(adjustRating)
         .sensoryFeedback(.selection, trigger: selectionFeedbackTrigger)
@@ -245,8 +247,8 @@ struct PlaceRatingSlider: View {
                     }
 
                 Capsule()
-                    .fill(liquidState.color)
-                    .frame(width: trackWidth * CGFloat(liquidState.progress), height: 7)
+                    .fill((isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color))
+                    .frame(width: isUnrated ? 0 : trackWidth * CGFloat(liquidState.progress), height: 7)
                     .frame(width: trackWidth, alignment: .leading)
 
                 ForEach(PlaceRating.allowedScores, id: \.self) { value in
@@ -262,7 +264,7 @@ struct PlaceRatingSlider: View {
                         )
                         .overlay {
                             Circle()
-                                .stroke(liquidState.color.opacity(0.72), lineWidth: 1.5)
+                                .stroke((isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color).opacity(0.72), lineWidth: 1.5)
                         }
                         .frame(
                             width: isWholeNumber ? 7 : 4,
@@ -278,11 +280,11 @@ struct PlaceRatingSlider: View {
                     .fill(brandMode.raisedBackground.opacity(0.96))
                     .overlay {
                         Circle()
-                            .stroke(liquidState.color, lineWidth: 5)
+                            .stroke((isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color), lineWidth: 5)
                     }
                     .overlay {
                         Circle()
-                            .fill(liquidState.color)
+                            .fill((isUnrated ? brandMode.secondaryText.opacity(0.45) : liquidState.color))
                             .frame(width: 8, height: 8)
                     }
                     .frame(width: 32, height: 32)
@@ -335,6 +337,7 @@ struct PlaceRatingSlider: View {
     }
 
     private func scaleLabelColor(for value: Int) -> Color {
+        if isUnrated { return brandMode.secondaryText }
         let isSelected = abs(Double(value) - reaction.score) < 0.001
         if liquidState.progress >= 0.7 {
             return Color.white.opacity(isSelected ? 1 : 0.92)
@@ -343,6 +346,7 @@ struct PlaceRatingSlider: View {
     }
 
     private func setScore(_ candidate: Double) {
+        onInteraction()
         let normalized = PlaceRating.normalized(candidate) ?? PlaceRating.defaultScore
         guard normalized != score else { return }
 

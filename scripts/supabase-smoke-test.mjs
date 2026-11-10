@@ -5,7 +5,6 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const DEFAULT_ENV_FILE = `${homedir()}/.openclaw/workspace/.env.keys`;
 const DEFAULT_SMOKE_USER_ID = "user_codex_supabase_smoke";
 const DEFAULT_SMOKE_COLLABORATOR_ID = "user_codex_supabase_smoke_collab";
 const DEFAULT_SMOKE_STRANGER_ID = "user_codex_supabase_smoke_stranger";
@@ -49,7 +48,7 @@ async function main() {
     return;
   }
 
-  loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? DEFAULT_ENV_FILE);
+  loadEnvFile(options.envFile ?? process.env.WANDER_SUPABASE_ENV_FILE ?? `${homedir()}/.openclaw/workspace/.env.keys`);
 
   const smokeUserID = DEFAULT_SMOKE_USER_ID;
   const collaboratorUserID = DEFAULT_SMOKE_COLLABORATOR_ID;
@@ -194,6 +193,7 @@ async function main() {
         await client.query(readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
         await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
+        await client.query(readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - owner visit details preserve answers without exposing another user’s history");
         await client.query("savepoint events_interest_smoke");
         await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
@@ -2930,6 +2930,7 @@ release savepoint place_plan_smoke;
 reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8")}
+${readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8")}
 savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;

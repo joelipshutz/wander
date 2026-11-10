@@ -20,7 +20,7 @@ struct PlaceSaveDraftForm: Codable, Equatable {
     var selectedAssignment: PlaceCategoryAssignment
     var selectedStatus: PlaceStatus
     var selectedVisibility: PlaceVisibility
-    var selectedRatingScore: Double
+    var selectedRatingScore: Double?
     var selectedAnswers: [String: Set<String>]
     var unifiedTags: Set<String>
     var selectedCuisine: String?
@@ -35,6 +35,7 @@ struct PlaceSaveDraftForm: Codable, Equatable {
     /// Optional so drafts from before check-in list selection still decode.
     var selectedListIDs: Set<String>? = nil
     var silentNotifications: Bool? = nil
+    var detailsExpanded: Bool? = nil
 }
 
 struct PlaceSaveDraftUpdate: Equatable {
@@ -43,10 +44,10 @@ struct PlaceSaveDraftUpdate: Equatable {
 }
 
 struct PlaceSaveDraft: Codable, Equatable, Identifiable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
     static let maximumAge: TimeInterval = 7 * 24 * 60 * 60
 
-    let schemaVersion: Int
+    private(set) var schemaVersion: Int
     let id: UUID
     let ownerUserID: String
     let createdAt: Date
@@ -91,8 +92,21 @@ struct PlaceSaveDraft: Codable, Equatable, Identifiable {
         self.recoveryNotice = recoveryNotice
     }
 
+    /// Version 1 could not distinguish an untouched midpoint from a chosen 3.
+    /// Recover its other fields, but require an explicit rating selection again.
+    var restoredRatingScore: Double? {
+        schemaVersion < 2 && form.selectedRatingScore == PlaceRating.defaultScore
+            ? nil : form.selectedRatingScore
+    }
+
+    mutating func migrateForEditing() {
+        guard schemaVersion < Self.currentSchemaVersion else { return }
+        form.selectedRatingScore = restoredRatingScore
+        schemaVersion = Self.currentSchemaVersion
+    }
+
     func isRestorable(for ownerUserID: String, now: Date) -> Bool {
-        schemaVersion == Self.currentSchemaVersion
+        (1...Self.currentSchemaVersion).contains(schemaVersion)
             && self.ownerUserID == ownerUserID
             && !ownerUserID.isEmpty
             && !candidate.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -350,7 +364,7 @@ final class PlaceSaveDraftStore: ObservableObject {
 
     @discardableResult
     func restore(ownerUserID: String, now: Date = .now) -> PlaceSaveDraftRestoreOutcome {
-        guard let persisted = persistence.load() else {
+        guard var persisted = persistence.load() else {
             if draft != nil {
                 objectWillChange.send()
             }
@@ -362,6 +376,10 @@ final class PlaceSaveDraftStore: ObservableObject {
             return .discarded
         }
 
+        if persisted.schemaVersion < PlaceSaveDraft.currentSchemaVersion {
+            persisted.migrateForEditing()
+            persistence.save(persisted)
+        }
         if draft?.id != persisted.id {
             objectWillChange.send()
         }
@@ -384,6 +402,7 @@ final class PlaceSaveDraftStore: ObservableObject {
         now: Date = .now
     ) {
         guard var current = draft, current.id == draftID else { return }
+        current.migrateForEditing()
         current.form = form
         current.submittedAt = submittedAt
         current.updatedAt = now

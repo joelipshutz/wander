@@ -1160,7 +1160,9 @@ struct SupabaseUserPlaceRepository: UserPlaceRepository, SocialPlaceSaveReposito
                 note: result.note,
                 ratingScore: result.ratingScore,
                 tags: result.tags,
-                backfilledFromUserPlace: result.backfilledFromUserPlace
+                backfilledFromUserPlace: result.backfilledFromUserPlace,
+                createdAt: result.createdAt,
+                detailsPending: result.detailsPending
             )
         )
     }
@@ -1322,12 +1324,13 @@ struct SupabaseVisitRepository: VisitRepository {
 }
 
 private struct PlaceVisitRow: Decodable, Sendable {
-    static let selectColumns = "id,user_place_id,visited_at,note,rating_score,tags,backfilled_from_user_place,created_at,updated_at,deleted_at"
+    static let selectColumns = "id,user_place_id,visited_at,note,rating_score,details_pending,tags,backfilled_from_user_place,created_at,updated_at,deleted_at"
 
     let id: String
     let userPlaceID: String
     let visitedAt: Date
     let note: String?
+    let detailsPending: Bool?
     let ratingScore: Double?
     let tags: [String]
     let backfilledFromUserPlace: Bool
@@ -1339,6 +1342,7 @@ private struct PlaceVisitRow: Decodable, Sendable {
         case userPlaceID = "user_place_id"
         case visitedAt = "visited_at"
         case note
+        case detailsPending = "details_pending"
         case ratingScore = "rating_score"
         case tags
         case backfilledFromUserPlace = "backfilled_from_user_place"
@@ -1356,7 +1360,8 @@ private struct PlaceVisitRow: Decodable, Sendable {
             tags: tags,
             backfilledFromUserPlace: backfilledFromUserPlace,
             createdAt: createdAt,
-            updatedAt: updatedAt
+            updatedAt: updatedAt,
+            detailsPending: detailsPending
         )
     }
 }
@@ -1440,6 +1445,7 @@ private struct PlaceVisitUpsertBody: Encodable {
     let userPlaceID: String
     let visitedAt: Date
     let note: String?
+    let detailsPending: Bool?
     let ratingScore: Double?
     let attributeAnswers: [VisitAttributeAnswer]
     let backfilledFromUserPlace: Bool
@@ -1453,6 +1459,7 @@ private struct PlaceVisitUpsertBody: Encodable {
         self.userPlaceID = draft.userPlaceID
         self.visitedAt = draft.visitedAt
         self.note = draft.note
+        detailsPending = draft.detailsPending
         self.ratingScore = PlaceRating.normalized(draft.ratingScore)
         self.attributeAnswers = Self.decodedAttributeAnswers(draft.attributeAnswersJSON)
         self.backfilledFromUserPlace = draft.backfilledFromUserPlace
@@ -1467,6 +1474,7 @@ private struct PlaceVisitUpsertBody: Encodable {
         case userPlaceID = "user_place_id"
         case visitedAt = "visited_at"
         case note
+        case detailsPending = "details_pending"
         case ratingScore = "rating_score"
         case attributeAnswers = "attribute_answers"
         case backfilledFromUserPlace = "backfilled_from_user_place"
@@ -3429,6 +3437,7 @@ private struct NotificationPreferencesResponse: Decodable {
     let followedActivityEnabled: Bool
     let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
+    let checkInRemindersEnabled: Bool?
     let reservationRemindersEnabled: Bool?
 
     enum CodingKeys: String, CodingKey {
@@ -3442,6 +3451,7 @@ private struct NotificationPreferencesResponse: Decodable {
         case followedActivityEnabled = "followed_activity_enabled"
         case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
+        case checkInRemindersEnabled = "check_in_reminders_enabled"
         case reservationRemindersEnabled = "reservation_reminders_enabled"
     }
 
@@ -3457,6 +3467,7 @@ private struct NotificationPreferencesResponse: Decodable {
             followedActivityEnabled: followedActivityEnabled,
             engagementEnabled: engagementEnabled ?? false,
             wannaGoRemindersEnabled: wannaGoRemindersEnabled ?? false,
+            checkInRemindersEnabled: checkInRemindersEnabled ?? pushEnabled,
             reservationRemindersEnabled: reservationRemindersEnabled ?? false
         )
     }
@@ -3485,6 +3496,7 @@ private struct NotificationPreferencesPatch: Encodable {
     let followedActivityEnabled: Bool?
     let engagementEnabled: Bool?
     let wannaGoRemindersEnabled: Bool?
+    let checkInRemindersEnabled: Bool?
     let reservationRemindersEnabled: Bool?
 
     init(update: NotificationPreferencesUpdate) {
@@ -3498,6 +3510,7 @@ private struct NotificationPreferencesPatch: Encodable {
         self.followedActivityEnabled = update.followedActivityEnabled
         self.engagementEnabled = update.engagementEnabled
         self.wannaGoRemindersEnabled = update.wannaGoRemindersEnabled
+        self.checkInRemindersEnabled = update.checkInRemindersEnabled
         self.reservationRemindersEnabled = update.reservationRemindersEnabled
     }
 
@@ -3512,6 +3525,7 @@ private struct NotificationPreferencesPatch: Encodable {
         case followedActivityEnabled = "followed_activity_enabled"
         case engagementEnabled = "engagement_enabled"
         case wannaGoRemindersEnabled = "wanna_go_reminders_enabled"
+        case checkInRemindersEnabled = "check_in_reminders_enabled"
         case reservationRemindersEnabled = "reservation_reminders_enabled"
     }
 }
@@ -4282,9 +4296,12 @@ private struct SaveOwnCheckInParams: Encodable {
 }
 
 private struct SaveOwnCheckInVisitParams: Encodable {
+    let reminderTimezone = TimeZone.current.identifier
+    let capturedAt: Date?
     let id: String
     let visitedAt: Date
     let note: String?
+    let detailsPending: Bool?
     let ratingScore: Double?
     let attributeAnswers: JSONValue
 
@@ -4292,17 +4309,22 @@ private struct SaveOwnCheckInVisitParams: Encodable {
         guard let id = draft.id, UUID(uuidString: id) != nil else {
             throw WanderRemoteError.invalidResponse("Explicit check-ins require a stable UUID")
         }
+        capturedAt = draft.capturedAt
         self.id = id
         visitedAt = draft.visitedAt
         note = draft.note
+        detailsPending = draft.detailsPending
         ratingScore = PlaceRating.normalized(draft.ratingScore)
         attributeAnswers = try Self.decodeJSON(draft.attributeAnswersJSON)
     }
 
     enum CodingKeys: String, CodingKey {
+        case reminderTimezone = "reminder_timezone"
+        case capturedAt = "captured_at"
         case id
         case visitedAt = "visited_at"
         case note
+        case detailsPending = "details_pending"
         case ratingScore = "rating_score"
         case attributeAnswers = "attribute_answers"
     }
@@ -4340,8 +4362,10 @@ private struct SaveOwnCheckInResponse: Decodable {
     let userPlaceID: String
     let placeID: String
     let visitID: String
+    let createdAt: Date?
     let visitedAt: Date
     let note: String?
+    let detailsPending: Bool?
     let ratingScore: Double?
     let tags: [String]
     let backfilledFromUserPlace: Bool
@@ -4350,8 +4374,10 @@ private struct SaveOwnCheckInResponse: Decodable {
         case userPlaceID = "user_place_id"
         case placeID = "place_id"
         case visitID = "visit_id"
+        case createdAt = "created_at"
         case visitedAt = "visited_at"
         case note
+        case detailsPending = "details_pending"
         case ratingScore = "rating_score"
         case tags
         case backfilledFromUserPlace = "backfilled_from_user_place"

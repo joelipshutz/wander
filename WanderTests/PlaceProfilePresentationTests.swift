@@ -6,7 +6,7 @@ import XCTest
 final class PlaceProfilePresentationTests: XCTestCase {
     @MainActor
     func testEverySaveEntryPointUsesTheSharedHalfSheetDetent() {
-        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 560)
+        XCTAssertEqual(MapPlaceSaveFlowSheet.compactHeight, 480)
         XCTAssertEqual(
             MapPlaceSaveFlowSheet.compactDetent,
             .height(MapPlaceSaveFlowSheet.compactHeight)

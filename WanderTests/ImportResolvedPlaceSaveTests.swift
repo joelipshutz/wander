@@ -57,7 +57,18 @@ final class ImportResolvedPlaceSaveTests: XCTestCase {
                     imported.saveImportedCandidate(target, status: status, visibility: .selfOnly,
                         note: "Fixture note", sourceType: .link, ratingScore: 4, visitedAt: visitedAt)
                 }
-                XCTAssertEqual(actual, expected)
+                XCTAssertEqual(actual.userPlaceID, expected.userPlaceID)
+                XCTAssertEqual(actual.syncState, expected.syncState)
+                XCTAssertEqual(actual.placeID, expected.placeID)
+                XCTAssertEqual(actual.localDetailsWarning, expected.localDetailsWarning)
+                // Separate stores generate independent visit UUIDs. Each result
+                // must identify its own created visit, rather than match UUIDs.
+                XCTAssertEqual(actual.visitID, imported.visits(for: actual.userPlaceID).first?.id)
+                XCTAssertEqual(expected.visitID, ordinary.visits(for: expected.userPlaceID).first?.id)
+                if status == .been {
+                    XCTAssertNotNil(actual.visitID)
+                    XCTAssertNotNil(expected.visitID)
+                }
                 XCTAssertEqual(imported.places.count, ordinary.places.count)
                 let actualSave = try XCTUnwrap(imported.userPlaces.first)
                 let expectedSave = try XCTUnwrap(ordinary.userPlaces.first)

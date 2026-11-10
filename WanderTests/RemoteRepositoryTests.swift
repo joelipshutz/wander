@@ -4418,6 +4418,7 @@ final class RemoteRepositoryTests: XCTestCase {
           "followed_activity_enabled": false,
           "engagement_enabled": false,
           "wanna_go_reminders_enabled": true,
+          "check_in_reminders_enabled": false,
           "reservation_reminders_enabled": true
         }
         """.data(using: .utf8)
@@ -4431,9 +4432,12 @@ final class RemoteRepositoryTests: XCTestCase {
                 followedActivityEnabled: false,
                 engagementEnabled: false,
                 wannaGoRemindersEnabled: true,
+                checkInRemindersEnabled: false,
                 reservationRemindersEnabled: true
             )
         )
+        XCTAssertTrue(preferences.checkInRemindersEnabled, "Older preference responses inherit enabled push")
+        XCTAssertFalse(updated.checkInRemindersEnabled)
         let tokenID = try await repository.registerPushToken(
             "abcdef1234567890",
             environment: .sandbox,
@@ -4469,6 +4473,7 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(updatePayload?["followed_activity_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["engagement_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["wanna_go_reminders_enabled"] as? Bool, true)
+        XCTAssertEqual(updatePayload?["check_in_reminders_enabled"] as? Bool, false)
         XCTAssertEqual(updatePayload?["reservation_reminders_enabled"] as? Bool, true)
 
         XCTAssertEqual(rpc.rawBodies[2]["input_device_token"] as? String, "abcdef1234567890")
@@ -4870,6 +4875,7 @@ final class RemoteRepositoryTests: XCTestCase {
             followedActivityEnabled: false,
             engagementEnabled: false,
             wannaGoRemindersEnabled: false,
+            checkInRemindersEnabled: false,
             reservationRemindersEnabled: false
         ))
     }

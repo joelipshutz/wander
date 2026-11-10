@@ -2187,6 +2187,14 @@ struct MapScreen: View {
                         .zIndex(isMoreFiltersPresented ? 20 : 0)
                         .walkthroughTarget(.mapFeatured)
 
+                        if walkthroughs.activeSurface == nil && !hasSelectedProfile {
+                            CheckInDetailsInvitation { visit, place in
+                                mapSaveFlow = .editVisit(visit, visiblePlace: place)
+                            }
+                            .padding(.horizontal, WanderTheme.spacing3)
+                            .padding(.top, WanderTheme.spacing1)
+                        }
+
                         if let mapFilterEmptyMessage {
                             MapFilterEmptyNotice(
                                 message: mapFilterEmptyMessage,
@@ -2677,6 +2685,24 @@ struct MapScreen: View {
         }
 
         switch request.destination {
+        case .checkInDetails(let userPlaceID, let visitID):
+            let ownerID = store.currentUser.id
+            // Owner calendar hydration is independent of the current map viewport.
+            _ = await store.refreshRemoteCurrentUserCalendarData(backend: backend)
+            guard ownerID == store.currentUser.id,
+                  canApplyDeferredMapNavigation(requestID: request.id, revision: navigationRevision) else { return }
+            _ = await store.refreshRemotePlaceActivity(userPlaceIDs: [userPlaceID], backend: backend)
+            guard ownerID == store.currentUser.id,
+                  canApplyDeferredMapNavigation(requestID: request.id, revision: navigationRevision) else { return }
+            guard let place = store.currentUserVisiblePlaces.first(where: { $0.userPlace.id == userPlaceID }),
+                  let visit = store.visits(for: userPlaceID).first(where: { $0.id == visitID }),
+                  store.canEditVisitAnswers(visitID: visitID) else {
+                mapSearchMessage = "That check-in is unavailable. Connect and try again."
+                pushNotifications.consumeNavigationRequest(id: request.id)
+                return
+            }
+            mapSaveFlow = .editVisit(visit, visiblePlace: place)
+            pushNotifications.consumeNavigationRequest(id: request.id)
         case .place(let placeID):
             await openNotificationPlace(
                 placeID,
@@ -2749,7 +2775,7 @@ struct MapScreen: View {
         initialCameraState.resolve()
         if let request = pushNotifications.navigationRequest {
             switch request.destination {
-            case .place, .sharedVisit:
+            case .place, .checkInDetails, .sharedVisit:
                 pushNotifications.consumeNavigationRequest(id: request.id)
             default:
                 break
@@ -11828,11 +11854,8 @@ struct MapPlaceSaveContext: Identifiable {
         return nil
     }
 
-    /// A repeat visit borrows answers only; it never becomes an edit of its source.
-    var questionAnswerSourceVisit: LocalPlaceVisit? {
-        if case .addVisit = mode { return existingLatestVisit }
-        return editedVisit
-    }
+    /// Only an edit inherits answers; a new visit starts with its own blank memory.
+    var questionAnswerSourceVisit: LocalPlaceVisit? { editedVisit }
 
     var sharedVisitInvitation: SharedVisitInvitation? {
         if case .sharedVisit(let invitation) = mode {
@@ -12038,16 +12061,15 @@ struct MapPlaceSaveContext: Identifiable {
             hasPriorCheckIn: latestVisit != nil,
             initialStatus: .been,
             initialVisibility: visiblePlace.userPlace.visibility,
-            initialRatingScore: latestVisit?.ratingScore,
+            initialRatingScore: nil,
             initialNote: "",
             initialPlannedDate: nil,
-            initialAnswers: initialAnswers(from: defaultAttributes),
-            initialPersonalLabels: initialPersonalLabels(from: defaultAttributes),
+            initialAnswers: [:],
+            initialPersonalLabels: [],
             initialCuisine: initialCuisine(from: defaultAttributes),
             initialPhotoAttachments: initialPhotoAttachments,
             existingCurrentUserSave: visiblePlace,
-            existingLatestVisit: latestVisit,
-            originalAttributes: defaultAttributes
+            existingLatestVisit: latestVisit
         )
     }
 
@@ -12565,6 +12587,7 @@ struct MapPlaceSaveSubmission {
     var priorWannaRemovalTargets: [MapPlaceWannaRemovalTarget]? = nil
     var priorWannaHistoryOwnerID: String? = nil
     var priorWannaHistoryGeneration: UUID? = nil
+    var detailsPending: Bool = false
 
     func withSenderNotificationPolicy(_ policy: SenderNotificationPolicy) -> Self {
         var copy = self
@@ -12767,7 +12790,7 @@ extension PlaceSaveDraft {
                 selectedAssignment: context.candidate.categoryAssignment,
                 selectedStatus: context.initialStatus,
                 selectedVisibility: context.initialVisibility.normalizedForStealthMode,
-                selectedRatingScore: context.initialRatingScore ?? PlaceRating.defaultScore,
+                selectedRatingScore: context.initialRatingScore,
                 selectedAnswers: selectedAnswers,
                 unifiedTags: unifiedTags,
                 selectedCuisine: initialCuisine,
@@ -12803,8 +12826,19 @@ func createExplicitVisitIfNeeded(
         ratingScore: submission.ratingScore,
         attributes: submission.attributes,
         visibility: submission.visibility,
-        senderNotificationPolicy: submission.senderNotificationPolicy
+        senderNotificationPolicy: submission.senderNotificationPolicy,
+        detailsPending: submission.detailsPending
     )
+}
+
+@MainActor
+private func enqueueQuickCheckInSync(visitID: String, store: WanderStore, backend: WanderBackend?) {
+    guard let backend else { return }
+    let ownerID = store.currentUser.id
+    Task { @MainActor [weak store] in
+        guard let store, store.currentUser.id == ownerID else { return }
+        _ = await store.syncVisit(visitID: visitID, backend: backend)
+    }
 }
 
 @MainActor
@@ -12863,9 +12897,10 @@ func persistNewPlaceSaveSubmission(
         plannedDate: submission.plannedDate,
         attributes: submission.attributes,
         senderNotificationPolicy: submission.senderNotificationPolicy,
-        backend: backend
+        detailsPending: submission.detailsPending,
+        backend: submission.detailsPending ? nil : backend
     )
-    let targetVisit = submission.status == .been ? store.visits(for: result.userPlaceID).first : nil
+    let targetVisit = store.visits(for: result.userPlaceID).first { $0.id == result.visitID }
     await queueSharedVisitInvitees(
         for: submission,
         sourceVisit: targetVisit,
@@ -12878,7 +12913,12 @@ func persistNewPlaceSaveSubmission(
         store: store,
         backend: backend
     )
-    return persistPrivateCheckInAnswers(result: result, submission: submission, visit: targetVisit, store: store)
+    let completed = persistPrivateCheckInAnswers(result: result, submission: submission, visit: targetVisit, store: store)
+    store.flushPersistence()
+    if submission.detailsPending, let targetVisit {
+        enqueueQuickCheckInSync(visitID: targetVisit.id, store: store, backend: backend)
+    }
+    return completed
 }
 
 @MainActor
@@ -12958,7 +12998,10 @@ func persistScopedVisitOrWantSubmission(
         guard let visit = createExplicitVisitIfNeeded(for: submission, store: store) else {
             return (nil, nil)
         }
-        if let backend {
+        if submission.detailsPending {
+            store.flushPersistence()
+            enqueueQuickCheckInSync(visitID: visit.id, store: store, backend: backend)
+        } else if let backend {
             _ = await store.syncVisit(visitID: visit.id, backend: backend)
         }
         await queueSharedVisitInvitees(
@@ -13066,10 +13109,10 @@ func loadPrivateQuestionAnswerDefaults(
     ownerUserID: String,
     preferences: CheckInQuestionPreferenceStore = CheckInQuestionPreferenceStore()
 ) throws -> [String: String] {
-    guard let visit = context.questionAnswerSourceVisit else { return [:] }
-    guard context.saveOwnerUserID == ownerUserID else {
+    if let sourceOwnerID = context.saveOwnerUserID, sourceOwnerID != ownerUserID {
         throw CheckInQuestionPersistenceError.invalidPrivateAnswer
     }
+    guard let visit = context.questionAnswerSourceVisit else { return [:] }
     return try loadAndMigratePrivateCheckInAnswers(
         originalAttributes: context.originalAttributes,
         ownerUserID: ownerUserID,
@@ -13269,7 +13312,7 @@ private enum MapPlaceSaveStep {
 
 struct MapPlaceSaveModeDraft<Photo> {
     var visibility: PlaceVisibility
-    var ratingScore: Double
+    var ratingScore: Double?
     var selectedAnswers: [String: Set<String>]
     var unifiedTags: Set<String>
     var note: String
@@ -13282,6 +13325,7 @@ struct MapPlaceSaveModeDraft<Photo> {
     var sharedVisitInviteesError: String?
     var customQuestionAnswers: [String: String] = [:]
     var customQuestionAnswersLoaded: Bool = true
+    var detailsExpanded: Bool = false
 }
 
 extension MapPlaceSaveModeDraft: Equatable where Photo: Equatable {}
@@ -13640,7 +13684,7 @@ private struct MapCheckInDateSection: View {
 }
 
 struct MapPlaceSaveFlowSheet: View {
-    static let compactHeight: CGFloat = 560
+    static let compactHeight: CGFloat = 480
     static let compactDetent = PresentationDetent.height(compactHeight)
 
     @Environment(\.dismiss) private var dismiss
@@ -13670,6 +13714,9 @@ struct MapPlaceSaveFlowSheet: View {
         self.onRemove = onRemove
         self.onClose = onClose
         self.onSaveCompleted = onSaveCompleted
+        if context.isEditing || draft?.form.detailsExpanded == true {
+            _selectedDetent = State(initialValue: .large)
+        }
     }
 
     var body: some View {
@@ -13788,7 +13835,8 @@ struct MapPlaceSaveEditor: View {
     @State private var selectedStatus: PlaceStatus
     @State private var hasSelectedStatus: Bool
     @State private var selectedVisibility: PlaceVisibility
-    @State private var selectedRatingScore: Double
+    @State private var selectedRatingScore: Double?
+    @State private var detailsExpanded = false
     @State private var customQuestionAnswers: [String: String]
     @State private var privateAnswersOwnerID: String?
     @State private var editorOwnerID: String?
@@ -13872,9 +13920,8 @@ struct MapPlaceSaveEditor: View {
         let initialAssignment = restoredForm?.selectedAssignment ?? initialContext.candidate.categoryAssignment
         let initialVisibility = restoredForm?.selectedVisibility
             ?? initialContext.initialVisibility.normalizedForStealthMode
-        let initialRatingScore = restoredForm?.selectedRatingScore
-            ?? initialContext.initialRatingScore
-            ?? PlaceRating.defaultScore
+        let initialRatingScore = restoredForm != nil
+            ? draft?.restoredRatingScore : initialContext.initialRatingScore
         let initialCuisine = restoredForm?.selectedCuisine ?? Self.initialCuisine(for: initialContext)
         let initialUnifiedTags = restoredForm?.unifiedTags ?? initialContext.initialAnswers
             .filter { Self.isUnifiedTagKey($0.key) }
@@ -13905,6 +13952,7 @@ struct MapPlaceSaveEditor: View {
         )
         _selectedVisibility = State(initialValue: initialVisibility)
         _selectedRatingScore = State(initialValue: initialRatingScore)
+        _detailsExpanded = State(initialValue: restoredForm?.detailsExpanded ?? initialContext.isEditing)
         _selectedAnswers = State(initialValue: initialAnswers)
         _unifiedTags = State(initialValue: initialUnifiedTags)
         _questionBlocksCache = State(
@@ -14003,7 +14051,8 @@ struct MapPlaceSaveEditor: View {
                 isShowingOptionalDetails: isShowingOptionalDetails,
                 customQuestionAnswers: selectedStatus == .been && didLoadPrivateAnswers && privateAnswersOwnerID == store.currentUser.id ? customQuestionAnswers : nil,
                 selectedListIDs: selectedListIDs,
-                silentNotifications: silentNotifications
+                silentNotifications: silentNotifications,
+                detailsExpanded: detailsExpanded
             ),
             submittedAt: saveAttemptedAt
         )
@@ -14061,15 +14110,12 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var currentSubmission: MapPlaceSaveSubmission {
-        MapPlaceSaveSubmission(
+        var submission = MapPlaceSaveSubmission(
             context: context,
             candidate: selectedCandidate,
             status: selectedStatus,
             visibility: saveVisibility,
-            ratingScore: MapPlaceSaveSubmissionPolicy.checkInValue(
-                selectedRatingScore,
-                status: selectedStatus
-            ),
+            ratingScore: selectedStatus == .been ? selectedRatingScore : nil,
             note: note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note,
             attributes: attributeDrafts(),
             photoAttachments: MapPlaceSaveSubmissionPolicy.checkInValues(
@@ -14099,6 +14145,12 @@ struct MapPlaceSaveEditor: View {
             senderNotificationPolicy: SenderNotificationPolicy(silent: effectiveSilentNotifications),
             removesSourceWannaAfterCheckIn: selectedStatus == .been && removesSourceWannaAfterCheckIn
         )
+        submission.detailsPending = selectedStatus == .been && !context.isEditing
+            && selectedRatingScore == nil && note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && visitPhotoAttachments.isEmpty && selectedInviteeUserIDs.isEmpty && selectedListIDs.isEmpty
+            && unifiedTags.isEmpty && selectedAnswers.values.allSatisfy(\.isEmpty)
+            && customQuestionAnswers.values.allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return submission
     }
 
     private var effectiveSilentNotifications: Bool {
@@ -14481,11 +14533,58 @@ struct MapPlaceSaveEditor: View {
             }
 
             if isReadyForDetails {
-                detailsContent
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                if detailsExpanded || context.isEditing || walkthroughs.activeSurface == .saveFlow {
+                    detailsContent
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                } else {
+                    quickCaptureContent
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isReadyForDetails)
+    }
+
+    private var quickCaptureContent: some View {
+        VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
+            if selectedStatus == .been {
+                HStack {
+                    Text("When").font(AstirTypography.label)
+                    Spacer()
+                    DatePicker("Check-in date", selection: $visitedAt, in: ...Date.now,
+                        displayedComponents: [.date])
+                        .datePickerStyle(.compact)
+                        .labelsHidden().tint(astirBrandMode.accent)
+                        .accessibilityIdentifier("save.quickDate")
+                }
+                .frame(minHeight: 44)
+            }
+            Button {
+                withAnimation(.snappy) { detailsExpanded = true }
+                onContentExpansionRequested()
+            } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    Image(systemName: "plus.circle").font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(astirBrandMode.accentText)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Add details").font(AstirTypography.control)
+                            .foregroundStyle(astirBrandMode.primaryText)
+                        Text(selectedStatus == .been ? "Rating, photos, friends & more" : "Notes, lists, plans & more")
+                            .font(AstirTypography.caption).foregroundStyle(astirBrandMode.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold))
+                }
+                .padding(WanderTheme.spacing3)
+                .frame(maxWidth: .infinity, minHeight: 62, alignment: .leading)
+                .background(astirBrandMode.recessedBackground)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                .overlay(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge).stroke(astirBrandMode.border))
+            }
+            .buttonStyle(.plain).accessibilityIdentifier("save.addDetails")
+            Text("You can add details anytime.")
+                .font(AstirTypography.caption).foregroundStyle(astirBrandMode.secondaryText)
+            visibilitySection
+        }
     }
 
     private var checkInStatusChoice: some View {
@@ -15104,8 +15203,21 @@ struct MapPlaceSaveEditor: View {
     }
 
     private var ratingSection: some View {
-        PlaceRatingSlider(score: $selectedRatingScore, isCompact: true)
+        VStack(alignment: .trailing, spacing: 0) {
+            PlaceRatingSlider(
+                score: Binding(get: { selectedRatingScore ?? PlaceRating.defaultScore },
+                               set: { selectedRatingScore = $0 }),
+                isCompact: true,
+                isUnrated: selectedRatingScore == nil,
+                onInteraction: { if selectedRatingScore == nil { selectedRatingScore = PlaceRating.defaultScore } }
+            )
             .disabled(isWalkthroughAutomating(.saveRating))
+            if selectedRatingScore != nil {
+                Button("Remove rating") { selectedRatingScore = nil }
+                    .font(AstirTypography.caption).foregroundStyle(astirBrandMode.accentText)
+                    .frame(minHeight: 44).accessibilityIdentifier("save.removeRating")
+            }
+        }
     }
 
     private func isWalkthroughAutomating(_ target: WalkthroughTargetID) -> Bool {
@@ -15262,7 +15374,8 @@ struct MapPlaceSaveEditor: View {
             didLoadSharedVisitInvitees: didLoadSharedVisitInvitees,
             sharedVisitInviteesError: sharedVisitInviteesError,
             customQuestionAnswers: customQuestionAnswers,
-            customQuestionAnswersLoaded: didLoadPrivateAnswers
+            customQuestionAnswersLoaded: didLoadPrivateAnswers,
+            detailsExpanded: detailsExpanded
         )
     }
 
@@ -15272,6 +15385,7 @@ struct MapPlaceSaveEditor: View {
         guard bindEditorOwnerIfNeeded(), modeDrafts.ownerUserID == editorOwnerID else { return }
         selectedVisibility = store.isPrivateProfile ? .selfOnly : draft.visibility
         selectedRatingScore = draft.ratingScore
+        detailsExpanded = draft.detailsExpanded
         selectedAnswers = draft.selectedAnswers
         customQuestionAnswers = draft.customQuestionAnswers
         didLoadPrivateAnswers = draft.customQuestionAnswersLoaded
@@ -15322,7 +15436,7 @@ struct MapPlaceSaveEditor: View {
         didLoadPrivateAnswers = false
         selectedStatus = nextContext.initialStatus
         selectedVisibility = nextContext.initialVisibility.normalizedForStealthMode
-        selectedRatingScore = nextContext.initialRatingScore ?? PlaceRating.defaultScore
+        selectedRatingScore = nextContext.initialRatingScore
 
         let initialCuisine: String?
         if preservingSharedPlaceDetails {
@@ -15856,7 +15970,7 @@ struct MapPlaceSaveEditor: View {
         to destination: Double,
         target: WalkthroughTargetID
     ) async -> Bool {
-        let start = selectedRatingScore
+        let start = selectedRatingScore ?? PlaceRating.defaultScore
         let frameCount = 28
         for frame in 1...frameCount {
             guard isCurrentWalkthroughTarget(target) else { return false }
@@ -19398,6 +19512,15 @@ private struct PlaceActivityCard: View {
                 }
             }
 
+            if entry.isCurrentUser, let visit = entry.visit, visit.ratingScore == nil {
+                Button(action: onEdit) {
+                    Label("Add details", systemImage: "plus.circle")
+                        .font(AstirTypography.control).frame(minHeight: 44)
+                }
+                .foregroundStyle(astirBrandMode.accentText)
+                .accessibilityIdentifier("place-activity.addDetails.\(entry.id)")
+            }
+
             photoThumbnails
 
             addPhotoControl
@@ -20300,7 +20423,7 @@ private struct PlaceFactPill: View {
     }
 }
 
-private struct CategoryThumb: View {
+struct CategoryThumb: View {
     let emoji: String
     var status: PlaceStatus? = nil
     var size: CGFloat = 46

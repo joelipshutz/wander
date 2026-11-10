@@ -917,6 +917,8 @@ struct PlaceVisitDraft: Equatable {
     let ratingScore: Double?
     let attributeAnswersJSON: String
     let backfilledFromUserPlace: Bool
+    var capturedAt: Date? = nil
+    var detailsPending: Bool = false
     var senderNotificationPolicy: SenderNotificationPolicy = .standard
 
 }
@@ -934,6 +936,7 @@ struct PlaceVisitResult: Equatable, Sendable {
     var attributeAnswersJSON: String? = nil
     var createdAt: Date? = nil
     var updatedAt: Date? = nil
+    var detailsPending: Bool? = nil
 }
 
 struct HistoricalWantSnapshotDraft: Equatable {
@@ -1305,11 +1308,13 @@ struct SaveResult: Equatable {
     let userPlaceID: String
     let syncState: SyncState
     let placeID: String?
+    let visitID: String?
 
-    init(userPlaceID: String, syncState: SyncState, placeID: String? = nil) {
+    init(userPlaceID: String, syncState: SyncState, placeID: String? = nil, visitID: String? = nil) {
         self.userPlaceID = userPlaceID
         self.syncState = syncState
         self.placeID = placeID
+        self.visitID = visitID
     }
 }
 
@@ -1504,6 +1509,7 @@ struct NotificationPreferences: Equatable {
     var followedActivityEnabled: Bool = false
     var engagementEnabled: Bool = false
     var wannaGoRemindersEnabled: Bool = false
+    var checkInRemindersEnabled: Bool = true
     var reservationRemindersEnabled: Bool = false
 
     static let allEnabled = NotificationPreferences(
@@ -1517,6 +1523,7 @@ struct NotificationPreferences: Equatable {
         followedActivityEnabled: true,
         engagementEnabled: true,
         wannaGoRemindersEnabled: true,
+        checkInRemindersEnabled: true,
         reservationRemindersEnabled: true
     )
 
@@ -1531,6 +1538,7 @@ struct NotificationPreferences: Equatable {
         followedActivityEnabled: false,
         engagementEnabled: false,
         wannaGoRemindersEnabled: false,
+        checkInRemindersEnabled: false,
         reservationRemindersEnabled: false
     )
 }
@@ -1546,6 +1554,7 @@ struct NotificationPreferencesUpdate: Equatable {
     var followedActivityEnabled: Bool?
     var engagementEnabled: Bool?
     var wannaGoRemindersEnabled: Bool?
+    var checkInRemindersEnabled: Bool?
     var reservationRemindersEnabled: Bool?
 
     init(
@@ -1559,6 +1568,7 @@ struct NotificationPreferencesUpdate: Equatable {
         followedActivityEnabled: Bool? = nil,
         engagementEnabled: Bool? = nil,
         wannaGoRemindersEnabled: Bool? = nil,
+        checkInRemindersEnabled: Bool? = nil,
         reservationRemindersEnabled: Bool? = nil
     ) {
         self.pushEnabled = pushEnabled
@@ -1571,6 +1581,7 @@ struct NotificationPreferencesUpdate: Equatable {
         self.followedActivityEnabled = followedActivityEnabled
         self.engagementEnabled = engagementEnabled
         self.wannaGoRemindersEnabled = wannaGoRemindersEnabled
+        self.checkInRemindersEnabled = checkInRemindersEnabled
         self.reservationRemindersEnabled = reservationRemindersEnabled
     }
 
@@ -1585,6 +1596,7 @@ struct NotificationPreferencesUpdate: Equatable {
         followedActivityEnabled: true,
         engagementEnabled: true,
         wannaGoRemindersEnabled: true,
+        checkInRemindersEnabled: true,
         reservationRemindersEnabled: true
     )
 
@@ -1599,6 +1611,7 @@ struct NotificationPreferencesUpdate: Equatable {
         followedActivityEnabled: false,
         engagementEnabled: false,
         wannaGoRemindersEnabled: false,
+        checkInRemindersEnabled: false,
         reservationRemindersEnabled: false
     )
 }

@@ -5,7 +5,7 @@ import XCTest
 final class CheckInQuestionPreferencesTests: XCTestCase {
     private let defaultsIDs = ["place_detail_outlets", "place_detail_noise", "place_detail_seating"]
 
-    func testRepeatVisitCopiesPrivateDefaultsWithoutChangingPriorAnswersOrOtherAccounts() throws {
+    func testRepeatVisitStartsBlankWithoutChangingPriorPrivateAnswersOrOtherAccounts() throws {
         let (defaults, suite) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let preferences = CheckInQuestionPreferenceStore(defaults: defaults)
@@ -20,12 +20,12 @@ final class CheckInQuestionPreferencesTests: XCTestCase {
             place, attributes: place.attributes, latestVisit: previous
         )
         var answers = try loadPrivateQuestionAnswerDefaults(context: context, ownerUserID: owner, preferences: preferences)
-        XCTAssertEqual(answers, ["place_detail_outlets": "Plenty"])
+        XCTAssertTrue(answers.isEmpty)
         XCTAssertNil(context.editedVisit)
         XCTAssertEqual(context.initialNote, "")
         XCTAssertThrowsError(try loadPrivateQuestionAnswerDefaults(context: context, ownerUserID: "another-account", preferences: preferences))
         let next = try XCTUnwrap(store.createVisit(userPlaceID: place.userPlace.id, ratingScore: context.initialRatingScore))
-        answers.removeAll() // Clearing the default belongs only to the new visit.
+        answers.removeAll() // The new visit has an independent answer set.
         try preferences.savePrivateAnswers(answers, ownerUserID: owner,
                                            userPlaceID: place.userPlace.localID, visitID: next.serverID ?? next.localID)
         XCTAssertEqual(try preferences.loadPrivateAnswers(ownerUserID: owner, userPlaceID: place.userPlace.localID,
