@@ -112,6 +112,14 @@ final class CompactPeopleCardsUITests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
+        // Wait for the native accessibility tree to publish the tap's state
+        // change before taking the atomic snapshot. This stays well inside the
+        // fixture's five-second request, so a missed tap still fails.
+        let pendingState = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@ AND enabled == false", "Following Alex Rivera"),
+            object: follow
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [pendingState], timeout: 2), .completed, file: file, line: line)
         // Separate accessibility requests can straddle the fixture's five-second
         // completion. Assert the label, duplicate-request guard, and spinner from
         // one snapshot of the same pending state.
