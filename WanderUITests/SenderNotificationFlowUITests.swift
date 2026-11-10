@@ -428,6 +428,13 @@ final class SenderNotificationFlowUITests: XCTestCase {
         return result == .completed
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication, down: Bool = false) {
+        // New captures start compact; optional controls are reached through the
+        // same Add details action a person uses before scrolling the full form.
+        let addDetails = app.buttons["save.addDetails"]
+        if !element.exists, addDetails.exists {
+            reveal(addDetails, app: app)
+            press(addDetails)
+        }
         _ = element.waitForExistence(timeout: 5)
         let requiresSaveEditor = app.scrollViews["save.editorScroll"].exists && element.identifier.hasPrefix("save.")
         for _ in 0..<16 {
