@@ -8,13 +8,33 @@ struct PlaceProfileActivityPresentation: ViewModifier {
     @EnvironmentObject private var auth: AuthSessionStore
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
-    @StateObject private var navigation = ActivityNavigationCoordinator()
+    @ObservedObject var navigation: ActivityNavigationCoordinator
+    var isEnabled = true
     @State private var selectedProfile: ProfileShell?
     let onLeavePlace: () -> Void
 
     func body(content: Content) -> some View {
-        content
-            .environmentObject(navigation)
+        if isEnabled {
+            content
+                .environmentObject(navigation)
+                .background { commentsPresenter }
+                .onChange(of: store.currentUser.id) { _, _ in reset() }
+                .onChange(of: auth.isSignedIn) { _, isSignedIn in
+                    if !isSignedIn { reset() }
+                }
+                .onChange(of: handoff.resetID) { _, resetID in
+                    if resetID != nil { reset() }
+                }
+        } else {
+            content
+        }
+    }
+
+    private var commentsPresenter: some View {
+        // Isolate native presentation environment changes from profile content,
+        // including the Map's manually hosted sliding profile.
+        Color.clear
+            .frame(width: 0, height: 0)
             .fullScreenCover(item: routeBinding, onDismiss: { handoff.onDidDismiss(.activityComments) }) { route in
                 WanderRootPresentationLifecycle(
                     surface: .activityComments, onPresent: handoff.onPresent, onDismiss: handoff.onWillDismiss
@@ -51,13 +71,6 @@ struct PlaceProfileActivityPresentation: ViewModifier {
                         }
                     }
                 }
-            }
-            .onChange(of: store.currentUser.id) { _, _ in reset() }
-            .onChange(of: auth.isSignedIn) { _, isSignedIn in
-                if !isSignedIn { reset() }
-            }
-            .onChange(of: handoff.resetID) { _, resetID in
-                if resetID != nil { reset() }
             }
     }
 

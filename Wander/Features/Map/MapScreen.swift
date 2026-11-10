@@ -1401,6 +1401,7 @@ struct MapScreen: View {
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @EnvironmentObject private var placeSaveDraftStore: PlaceSaveDraftStore
     @StateObject private var locationPermission = OnboardingLocationPermissionManager()
+    @StateObject private var placeActivityNavigation = ActivityNavigationCoordinator()
     @State private var retainedSelectionCache = MapRetainedSelectionCache()
     @State private var selectedPlaceGroupKey: String?
     @State private var selectedSearchCandidateID: String?
@@ -2568,6 +2569,10 @@ struct MapScreen: View {
                     }
                 }
         }
+        .modifier(PlaceProfileActivityPresentation(
+            navigation: placeActivityNavigation,
+            onLeavePlace: { collapseSelectedPlaceProfile() }
+        ))
         .sheet(item: attachedMapSaveSheetContext) { context in
             MapPlaceSaveFlowSheet(
                 context: context,
@@ -2620,6 +2625,7 @@ struct MapScreen: View {
         .onChange(of: hasSelectedProfile) { _, hasSelectedProfile in
             guard !hasSelectedProfile else { return }
             placePhotoGallery = nil
+            placeActivityNavigation.reset()
             isPlaceProfilePresented = false
             isPlaceProfileMounted = false
             placeProfilePresentationID = nil
@@ -4112,6 +4118,7 @@ struct MapScreen: View {
                 .environmentObject(walkthroughs)
                 .environmentObject(placeSaveDraftStore)
                 .environmentObject(pushNotifications)
+                .environmentObject(placeActivityNavigation)
                 .environment(\.activityPresentationHandoff, activityHandoff)
                 .environment(\.presentPlaceActivityEdit, { presentation in
                     mapActivityEditFlow = presentation
@@ -4156,6 +4163,7 @@ struct MapScreen: View {
         isPlaceProfilePresented && attachedMapSaveFlow == nil
             && mapSaveFlow == nil && mapActivityEditFlow == nil
             && mapPlaceListTarget == nil && placePhotoGallery == nil
+            && placeActivityNavigation.commentsRoute == nil
     }
 
     private func presentWalkthroughPlaceMemory() {
@@ -4239,6 +4247,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 presentsAttachedSaveSheet: false,
+                presentsActivityComments: false,
                 usesInteractiveHorizontalDismissal: true,
                 hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
@@ -4281,6 +4290,7 @@ struct MapScreen: View {
                 attachedSaveContext: $attachedMapSaveFlow,
                 attachedSaveDraft: attachedSaveDraft,
                 presentsAttachedSaveSheet: false,
+                presentsActivityComments: false,
                 usesInteractiveHorizontalDismissal: true,
                 hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
@@ -4315,6 +4325,7 @@ struct MapScreen: View {
                 tasteSaves: tasteSummaries,
                 currentUserID: store.currentUser.id,
                 action: .none,
+                presentsActivityComments: false,
                 usesInteractiveHorizontalDismissal: true,
                 hidesTabBar: isPlaceProfileOverlayBlockingInteraction,
                 onBack: {
