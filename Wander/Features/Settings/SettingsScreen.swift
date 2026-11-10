@@ -435,26 +435,6 @@ struct NotificationSettingsSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    #if DEBUG
-                    if QuickCaptureReviewRoute.resolved() == .reminders {
-                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
-                            SettingsSectionTitle("Check-in details")
-                            notificationToggle(title: "Recent check-in reminders", systemImage: "ticket",
-                                binding: $reviewDetailRemindersEnabled)
-                            Text("A gentle reminder to add details later. Your check-in is already saved.")
-                                .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
-                            Text("Add details to your recent check-in")
-                                .font(AstirTypography.control)
-                                .padding(WanderTheme.spacing3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(brandMode.recessedBackground)
-                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
-                        }
-                        .padding(WanderTheme.spacing3)
-                        .background(brandMode.raisedBackground)
-                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
-                    }
-                    #endif
                     statusBlock
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
@@ -474,6 +454,12 @@ struct NotificationSettingsSheet: View {
                             systemImage: "person.2.badge.plus",
                             binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
+                        #if DEBUG
+                        if QuickCaptureReviewRoute.resolved() == .reminders {
+                            notificationToggle(title: "Check-in reminders", systemImage: "ticket",
+                                binding: $reviewDetailRemindersEnabled)
+                        }
+                        #endif
                         notificationToggle(
                             title: "Saves from your map",
                             systemImage: "map",

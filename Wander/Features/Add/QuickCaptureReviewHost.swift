@@ -37,7 +37,6 @@ struct QuickCaptureReviewHost: View {
     @State private var editor: MapPlaceSaveContext?
     @State private var showsInvitation: Bool
     @State private var showsSettings = false
-    @State private var saved = false
     @State private var initialContext: MapPlaceSaveContext
     private var visit: LocalPlaceVisit {
         store.placeVisits.first { $0.localID == "quick-review-recent" }!
@@ -84,7 +83,6 @@ struct QuickCaptureReviewHost: View {
         _backend = StateObject(wrappedValue: WanderBackend(placeRepository: StorefrontPlaceResolver(),
             notificationRepository: SimulatorNotificationRepository()))
         _showsInvitation = State(initialValue: route == .invitation || route == .saved)
-        _saved = State(initialValue: route == .saved)
     }
 
     var body: some View {
@@ -107,7 +105,7 @@ struct QuickCaptureReviewHost: View {
                         store.objectWillChange.send()
                         return SaveResult(userPlaceID: own.userPlace.id, syncState: .localOnly, placeID: own.place.id)
                     }, onRemove: { _ in false }, onClose: { editor = nil },
-                    onSaveCompleted: { _ in editor = nil; saved = true; showsInvitation = true })
+                    onSaveCompleted: { _ in editor = nil; showsInvitation = true })
             }
             .sheet(isPresented: $showsSettings) { NotificationSettingsSheet() }
             .environmentObject(store)
@@ -129,20 +127,29 @@ struct QuickCaptureReviewHost: View {
     }
 
     private var invitation: some View {
-        HStack(alignment: .top, spacing: WanderTheme.spacing3) {
-            CategoryThumb(emoji: own.categoryEmoji, size: 42)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(saved ? "Checked in" : "Your recent check-in")
-                    .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
-                Text(own.place.canonicalName).font(AstirTypography.cardTitle)
-                    .foregroundStyle(brandMode.primaryText)
-                Text(visit.visitedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
-                Button("Add details") { editor = .editVisit(visit, visiblePlace: own) }
-                    .font(AstirTypography.control).foregroundStyle(brandMode.accentText)
-                    .frame(minHeight: 44).accessibilityIdentifier("quick-review.addDetails")
+        HStack(spacing: WanderTheme.spacing1) {
+            Button { editor = .editVisit(visit, visiblePlace: own) } label: {
+                HStack(spacing: WanderTheme.spacing3) {
+                    CategoryThumb(emoji: own.categoryEmoji, size: 36)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Add details to your check-in at")
+                            .font(AstirTypography.caption).foregroundStyle(brandMode.secondaryText)
+                        Text(own.place.canonicalName)
+                            .font(AstirTypography.control).foregroundStyle(brandMode.accentText)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(brandMode.accentText)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add details to your check-in at \(own.place.canonicalName)")
+            .accessibilityHint("Opens this visit's editor")
+            .accessibilityIdentifier("quick-review.addDetails")
             Button { showsInvitation = false } label: {
                 Image(systemName: "xmark").font(.system(size: 12, weight: .bold))
                     .frame(width: 44, height: 44)

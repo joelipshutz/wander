@@ -38,16 +38,19 @@ xcrun simctl launch <simulator-uuid> com.grayline.wander \
   -WanderUseDemoFixtures -WanderDisableWalkthroughs -WanderUnifiedLiveUITest
 ```
 
-The compact sheet expands the **same real editor**. The rating's neutral thumb
-is not a value: untouched saves submit nil; a deliberate midpoint tap counts;
+The compact sheet uses a date-only When control, followed by Add details, its
+helper text, and Stealth mode. It expands the **same real editor**: the compact
+When disappears and the existing full When section inherits the selected date.
+The rating's neutral thumb is not a value: untouched saves submit nil; a deliberate midpoint tap counts;
 Remove rating restores nil. Existing explicit ratings are preserved on edit.
 The review save callback updates the sample visit only. Production create/edit,
 remote sync, durable drafts and notification scheduling are not implemented.
 
 Profile Activity and the place's Check-in history are existing app screens.
-The added ticket action and contextual invitation open the exact sample visit.
-Reminder copy appears within the actual Notifications sheet; it is not a
-screenshot of an OS push notification, and no push is sent or scheduled.
+The pencil and added ticket action use the same handler for the exact sample
+visit. The horizontal invitation reads “Add details to your check-in at” with
+the place name. “Check-in reminders” is a regular row under Push types in the
+actual Notifications sheet. No push is sent or scheduled.
 
 Focused interaction coverage is in `WanderUITests/QuickCaptureReviewUITests.swift`.
 Run it on a dedicated simulator with the same build/package paths:

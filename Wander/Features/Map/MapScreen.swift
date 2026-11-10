@@ -14546,13 +14546,14 @@ struct MapPlaceSaveEditor: View {
                 HStack {
                     Text("When").font(AstirTypography.label)
                     Spacer()
-                    DatePicker("Check-in time", selection: $visitedAt, in: ...Date.now,
-                        displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Check-in date", selection: $visitedAt, in: ...Date.now,
+                        displayedComponents: [.date])
+                        .datePickerStyle(.compact)
                         .labelsHidden().tint(astirBrandMode.accent)
+                        .accessibilityIdentifier("quick-review.date")
                 }
                 .frame(minHeight: 44)
             }
-            visibilitySection
             Button {
                 withAnimation(.snappy) { reviewDetailsExpanded = true }
                 onContentExpansionRequested()
@@ -14578,6 +14579,7 @@ struct MapPlaceSaveEditor: View {
             .buttonStyle(.plain).accessibilityIdentifier("quick-review.expand")
             Text("You can add details anytime.")
                 .font(AstirTypography.caption).foregroundStyle(astirBrandMode.secondaryText)
+            visibilitySection
         }
     }
     #endif
@@ -14647,7 +14649,7 @@ struct MapPlaceSaveEditor: View {
                     .walkthroughTarget(.saveQuestions)
 
                 visitParticipationSections
-                .id("quick-review.extras")
+                    .id("quick-review.extras")
                     .id(WalkthroughTargetID.saveFriends)
                     .walkthroughTarget(.saveFriends)
             }

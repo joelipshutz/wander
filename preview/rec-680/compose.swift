@@ -29,6 +29,10 @@ func board(_ name: String, _ title: String, _ screens: [(String,String,String)])
     let rep=NSBitmapImageRep(data:image.tiffRepresentation!)!
     try rep.representation(using:.jpeg,properties:[.compressionFactor:0.86])!.write(to:URL(fileURLWithPath:outputRoot+"/"+name+".jpg"))
 }
+try board("actual-refinements", "Your revisions, in the actual app.", [
+    ("large/quick.png", "Date-only check-in", "Add details, helper text, then Stealth mode."),
+    ("large/invitation.png", "A horizontal invitation", "Tap to reopen this exact check-in."),
+    ("large/reminders.png", "Inside Push types", "Check-in reminders alongside existing options.")])
 try board("actual-capture", "The existing editor, simplified.", [
     ("large/baselineEditor.png", "Current app", "The existing full form, before this proposal."),
     ("large/quick.png", "Quick check-in", "Same place header, privacy control and save action."),

@@ -20,6 +20,8 @@ is gated by an explicit Debug simulator review route. Sample data and save
 callbacks are local to the review host. No production persistence, push scheduler,
 APNs delivery, analytics contract or backend schema is implemented by this PR.
 
+![Refined date-only capture, horizontal invitation and reminder row](rec-680/actual-refinements.jpg)
+
 ![Current editor, quick capture and full editor](rec-680/actual-capture.jpg)
 
 ![Contextual invitation and existing activity history](rec-680/actual-return.jpg)
@@ -42,9 +44,14 @@ the price of admission.
 Use one compact capture sheet, shared with the existing detailed editor:
 
 1. Place identity, already resolved by search, nearby selection or place profile.
-2. Editable visit time and visible audience/notification controls.
-3. Primary **Check in** or **Save to Wanna**.
-4. Secondary **Add details**, expanding to the complete editor in place.
+2. A compact, date-only **When** control for Check-in.
+3. **Add details** with its field summary and “You can add details anytime.”
+4. Stealth mode beneath that disclosure and helper text.
+5. Primary **Check in** or **Save to Wanna**.
+
+Expanding replaces the entire compact section with the existing full editor.
+The compact and expanded When controls share one date binding, so changes
+carry forward and only one When section is visible at a time.
 
 After saving, return to the original map/place context with a modest success
 message and **Add details** / **Undo**. Do not insert another required screen.
@@ -61,10 +68,10 @@ search, permissions, authentication and poor connectivity can take longer.
 
 | Situation | Recommended path | What persists |
 |---|---|---|
-| At a place, no time for details | Add → nearby place or existing place card → Check in | Place + new visit + time + current audience; rating null |
+| At a place, no time for details | Add → nearby place or existing place card → Check in | Place + new visit + selected date + current audience; rating null |
 | At a place, wants details now | Same sheet → Add details → fill any subset → Check in | One visit with only deliberately entered details |
-| Logging a visit an hour later | Search/select place → time control → An hour ago or specific date/time → Check in | Actual visit time separate from record creation time |
-| Logging a past visit with a full memory | Select place → time → Add details → Check in | One backdated visit with optional details |
+| Logging a visit an hour later | Search/select place → leave today selected or change the date → Check in | Selected visit date; creation time remains separate |
+| Logging a past visit with a full memory | Select place → date → Add details → Check in | One backdated visit with optional details |
 | Adding details after a quick save | Open that visit → Add details → Save changes | Update the same visit ID and original time, not a new visit |
 | Returning to a place | New Check in action | A new visit, with no assumed new rating or reused note/photos/friends |
 | Keeping a place for later | Explicit Wanna action → Save to Wanna | Wanna event; no rating or visited timestamp; planned date optional |
@@ -82,7 +89,7 @@ Nearby suggestions should never silently choose a venue or create a visit.
 | Data | Compact sheet | Optional editor | Meaning |
 |---|---|---|---|
 | Place | Name, area, inferred type | Type/name correction where supported | Required resolved identity; no repeated categorization task |
-| Visit time | Visible and editable | Same date/time control | Required visit context; editable after capture |
+| Visit date | Compact date-only control | Existing When section, using the same date | No duplicate compact row after expansion; existing check-in date bounds retained |
 | Audience | Visible account default | Same setting | Existing Everyone/Friends/Self semantics |
 | Silent notification choice | Audience menu, status shown when silent | Explicit toggle | Independent from audience; never a privacy substitute |
 | Rating | Absent | Not rated → explicit selection; remove available | Nullable; no 0/3 placeholder score |
@@ -109,9 +116,10 @@ touch. This behavior must be verified in the production custom slider too.
 
 Use the navigation already in Astir. Profile has an Activity section and an
 Activity history screen with Check-ins / Wanna filters. A row opens the place's
-Check-in history. Each dated visit already has its own edit action. Add a
-clear **Add details** action to the owner's unrated visit ticket; do not invent
-another parallel history hierarchy.
+Check-in history. Each dated visit already has its own edit action. Both the
+pencil and Add details call the same edit handler for that visit. The clear
+**Add details** action appears on the owner's unrated visit ticket; there is no
+parallel history hierarchy.
 
 | Entry | Action | Destination |
 |---|---|---|
@@ -120,7 +128,7 @@ another parallel history hierarchy.
 | Profile | Activity → Check-ins → dated row | Existing place history with dated visit tickets |
 | Place history | Add details or existing pencil | Existing editor for that ticket's visit |
 | Push notification | Tap | Same exact-visit editor after auth and ownership checks |
-| Settings → Notifications | Recent check-in reminders | Proposed preference alongside existing push types |
+| Settings → Notifications → Push types | Check-in reminders | A regular toggle in the existing list |
 | Profile | Activity → Wanna | Existing place history and Wanna editing |
 
 The review preserves the app's current edit labels and controls. It does not
@@ -131,15 +139,14 @@ Edits must keep the original visit ID and time unless the user changes the time.
 
 ## Contextual invitation and push reminder
 
-Recommended contextual card, shown privately on the next eligible Map return:
+Recommended compact horizontal invitation, shown privately on the next eligible
+Map return:
 
-> Your recent check-in
->
-> Juniper Coffee · Today, 8:15 AM
->
-> Want to add a rating, photo, or note?
->
-> **Add details** · **Dismiss**
+> Add details to your check-in at **Juniper Coffee** →
+
+The place icon, two-line invitation, chevron and 44pt dismiss action share one
+row. The invitation itself opens the exact visit. No separate timestamp or
+second Add details button adds vertical height.
 
 Do not auto-open the editor. One card at a time; no overdue badges or repeated
 nagging for the same event. Dismiss suppresses that event's invitation and its
@@ -164,12 +171,13 @@ Proposed scheduling policy for review, not yet implemented:
   owned by the user, with no prior invitation dismissal or detail edit. Missing
   rating by itself never qualifies a visit.
 - Offer a separate Check-in reminders preference inside existing Notifications
-  settings. Respect both that preference and existing OS/app permission; do not
-  ask for permission in the few-second check-in path. The mock shows an enabled
+  settings, as a regular **Push types** row. Respect both that preference and
+  existing OS/app permission; do not ask for permission in the few-second check-in path. The mock shows an enabled
   example, not a decision to enable a new push type for all existing accounts.
 - Initial experiment: one push a few hours after capture, not after a backdated
   visit timestamp. Timing is a product decision; the mock shows the preference
-  and proposed copy, without adding a scheduling control.
+  only, without a separate section or scheduling control. Proposed push copy
+  remains in this document.
 - At most one reminder per visit and one per account per day, coordinated with
   the existing notification budget. Hold during quiet hours; expire instead of
   delivering a backlog. Exact delay, quiet hours and expiry need product approval.
@@ -294,8 +302,8 @@ Nearby / Search / Place / explicit shortcut
 
 ## Design review and validation plan
 
-Hierarchy: resolved place, time/audience, primary save. Details are discoverable
-without competing with save. Keep the primary action above the home indicator;
+Hierarchy: resolved place, date, Add details, Stealth mode, primary save.
+Details are discoverable without competing with save. Keep the primary action above the home indicator;
 large text expands the sheet and scrolls instead of shrinking text. Existing
 typography, coral action color and adaptive paper/ink surfaces remain.
 
@@ -320,18 +328,23 @@ suite plus hosted rolled-back save/RLS checks for any touched RPC contract.
 
 ## Review validation
 
-The actual Wander Debug app builds successfully for the simulator. Focused
-native validation passed **20 tests, zero failures**: three review UI tests plus
-17 existing rating reaction/summary tests. The UI tests exercise compact and
-expanded untouched saves, a deliberate midpoint selection, editing an explicit
-rating, removing that rating, expansion into the existing editor, and Wanna
-without rating controls. The sample save preserves nil and an explicit 3.0.
+The actual Wander Debug app builds successfully. **22 focused native checks
+are validated**: five review UI tests and 17 existing rating reaction/summary
+tests. The initial refinement run passed 21 checks; the date test could not
+dismiss the native calendar. After correcting its dismissal action, that test
+passed on a focused rerun. No app change was needed for the date handoff.
+
+UI coverage includes compact and expanded untouched saves, deliberate midpoint
+selection, preserving an explicit rating on edit, removing it to nil, Wanna
+without ratings, changing the compact date before expansion with no duplicate
+When, and both visit-ticket edit actions opening the same unrated visit. The
+sample save preserves nil and an explicit 3.0.
 
 Screenshots were captured from the actual target on iPhone 17 Pro and iPhone
 17e (iOS 26.5). The final boards cover all review surfaces and the smaller-phone
 layout. Capture-script syntax, board composition and diff formatting also pass.
 Raw images and test results remain in the issue's evidence directory outside
-the worktree; only the five final boards are retained here.
+the worktree; only the six final boards are retained here.
 
 This is development review tooling. The full app test suite, production
 rating/save pipeline, hosted RPC checks and push delivery were not exercised.
