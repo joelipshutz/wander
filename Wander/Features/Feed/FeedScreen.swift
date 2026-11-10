@@ -98,8 +98,6 @@ struct FeedScreen: View {
     @State private var placeSaveFlow: MapPlaceSaveContext?
     @State private var savedMessage: String?
     @State private var presentationGeneration = UUID()
-    @State private var followingProfileIDs = Set<String>()
-    @State private var followFailedProfileIDs = Set<String>()
     @State private var focusedActivityID: String?
     @State private var pendingActivityFocus: FeedActivityFocusRequest?
     @State private var focusedActivityFrame: CGRect?
@@ -781,9 +779,6 @@ struct FeedScreen: View {
         let renderedFocusGroupID = projection.groupID(containing: pendingActivityFocus?.activityID)
         CircleQuestionFeedSection(state: backend.circleQuestions, userID: store.currentUser.id)
         if showsInviteEntry { FeedInviteSection() }
-        if !FeedPresentation.showsFeaturedPlaces {
-            peopleRail
-        }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
             FeedLoadingState(audience: audienceSelection)
         } else if isEmbedded, store.liveFeedQuery != nil, page != nil {
@@ -884,13 +879,7 @@ struct FeedScreen: View {
             } else if store.feedAudience != .everyone {
                 FeedAudienceEmptyState(audience: audienceSelection)
             } else {
-                FeedEmptyState(
-                    recommendations: FeedPresentation.showsFeaturedPlaces ? peopleRecommendations : [],
-                    followingProfileIDs: followingProfileIDs,
-                    openSearch: openDiscoverSearch,
-                    openProfile: openProfile,
-                    follow: follow
-                )
+                FeedEmptyState(openSearch: openDiscoverSearch)
             }
             // Local visibility changes can remove every row from a server
             // page without removing its cursor. Keep later rows reachable.
@@ -948,61 +937,9 @@ struct FeedScreen: View {
             .accessibilityIdentifier("feed.filteredEmpty")
     }
 
-    private var feedPeopleRecommendations: [DiscoverPeopleRecommendation] {
-        #if DEBUG
-        // Explicit, local-only review fixture; use the existing native cards.
-        if ProcessInfo.processInfo.arguments.contains("-WanderNUXFeedFixture"),
-           ProcessInfo.processInfo.arguments.contains("-WanderUseDemoFixtures") {
-            return ["user_ryan", "user_maya"].enumerated().compactMap { index, id in
-                guard let profile = store.profile(for: id) else { return nil }
-                return DiscoverPeopleRecommendation(profile: store.shell(for: profile),
-                                                    reason: .sharedFollows(3), rank: index)
-            }
-        }
-        #endif
-        return store.visibleDiscoverPeopleRecommendations
-    }
-
-    @ViewBuilder
-    private var peopleRail: some View {
-        if !feedPeopleRecommendations.isEmpty {
-            PeopleRecommendationShelf(
-                recommendations: feedPeopleRecommendations,
-                isFollowing: { store.hasAcknowledgedFollow(to: $0) },
-                isFollowInFlight: { followingProfileIDs.contains($0) },
-                didFollowFail: { followFailedProfileIDs.contains($0) },
-                open: { openProfile($0.profile) },
-                follow: follow,
-                walkthroughProfileID: feedPeopleRecommendations.first?.id
-            )
-        } else {
-            switch store.discoverPeopleRecommendationsState {
-            case .idle, .loading:
-                if auth.isSignedIn {
-                    PeopleRecommendationLoadingShelf()
-                }
-            case .failed:
-                FeedRetryRow(
-                    title: "Suggestions couldn't load",
-                    subtitle: "Your feed can still load below.",
-                    actionTitle: "Try again",
-                    retry: {
-                        await store.refreshDiscoverPeopleRecommendations(backend: backend, force: true)
-                    }
-                )
-            case .loaded:
-                EmptyView()
-            }
-        }
-    }
-
     private var freshnessDetail: String? {
         guard store.feedLoadState == .stale else { return nil }
         return "Updated earlier"
-    }
-
-    private var peopleRecommendations: [DiscoverPeopleRecommendation] {
-        Array(store.visibleDiscoverPeopleRecommendations.prefix(3))
     }
 
     private func refresh() async {
@@ -1328,25 +1265,6 @@ struct FeedScreen: View {
                 attributes: attributesByID[visiblePlace.userPlace.id] ?? [],
                 viewerFollowsOwner: false
             )
-        }
-    }
-
-    private func follow(_ recommendation: DiscoverPeopleRecommendation) {
-        guard !followingProfileIDs.contains(recommendation.profile.id) else { return }
-        auth.requireSignIn(for: .followPeople) {
-            followingProfileIDs.insert(recommendation.profile.id)
-            followFailedProfileIDs.remove(recommendation.profile.id)
-            Task { @MainActor in
-                await Task.yield()
-                let succeeded = await store.followRecommendation(
-                    userID: recommendation.profile.id,
-                    backend: auth.isSignedIn ? backend : nil
-                )
-                followingProfileIDs.remove(recommendation.profile.id)
-                if !succeeded {
-                    followFailedProfileIDs.insert(recommendation.profile.id)
-                }
-            }
         }
     }
 }
@@ -2165,11 +2083,7 @@ private struct FeedRecoveryActivityList: View {
 
 private struct FeedEmptyState: View {
     @Environment(\.astirBrandMode) private var brandMode
-    let recommendations: [DiscoverPeopleRecommendation]
-    let followingProfileIDs: Set<String>
     let openSearch: () -> Void
-    let openProfile: (ProfileShell) -> Void
-    let follow: (DiscoverPeopleRecommendation) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing4) {
@@ -2181,63 +2095,14 @@ private struct FeedEmptyState: View {
                     .font(AstirTypography.bodySmall)
                     .foregroundStyle(brandMode.secondaryText)
             }
-
-            if recommendations.isEmpty {
-                Button("Find people", action: openSearch)
-                    .font(AstirTypography.control)
-                    .foregroundStyle(brandMode.accentForeground)
-                    .frame(minHeight: 44)
-                    .padding(.horizontal, WanderTheme.spacing4)
-                    .background(brandMode.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
-                    .accessibilityLabel("Find people to follow")
-            } else {
-                ForEach(recommendations) { recommendation in
-                    HStack(spacing: WanderTheme.spacing3) {
-                        Button {
-                            openProfile(recommendation.profile)
-                        } label: {
-                            WanderAvatar(
-                                initials: initials(for: recommendation.profile.displayName),
-                                avatarURL: recommendation.profile.avatarURL,
-                                size: 44,
-                                color: brandMode.accent
-                            )
-                        }
-                        .buttonStyle(.plain)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(recommendation.profile.displayName)
-                                .font(AstirTypography.cardTitle)
-                            if !recommendation.reason.compactDisplayText.isEmpty {
-                                Text(recommendation.reason.displayText(for: recommendation.profile))
-                                    .font(AstirTypography.caption)
-                                    .foregroundStyle(brandMode.secondaryText)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Button {
-                            follow(recommendation)
-                        } label: {
-                            if followingProfileIDs.contains(recommendation.profile.id) {
-                                ProgressView()
-                                    .tint(brandMode.accent)
-                                    .frame(width: 44, height: 44)
-                            } else {
-                                Text("Follow")
-                                    .font(AstirTypography.label)
-                                    .foregroundStyle(brandMode.accentText)
-                                    .frame(minHeight: 44)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(followingProfileIDs.contains(recommendation.profile.id))
-                    }
-                }
-            }
+            Button("Find people", action: openSearch)
+                .font(AstirTypography.control)
+                .foregroundStyle(brandMode.accentForeground)
+                .frame(minHeight: 44)
+                .padding(.horizontal, WanderTheme.spacing4)
+                .background(brandMode.accent)
+                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge, style: .continuous))
+                .accessibilityLabel("Find people to follow")
         }
         .padding(WanderTheme.spacing4)
         .background(brandMode.raisedBackground)

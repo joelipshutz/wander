@@ -2209,10 +2209,12 @@ struct PeopleRecommendationShelf: View {
     let open: (DiscoverPeopleRecommendation) -> Void
     let follow: (DiscoverPeopleRecommendation) -> Void
     var walkthroughProfileID: String? = nil
+    var showsTitle = true
+    var horizontalInset: CGFloat = WanderTheme.spacing4
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("People worth following")
+            if showsTitle { SectionTitle("People worth following") }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: WanderTheme.spacing3) {
@@ -2230,17 +2232,21 @@ struct PeopleRecommendationShelf: View {
                 }
                 .padding(.vertical, WanderTheme.spacing1)
             }
-            .discoverSearchRailBleed()
+            .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
+            .padding(.horizontal, -horizontalInset)
+            .accessibilityIdentifier("people.recommendations.scroll")
         }
     }
 }
 
 struct PeopleRecommendationLoadingShelf: View {
+    var showsTitle = true
+    var horizontalInset: CGFloat = WanderTheme.spacing4
     @Environment(\.astirBrandMode) private var brandMode
 
     var body: some View {
         VStack(alignment: .leading, spacing: WanderTheme.spacing3) {
-            SectionTitle("People worth following")
+            if showsTitle { SectionTitle("People worth following") }
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: WanderTheme.spacing3) {
                     ForEach(0..<3, id: \.self) { _ in
@@ -2264,7 +2270,9 @@ struct PeopleRecommendationLoadingShelf: View {
                 }
                 .padding(.vertical, WanderTheme.spacing1)
             }
-            .discoverSearchRailBleed()
+            .contentMargins(.horizontal, horizontalInset, for: .scrollContent)
+            .padding(.horizontal, -horizontalInset)
+            .accessibilityIdentifier("people.recommendations.scroll")
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Finding people worth following")

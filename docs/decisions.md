@@ -1126,3 +1126,18 @@ when relevant. **Reset filters** is visible in the drawer whenever shared
 filters are active and clears them without changing the map area or Feed scope.
 **Clear area** removes an applied drawn/searched area separately. The Filters
 sheet follows the same reset contract, with changes staged until Apply.
+
+## REC-682 — people discovery placement, 2026-11-10
+
+People worth following lives beneath the owner Profile actions and on Invite
+people. Feed contains no recommendation cards, including its empty state.
+The shared native horizontal shelf retains existing ranking, visibility, Follow,
+and gesture behavior. Profile order is people, streak, Activity, Your map,
+Your calendar.
+
+The Profile chevron is temporary disclosure state. It starts expanded on every
+cold launch and resets on tab return, Profile appearance, foreground return,
+and account change. Collapsing never writes a saved preference. Invite keeps
+the shelf available independently of contact permission/loading and hides it
+while filtering contacts. Existing follow and invite analytics contracts remain
+unchanged, including the historical `feed_people` invitation surface value.

@@ -350,7 +350,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(feed.contains("private struct FeedSurfaceTabs"))
         XCTAssertFalse(feed.contains("FeedPeopleSurface("))
         XCTAssertTrue(feed.contains("FeedInviteSection()"))
-        XCTAssertTrue(feed.contains("PeopleRecommendationShelf("))
+        XCTAssertFalse(feed.contains("PeopleRecommendationShelf("))
+        XCTAssertFalse(feed.contains("peopleRail"))
         XCTAssertTrue(discover.contains("unifiedPeopleResults"))
 
     }

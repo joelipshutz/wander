@@ -5,6 +5,12 @@ on:
     paths:
       - '**/*ContactDiscovery*'
       - '**/PeopleFollowButton.swift'
+      - 'Wander/Features/Profile/PeopleRecommendationsSection.swift'
+      - 'Wander/Features/Profile/ProfileOwnerHome.swift'
+      - 'Wander/Features/Profile/ProfileScreen.swift'
+      - 'Wander/Features/Invites/ContactInviteSheet.swift'
+      - 'WanderUITests/PeoplePlacementUITests.swift'
+      - 'WanderUITests/CompactPeopleCardsUITests.swift'
       - 'supabase/migrations/*ranked_people_recommendations.sql'
       - 'supabase/tests/ranked_people_recommendations.sql'
       - '**/ContactProvider.swift'
@@ -89,6 +95,7 @@ jobs:
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderTests -only-testing:WanderUITests/ContactDiscoveryUITests
           -only-testing:WanderUITests/CompactPeopleCardsUITests
+          -only-testing:WanderUITests/PeoplePlacementUITests
           -skip-testing:WanderTests/TrustedPlaceSearchTests/testSearchOneThousandMemoriesP95UnderFiftyMilliseconds
           -skip-testing:WanderTests/WanderPlaceCategoryTests/testPerformanceFixtureExercisesARealisticHighDataAccountWithinBudget
           -skip-testing:WanderTests/ImportAutoSaveFileResponsivenessTests/testPerformanceFileAutoSaveWith1500ResolvedRowsAndList
