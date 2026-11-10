@@ -182,24 +182,23 @@ final class LiveReviewContinuityUITests: XCTestCase {
         XCTAssertTrue(card.waitForExistence(timeout: 5))
     }
 
-    func testEmbeddedFeedKeepsInvitePeopleActivityOrderAndProfileReturn() {
+    func testEmbeddedFeedKeepsInviteAndActivityWithoutRecommendations() {
         let app = launchLive(extraArguments: ["-WanderLiveFeedPhotosUITest"])
         expandDrawer(in: app)
         let feed = app.scrollViews["feed.places.scroll"]
         let invite = app.buttons["live.utility.invite"]
         let people = app.staticTexts["People worth following"].firstMatch
         let activity = app.staticTexts.matching(NSPredicate(format: "label == %@", "Activity")).firstMatch
-        reveal(people, in: feed, app: app)
         waitHittable(invite)
         XCTAssertTrue(app.frame.contains(invite.frame))
         XCTAssertFalse(feed.buttons["live.utility.invite"].exists)
         XCTAssertLessThanOrEqual(invite.frame.maxY, feed.frame.minY + 1)
-        XCTAssertLessThan(invite.frame.maxY, people.frame.minY)
-        capture("drawer-invite-above-people")
+        XCTAssertFalse(people.exists)
+        XCTAssertFalse(feed.scrollViews["people.recommendations.scroll"].exists)
+        capture("drawer-invite-without-people")
         reveal(activity, in: feed, app: app)
-        XCTAssertTrue(physicallyVisible(people, in: feed, app: app))
-        XCTAssertLessThan(people.frame.maxY, activity.frame.minY)
-        capture("embedded-people-before-activity")
+        XCTAssertFalse(people.exists)
+        capture("embedded-activity-without-people")
 
         let card = app.descendants(matching: .any)["feed.activity.fixture-feed-maya-been-bar-nido.postcard"].firstMatch
         let photos = app.buttons["feed.activity.fixture-feed-maya-been-bar-nido.postcard.photos"]

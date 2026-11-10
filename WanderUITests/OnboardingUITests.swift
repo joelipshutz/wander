@@ -983,7 +983,7 @@ final class OnboardingUITests: XCTestCase {
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 5))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
-                                   evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
+                                   evaluatedWith: app.buttons["Invite people to Astir"])
         wait(for: [returned], timeout: 4)
     }
 
@@ -1119,7 +1119,7 @@ final class OnboardingUITests: XCTestCase {
         XCTAssertTrue(annotation.waitForNonExistence(timeout: 6))
         XCTAssertTrue(app.staticTexts["walkthrough.feed.feedActivity.recent"].waitForNonExistence(timeout: 6))
         XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
-        XCTAssertTrue(app.buttons["people.recommendation.user_ryan.profile"].isHittable)
+        XCTAssertTrue(app.buttons["Invite people to Astir"].isHittable)
         app.buttons["Map"].tap()
         app.buttons["Feed"].tap()
         XCTAssertFalse(annotation.exists)
@@ -1154,7 +1154,7 @@ final class OnboardingUITests: XCTestCase {
             .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
         XCTAssertTrue(recent.waitForNonExistence(timeout: 6))
         let returned = expectation(for: NSPredicate(format: "hittable == true"),
-                                   evaluatedWith: app.buttons["people.recommendation.user_ryan.profile"])
+                                   evaluatedWith: app.buttons["Invite people to Astir"])
         wait(for: [returned], timeout: 4)
         XCTAssertFalse(app.buttons["walkthrough.next.feed.feedActivity"].exists)
         app.buttons["Map"].tap()
