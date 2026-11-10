@@ -1392,6 +1392,7 @@ struct MapScreen: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @Environment(\.placeProfileFloatingActionVariant) private var placeProfileFloatingActionVariant
+    @Environment(\.activityPresentationHandoff) private var activityHandoff
     @Environment(\.astirBrandMode) private var astirBrandMode
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var auth: AuthSessionStore
@@ -4110,6 +4111,8 @@ struct MapScreen: View {
                 .environmentObject(backend)
                 .environmentObject(walkthroughs)
                 .environmentObject(placeSaveDraftStore)
+                .environmentObject(pushNotifications)
+                .environment(\.activityPresentationHandoff, activityHandoff)
                 .environment(\.presentPlaceActivityEdit, { presentation in
                     mapActivityEditFlow = presentation
                 })

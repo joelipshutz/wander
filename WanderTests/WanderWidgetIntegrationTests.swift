@@ -247,7 +247,7 @@ final class WanderWidgetIntegrationTests: XCTestCase {
 
     func testNewestPostNotificationWaitsForEveryFeedAndPostCover() {
         var handoff = WanderDeepLinkHandoffCoordinator()
-        let surfaces: [WanderDeepLinkPresentationSurface] = [.feedProfile, .feedSave, .activityShare, .activityPhoto, .activityReport, .activitySave]
+        let surfaces: [WanderDeepLinkPresentationSurface] = [.feedProfile, .feedSave, .activityShare, .activityPhoto, .activityReport, .activitySave, .activityComments, .activityProfile]
         let tokens = surfaces.map { WanderDeepLinkPresentationToken(surface: $0) }
         handoff.begin(requestID: UUID(), route: .sharedActivity(activityID: "older"), awaitingDismissals: Set(tokens))
         let target = WanderDeepLinkRoute.checkInActivity(userPlaceID: "parent", visitID: "visit")

@@ -3,6 +3,85 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceUITests: XCTestCase {
+    func testPlaceHistoryCommentsHandoffAfterOpeningActorProfile() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest", "-WanderDisableWalkthroughs",
+            "-WanderInitialTab", "map", "-WanderMapPlace", "Bar Nido", "-WanderMapSheetExpanded",
+            "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"
+        ]
+        app.launch()
+        let scroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 20))
+        let comments = app.buttons.matching(identifier: "Open comments")
+        for _ in 0..<10 {
+            if comments.allElementsBoundByIndex.contains(where: { $0.isHittable }) { break }
+            scroll.swipeUp()
+        }
+        try XCTUnwrap(comments.allElementsBoundByIndex.first(where: { $0.isHittable })).tap()
+        let actor = app.buttons["comments.activity.actor"]
+        XCTAssertTrue(actor.waitForExistence(timeout: 10))
+        actor.tap()
+        let profileBack = app.buttons["profile.back"]
+        XCTAssertTrue(profileBack.waitForExistence(timeout: 10))
+        profileBack.tap()
+        XCTAssertTrue(actor.waitForExistence(timeout: 5))
+
+        app.open(try XCTUnwrap(URL(string: "recme://profiles/user_maya")))
+        let open = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Open"]
+        if open.waitForExistence(timeout: 3) { open.tap() }
+        XCTAssertTrue(profileBack.waitForExistence(timeout: 15), "The link must wait for comments to dismiss, then open the linked profile")
+        XCTAssertFalse(app.buttons["place-activity.comments.back"].exists)
+        profileBack.tap()
+        XCTAssertFalse(app.buttons["activity.comment.send"].exists)
+    }
+
+    func testPlaceHistoryCommentsOpenPostAndReturnToSameProfile() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-WanderMapCapture", "-WanderUseDemoFixtures", "-WanderAuthenticatedUITest",
+            "-WanderDisableWalkthroughs", "-WanderREC386PhotoFixture",
+            "-WanderMapPlace", "Dudley Market QA", "-WanderMapSheetExpanded"
+        ]
+        app.launch()
+        let scroll = app.scrollViews["place-profile.scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 20))
+        let comments = app.buttons.matching(identifier: "Open comments")
+        for _ in 0..<10 {
+            if comments.allElementsBoundByIndex.contains(where: { $0.isHittable }) { break }
+            scroll.swipeUp()
+        }
+        let button = try XCTUnwrap(comments.allElementsBoundByIndex.first(where: { $0.isHittable }))
+        let originalCount = button.value as? String
+        button.tap()
+
+        let send = app.buttons["activity.comment.send"]
+        XCTAssertTrue(send.waitForExistence(timeout: 10), "Comments must appear above the place profile")
+        XCTAssertTrue(app.buttons["comments.activity.place"].exists)
+        capture("Place history opens full activity")
+        let composer = app.textViews["activity.comment.input"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 5))
+        composer.tap()
+        composer.typeText("Let's return here soon!")
+        send.tap()
+        XCTAssertTrue(app.staticTexts["Let's return here soon!"].waitForExistence(timeout: 5))
+        app.buttons["place-activity.comments.back"].tap()
+
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["place-profile.back"].isHittable)
+        XCTAssertTrue(button.isHittable, "Returning preserves the history scroll position")
+        XCTAssertNotEqual(button.value as? String, originalCount)
+        button.tap()
+        XCTAssertTrue(send.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Let's return here soon!"].waitForExistence(timeout: 5))
+        app.buttons["place-activity.comments.back"].tap()
+        app.buttons["place-profile.back"].tap()
+        XCTAssertTrue(app.buttons["map.selectedPlaceCard"].waitForExistence(timeout: 5))
+        XCTAssertFalse(send.exists, "The hidden Feed must not retain an unintended comments route")
+    }
+
     func testPrimaryScreensAndPresentedSurfacesSurviveAppearanceChanges() throws {
         continueAfterFailure = false
         let previous = XCUIDevice.shared.appearance

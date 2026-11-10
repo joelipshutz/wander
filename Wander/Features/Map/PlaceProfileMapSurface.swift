@@ -284,6 +284,7 @@ struct PlaceProfileFullScreen: View {
             guard !presentsAttachedSaveSheet, previousID != nil, currentID == nil else { return }
             Task { await refreshHistory() }
         }
+        .modifier(PlaceProfileActivityPresentation(onLeavePlace: onBack))
     }
 
     private var attachedSaveSheetContext: Binding<MapPlaceSaveContext?> {

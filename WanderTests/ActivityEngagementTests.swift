@@ -1267,6 +1267,85 @@ final class ActivityEngagementTests: XCTestCase {
         XCTAssertNil(coordinator.commentsRoute)
     }
 
+    func testPlaceProfileCommentsDoNotMutateFeedRouteAndIgnoreOldDismissal() throws {
+        let feed = ActivityNavigationCoordinator()
+        let profile = ActivityNavigationCoordinator()
+        feed.openComments(activityID: "feed-activity")
+        let feedRequest = try XCTUnwrap(feed.commentsRoute)
+        let activity = privacyActivity(ownerID: "friend", visibility: .followers)
+        let context = try XCTUnwrap(activity.activityEngagementContext)
+
+        profile.openComments(context: context, visiblePlace: activity.place)
+        let firstRequest = try XCTUnwrap(profile.commentsRoute)
+        XCTAssertEqual(firstRequest.activityID, activity.id)
+        XCTAssertEqual(firstRequest.visiblePlace?.id, activity.place?.id)
+        XCTAssertEqual(feed.commentsRoute?.id, feedRequest.id)
+
+        profile.dismiss(requestID: firstRequest.id)
+        profile.openComments(context: context, visiblePlace: activity.place)
+        let reopened = try XCTUnwrap(profile.commentsRoute)
+        XCTAssertNotEqual(reopened.id, firstRequest.id)
+        profile.dismiss(requestID: firstRequest.id)
+        XCTAssertEqual(profile.commentsRoute?.id, reopened.id)
+        profile.reset()
+        XCTAssertNil(profile.commentsRoute)
+        XCTAssertEqual(feed.commentsRoute?.id, feedRequest.id)
+    }
+
+    func testCommentsRouteResolverClearsDeniedPreviewAndCanRetry() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResponses: [
+            .failure(WanderRemoteError.invalidResponse("activity_not_visible")), .success(activity)
+        ])
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        provider.finishRefresh()
+        let auth = AuthSessionStore(provider: provider)
+        await auth.refreshSession()
+        let navigation = ActivityNavigationCoordinator()
+        navigation.openComments(context: try XCTUnwrap(activity.activityEngagementContext), visiblePlace: activity.place)
+        let requestID = try XCTUnwrap(navigation.commentsRoute?.id)
+
+        let denied = await navigation.resolveCurrentRoute(store: store, auth: auth, backend: backend)
+        XCTAssertNil(denied)
+        XCTAssertNil(navigation.commentsRoute?.context)
+        XCTAssertNil(navigation.commentsRoute?.visiblePlace)
+        XCTAssertNotNil(store.activityEngagementError(for: activity.id))
+        let retried = await navigation.resolveCurrentRoute(store: store, auth: auth, backend: backend)
+        XCTAssertEqual(retried?.id, activity.id)
+        XCTAssertEqual(navigation.commentsRoute?.id, requestID)
+        XCTAssertEqual(navigation.commentsRoute?.context?.activityID, activity.id)
+    }
+
+    func testCommentsRouteResolverCannotReopenDismissedOrReplaceNewerActivity() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let activity = privacyActivity(ownerID: store.currentUser.id, visibility: .selfOnly)
+        let repository = ActivityEngagementRepositoryStub(activityResult: activity, suspendActivity: true)
+        let backend = WanderBackend(activityEngagementRepository: repository)
+        let provider = SuspendedActivityAuthProvider(userID: store.currentUser.id)
+        provider.finishRefresh()
+        let auth = AuthSessionStore(provider: provider)
+        await auth.refreshSession()
+        let navigation = ActivityNavigationCoordinator()
+        navigation.openComments(activityID: activity.id)
+        let started = expectation(description: "Route resolution starts")
+        repository.onActivityRequest = { started.fulfill() }
+        let read = Task { @MainActor in
+            await navigation.resolveCurrentRoute(store: store, auth: auth, backend: backend)?.id
+        }
+        await fulfillment(of: [started], timeout: activityReadSynchronizationTimeout)
+        navigation.reset()
+        navigation.openComments(activityID: "newer-activity")
+        let newerID = try XCTUnwrap(navigation.commentsRoute?.id)
+        repository.finishActivity()
+        let stale = await read.value
+        XCTAssertNil(stale)
+        XCTAssertEqual(navigation.commentsRoute?.id, newerID)
+        XCTAssertEqual(navigation.commentsRoute?.activityID, "newer-activity")
+        XCTAssertNil(navigation.commentsRoute?.context)
+    }
+
     func testFeedRefreshPreservesAnExactActivityLoadedForComments() async {
         let exactActivityID = "40000000-0000-0000-0000-000000000001"
         let pageActivityID = "40000000-0000-0000-0000-000000000002"
