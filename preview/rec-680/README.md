@@ -1,33 +1,75 @@
-# Quick capture exploration — REC-680
+# Quick capture and later editing — REC-680
 
-Native SwiftUI proposal for a compact Check-in / Wanna sheet with optional
-enrichment. This is a separate simulator app, outside the production target.
-It uses sample place/person/list data, in-memory saves, and MapKit context.
-It never connects to an Astir account, emits analytics, or writes app data.
+A real native SwiftUI design harness, built as a separate simulator app outside
+the production target. Fictional places/people/lists, in-memory state, MapKit
+context. No account, analytics, backend writes or scheduled notifications.
 
-## Run
+## Build and run
 
 ```sh
 bash preview/rec-680/render-build.sh /private/tmp/rec680-native
 xcrun simctl install <simulator-id> /private/tmp/rec680-native/QuickCapturePreview.app
-xcrun simctl launch <simulator-id> com.astir.preview.quickcapture --screen quick
+xcrun simctl launch <simulator-id> com.astir.preview.quickcapture --screen invitation
 ```
 
-Launch states: `quick`, `later`, `details`, `wanna`, `saved`, `edit`.
-Add `--dark` or `--large-text` for appearance/accessibility captures.
-Terminate the harness between deterministic launch states.
+Start with `invitation` to explore Map → Add details, or `profile` to explore
+Profile → Your check-ins → a dated visit. Tap the place profile's Your visits
+section to distinguish multiple check-ins at the same place. Save changes
+updates the selected event without changing its timestamp or history position.
 
-The save button dismisses the sheet to a visit card. Add details reopens the
-same in-memory record; opening the rating chooser does not assign a score.
-Rating choices include all nine half-step values from 1 through 5, plus Remove
-rating. Notes, date, audience, silent state and sample section choices are
-interactive. Photo picking/upload, invitations, question customization, lists,
-search, sync, durable drafts and other app navigation are illustrative only.
+## Deterministic launch states
 
-`Friends` is the sample account's audience, not a proposed new global default.
-The captured place is fictional. Map position supplies visual context only;
-the harness does not request device location or verify a visit.
+| Area | `--screen` values |
+|---|---|
+| Capture | `quick`, `later`, `details`, `saved` |
+| Return | `invitation`, `profile`, `history`, `place`, `visits`, `visit` |
+| Editing | `edit`, `rated`, `options` (scrolled optional fields), `updated` |
+| Reminder | `notification` (clearly labeled concept), `reminders`, `push-edit` |
+| Wanna | `wanna`, `wanna-saved`, `wannas`, `wanna-detail`, `wanna-edit`, `wanna-details` |
 
-See [the proposal](../../docs/designs/rec-680-quick-capture.md) for product,
-data and rollout decisions. Native captures are evidence of visual layout,
-not evidence that the production save path supports unrated visits.
+Terminate between deterministic states. Add `--dark` or `--large-text`
+(accessibility1) for adaptive captures. Large text is applied to the sheet too.
+
+The native slider reads an optional `PreviewRating`: its neutral visual value
+is 3 but its stored value is nil. Opening or saving without touching it never
+rates a visit. Touching the thumb deliberately selects the midpoint; adjustment
+selects half points. Remove rating restores nil. An existing explicit score is
+preserved when editing other fields.
+
+Notes, dates, audience, reminder preference, sample selections and navigation
+work in memory. Notification preview taps route to the sample event editor;
+this is not an APNs or OS banner test. Photo uploads, invitations, full question
+customization, sync and durable drafts reuse production contracts in a future
+implementation. Discover and unrelated profile capabilities are outside this
+scoped harness. `Friends` is the sample account audience, not a global default.
+
+## Model check
+
+```sh
+xcrun swiftc preview/rec-680/PreviewModels.swift preview/rec-680/check-model.swift \
+  -o /private/tmp/rec680-model-check
+/private/tmp/rec680-model-check
+```
+
+Covers untouched/midpoint/fractional/cleared ratings, notes without ratings,
+stable ID/time/order during edits, existing-score preservation and invitation
+eligibility. It does not validate the production save boundary.
+
+## Reproduce screenshots
+
+Use dedicated booted simulators; do not interrupt another task's devices.
+
+```sh
+python3 preview/rec-680/capture.py <large-simulator-id> /private/tmp/rec680-captures/large
+python3 preview/rec-680/capture.py <compact-simulator-id> /private/tmp/rec680-captures/compact --compact
+swift preview/rec-680/compose.swift /private/tmp/rec680-captures /private/tmp/rec680-boards
+```
+
+The capture script supports `--only invitation,edit` and `--delay 20` for slower
+startup. Inspect resulting images; process completion alone does not guarantee
+that a sheet finished appearing. Board composition only scales the original
+simulator images and adds captions. Raw images stay outside Git; final boards
+must pass `scripts/check-review-storage.py`.
+
+See [the proposal](../../docs/designs/rec-680-quick-capture.md) for the complete
+screen set, product tradeoffs, event identity, reminder policy and rollout.

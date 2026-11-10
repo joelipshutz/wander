@@ -7,7 +7,7 @@ mkdir -p "$APP_DIR" "$BUILD_DIR/module-cache"
 xcrun swiftc -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
   -target arm64-apple-ios17.0-simulator -parse-as-library \
   -module-cache-path "$BUILD_DIR/module-cache" \
-  "$SOURCE_DIR/QuickCapturePreview.swift" -o "$APP_DIR/QuickCapturePreview"
+  "$SOURCE_DIR/PreviewModels.swift" "$SOURCE_DIR/QuickCapturePreview.swift" -o "$APP_DIR/QuickCapturePreview"
 python3 - "$APP_DIR" <<'PY'
 import plistlib, sys
 from pathlib import Path

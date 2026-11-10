@@ -6,21 +6,31 @@ Source baseline: `743e990b05`. Native harness: `preview/rec-680/`.
 
 ## Native mockups
 
-![Quick capture, optional details and later editing](rec-680/quick-capture-proposal.jpg)
+The current review set covers the complete capture → return → exact-visit edit
+journey. These are native SwiftUI simulator captures of an isolated prototype,
+with fictional data. They are not screenshots of changed production behavior.
 
-![Retrospective visit, Wanna and saved visit](rec-680/other-capture-paths.jpg)
+![Contextual invitation, profile entry and check-in history](rec-680/return-and-history.jpg)
 
-![Dark appearance and compact phone layouts](rec-680/adaptive-capture.jpg)
+![Place profile, separate visits and a specific check-in](rec-680/specific-visit.jpg)
 
-These are native SwiftUI simulator captures, assembled into review sheets.
-They are an isolated prototype, not screenshots of a changed production app.
+![Untouched slider, explicit rating and updated original visit](rec-680/edit-and-rating.jpg)
 
-Validation: the standalone arm64 iOS simulator app compiles and runs; standard
-and expanded layouts were captured on iPhone 17 Pro and iPhone 17e with iOS 26.5.
-Light and Dark captures were inspected. Python capture-script syntax and shell
-build-script syntax passed. Production app tests and hosted save checks were
-not run because the production target is unchanged. Larger-text capture timing
-was unreliable in this simulator session; accessibility readiness is not claimed.
+![Push concept, reminder settings and exact-visit destination](rec-680/reminders.jpg)
+
+![Quick, retrospective and detailed capture](rec-680/quick-capture-proposal.jpg)
+
+![All optional fields, saved check-in and Wanna capture](rec-680/other-capture-paths.jpg)
+
+![Wanna history, saved Wanna and optional planning editor](rec-680/wanna-return.jpg)
+
+![Compact phone and larger text](rec-680/adaptive-capture.jpg)
+
+![Dark invitation, Dark history and compact reminder settings](rec-680/adaptive-return.jpg)
+
+The notification concept is a SwiftUI preview, explicitly labeled in the
+harness. It is not a delivered OS notification or an APNs test. No reminders
+are scheduled. Settings demonstrate a possible preference, not a new default.
 
 ## Recommendation
 
@@ -39,8 +49,9 @@ Use one compact capture sheet, shared with the existing detailed editor:
 After saving, return to the original map/place context with a modest success
 message and **Add details** / **Undo**. Do not insert another required screen.
 The exact saved visit is also editable from its history/activity card and
-place profile. No completion percentage, missing-rating warning or reminder
-notification in the first version.
+place profile. No completion percentage or missing-rating warning. Pair a
+private contextual invitation with an optional, bounded push reminder; details
+remain optional and the saved visit remains complete.
 
 Target: one confirmation tap and roughly 3–5 seconds after the intended place
 has been resolved. This is a usability target, not a measured result. Place
@@ -85,10 +96,115 @@ Nearby suggestions should never silently choose a venue or create a visit.
 
 The native harness groups these controls to demonstrate hierarchy. It does
 not replace the production question catalog, media picker or friend chooser.
-Those should be reused during implementation. The rating picker shown is one
-possible optional-input treatment; the existing liquid slider can remain if
-opening it does not commit its initial position. Choosing 3/5 must be as
-deliberate as choosing 5/5.
+Those should be reused during implementation. The revised native mock uses a
+slider: neutral appearance and **Not rated** until the user interacts. The
+visual thumb position is independent of the optional stored rating. Opening
+the editor, scrolling past, or saving a note must not commit the midpoint. A
+deliberate touch of the thumb at 3 selects 3; moving it selects half-point
+scores. Remove rating restores nil. VoiceOver adjustment also counts as explicit
+input. Editing an already rated visit preserves its prior score without a new
+touch. This behavior must be verified in the production custom slider too.
+
+## Returning to a specific visit
+
+All routes resolve the saved **visit ID** and its date/time. Place ID alone is
+insufficient: a person may have several visits to the same café, including
+multiple on one day. These navigation labels are proposed additions to the
+existing surfaces, not claims about currently shipped navigation.
+
+| Surface | Action | Destination |
+|---|---|---|
+| Save feedback | Add details | Editor for the event that just saved |
+| Next eligible Map return | Add details on private contextual invitation | Editor for the invitation's event |
+| Profile | Your check-ins | Chronological visit history, with place search |
+| Check-in history | Add details / Edit visit | Editor for that dated row |
+| Check-in history | Tap row | Specific visit page; Add details, Photos, Friends, More |
+| Place profile | Your visits → See all | Visits at that place, kept as distinct dated records |
+| Push notification | Tap | Editor for the exact referenced event after auth/ownership resolution |
+| Settings → Notifications | Check-in reminders | Reminder toggle and proposed timing preference |
+| Profile | Your Wanna | Saved Wanna → Add details, including optional plans |
+
+The Profile page adds history to an existing surface. The place profile adds a
+Your visits section; its See all view reuses the history row. Both the general
+history and place-filtered history use the same editor. Avoid separate edit
+implementations for push, context, history and place profile.
+
+Editor title: **Edit visit**. The original date/time remains visible; the action
+is **Save changes**. Saving returns to that visit with a small **Changes saved**
+confirmation. The historical timestamp and position stay unchanged. Dismissing
+an editor with changes offers Keep editing / Discard changes.
+
+## Contextual invitation and push reminder
+
+Recommended contextual card, shown privately on the next eligible Map return:
+
+> Your recent check-in
+>
+> Juniper Coffee · Today, 8:15 AM
+>
+> Want to add a rating, photo, or note?
+>
+> **Add details** · **Dismiss**
+
+Do not auto-open the editor. One card at a time; no overdue badges or repeated
+nagging for the same event. Dismiss suppresses that event's invitation and its
+pending push. The permanent history routes remain available.
+
+Push is a useful complementary experiment, particularly for someone who does
+not reopen the app soon. Suggested copy:
+
+> **Add details to your recent check-in**
+>
+> A rating, photo, or note—whenever you have a moment.
+
+Keep venue, time and personal content out of lock-screen copy. The destination
+shows the actual place/date after authorization. Never route a stale tap to the
+most recent visit as a substitute. A deleted/unavailable visit should explain
+that it is unavailable and offer history; signed-out users resume the same
+reference only after sign-in and owner checks.
+
+Proposed scheduling policy for review, not yet implemented:
+
+- Eligible: a quick capture with no optional content, created recently, still
+  owned by the user, with no prior invitation dismissal or detail edit. Missing
+  rating by itself never qualifies a visit.
+- Offer a separate Check-in reminders preference inside existing Notifications
+  settings. Respect both that preference and existing OS/app permission; do not
+  ask for permission in the few-second check-in path. The mock shows an enabled
+  example, not a decision to enable a new push type for all existing accounts.
+- Initial experiment: one push a few hours after capture, not after a backdated
+  visit timestamp. The next-day choice is an optional setting shown for review.
+- At most one reminder per visit and one per account per day, coordinated with
+  the existing notification budget. Hold during quiet hours; expire instead of
+  delivering a backlog. Exact delay, quiet hours and expiry need product approval.
+- Cancel on enrichment, explicit dismissal, deletion, opt-out or account change.
+  Recheck eligibility at send time, deduplicate across devices and never resend
+  because the reminder was ignored. Saving an intentional no-change edit also
+  suppresses further invitations for that visit.
+- In-app invitation and push share suppression state. A push already delivered
+  cannot be guaranteed retractable; a later tap must still resolve current state.
+  Opening a delivered reminder must not manufacture another check-in or rating.
+
+Benefit: more chances to capture useful memories while they are fresh. Cost:
+additional interruption and notification fatigue. Evaluate both incremental
+useful detail and opt-outs/dismissals against an in-app-only group. Low rating
+coverage alone is not a reason to increase reminders. Wanna planning stays
+separate from a visit-enrichment reminder.
+
+## Native prototype coverage
+
+`preview/rec-680/PreviewModels.swift` keeps optional rating state separate from
+its neutral slider position and updates history by stable event ID. The
+standalone model check covers untouched/midpoint/fractional/cleared ratings,
+notes without ratings, stable ID/time/order, preserved existing scores and
+invitation eligibility. It does not validate production persistence.
+
+The native harness includes actual buttons for Map invitation → editor,
+Profile → history → visit, place → its visits, save changes, removal of a rating,
+Wanna → editor, and reminder preview → event editor. Notes, time, audience,
+setting toggles and sample selections work in memory. Native photo import,
+friend invitations, full taxonomy/question customization, networking, durable
+drafts and the reminder scheduler are outside this design harness.
 
 ## Alternatives and tradeoffs
 
@@ -209,11 +325,31 @@ switch, Wanna independence, historical time/order, visibility/invitations,
 aggregate null exclusion and list/photo partial failures. Run the full native
 suite plus hosted rolled-back save/RLS checks for any touched RPC contract.
 
+## Prototype validation
+
+- Standalone native arm64 simulator compilation passed. Production targets,
+  schemas, analytics and notification delivery remain unchanged.
+- The focused Swift model check passed for nil/explicit/removed ratings and
+  exact-event update semantics. Production native/hosted tests were not run.
+- Simulator UI check: Save changes without touching the slider returned to the
+  same dated visit with **Changes saved** and **Not rated**; reopening preserved
+  that state. Further pointer/slider checks were not conclusive because a
+  concurrent simulator task changed the foreground window. Do not treat the
+  model check as validation of every native slider gesture or VoiceOver action.
+- Visual review covers iPhone 17 Pro and iPhone 17e on iOS 26.5, Light/Dark,
+  and accessibility1 text in the edit sheet. The larger-text screenshot gap from
+  the first exploration is resolved for that state. This is not a full
+  accessibility audit or a production QA sign-off.
+- Formal production engineering/design gates remain deferred: this package
+  changes only the proposal and isolated preview harness, not app runtime.
+
 ## Measure the tradeoff
 
 Use current `save_flow_opened/submitted/completed` events as a baseline. Any
 new properties/events need the existing analytics privacy review and tests.
-Suggested aggregate measurements: time to local save after resolved place,
+Suggested aggregate measurements: contextual invitation impressions/dismissals,
+reminder opt-outs, incremental enrichment versus an in-app-only group,
+time to local save after resolved place,
 completion/abandonment, quick vs expanded route, explicitly rated share,
 optional-field-group usage, enrichment within 24 hours / 7 days, edits versus
 new visits, duplicate/undo rate and sync failures. Compare cohort quality and
@@ -232,10 +368,12 @@ available. Rollout metrics are a proposal, not instrumentation added here.
 ## Decisions to settle before production
 
 - Accept compact capture as the default and retain a single optional full editor.
-- Require explicit rating selection for each new visit, including repeats.
+- Untouched sliders remain unrated on new visits, including repeats. This is a
+  confirmed design constraint; production end-to-end support is still required.
 - Use current account audience defaults and keep silent-save controls reachable
   before committing; do not silently widen visibility.
-- Keep later enrichment free of unsolicited reminders in the first version.
+- Settle reminder opt-in/defaults, delay, quiet hours and cross-channel frequency.
+  The revised proposal includes contextual invitations and optional push.
 - Make existing celebration behavior nonblocking on the quick path.
 - Define historical date precision if adding date-only or approximate inputs.
 
@@ -248,3 +386,7 @@ Apple recommends minimizing manual input, using appropriate system context
 and offering choices where practical. The compact capture recommendation
 applies those principles while leaving subjective ratings unfilled.
 [Apple HIG: Entering data](https://developer.apple.com/design/human-interface-guidelines/entering-data).
+
+The native slider provides editing-began/ended callbacks as well as a value binding.
+The prototype uses deliberate interaction, not the displayed fallback value, to
+assign a rating. [Apple SwiftUI Slider](https://developer.apple.com/documentation/swiftui/slider/init(value:in:step:oneditingchanged:)).
