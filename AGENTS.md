@@ -382,6 +382,22 @@ Observability policy:
 - Respect safe areas, Dynamic Type, 44pt minimum tap targets, keyboard, and the home indicator.
 - iPhone-first. Do not stretch phone UI into desktop/iPad layouts without a specific side-panel plan.
 
+### Real in-app SwiftUI mockups
+
+- When Joe or Ryan asks for "real in-app SwiftUI mockups," render the proposed
+  changes inside the actual app target and existing screens. Reuse the shipping
+  SwiftUI views, navigation, design tokens, typography, controls, and layout.
+- Preserve the surrounding app UI. Change only the surfaces required by the
+  feature under review; do not recreate the app shell or substitute a standalone
+  SwiftUI approximation, HTML mock, or generated image.
+- Use isolated sample data and explicit simulator review routes when needed.
+  Capture the running app on the current and a smaller iPhone size, inspect the
+  results, and show the visuals. Clearly identify proposed additions and any
+  interactions that are only simulated.
+- If the actual app cannot be built or captured, state the blocker. Do not call
+  a substitute rendering a real in-app mockup. Standalone concepts are acceptable
+  only when explicitly requested as such.
+
 ## Brand And App Icon
 
 - The canonical public app name is `Astir` (formerly `rec.me` and `Wander`). Internal `Wander*` names, the

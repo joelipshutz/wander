@@ -2,35 +2,35 @@
 
 Status: proposal for review, not approved production behavior.
 Tracking: [REC-680](https://linear.app/recme/issue/REC-680/explore-quick-check-in-and-wanna-capture-with-optional-details-later).
-Source baseline: `743e990b05`. Native harness: `preview/rec-680/`.
+Source baseline: `743e990b05`. Review routes: `Wander/Features/Add/QuickCaptureReviewHost.swift`.
 
-## Native mockups
+## Actual app mockups
 
-The current review set covers the complete capture → return → exact-visit edit
-journey. These are native SwiftUI simulator captures of an isolated prototype,
-with fictional data. They are not screenshots of changed production behavior.
+These review states run inside the real `Wander` app target. They use
+`WanderRootView`, `MapPlaceSaveEditor`, the existing profile Activity navigation,
+`PlaceProfileFullScreen`, check-in ticket cards, `PlaceRatingSlider`, and
+`NotificationSettingsSheet`. The surrounding app layout, typography and controls
+come from those shipping views. The earlier standalone prototype and its boards
+are superseded; they were not a faithful visual reference for the app.
 
-![Contextual invitation, profile entry and check-in history](rec-680/return-and-history.jpg)
+The proposed additions are a compact editor state, a neutral unrated slider,
+a dismissible contextual invitation, an Add details action on an existing visit
+ticket, and a reminder preference in existing notification settings. Everything
+is gated by an explicit Debug simulator review route. Sample data and save
+callbacks are local to the review host. No production persistence, push scheduler,
+APNs delivery, analytics contract or backend schema is implemented by this PR.
 
-![Place profile, separate visits and a specific check-in](rec-680/specific-visit.jpg)
+![Current editor, quick capture and full editor](rec-680/actual-capture.jpg)
 
-![Untouched slider, explicit rating and updated original visit](rec-680/edit-and-rating.jpg)
+![Contextual invitation and existing activity history](rec-680/actual-return.jpg)
 
-![Push concept, reminder settings and exact-visit destination](rec-680/reminders.jpg)
+![Exact visit editing, optional details and reminder settings](rec-680/actual-details.jpg)
 
-![Quick, retrospective and detailed capture](rec-680/quick-capture-proposal.jpg)
+![Past visits and compact/expanded Wanna](rec-680/actual-wanna.jpg)
 
-![All optional fields, saved check-in and Wanna capture](rec-680/other-capture-paths.jpg)
+![Smaller iPhone](rec-680/actual-compact.jpg)
 
-![Wanna history, saved Wanna and optional planning editor](rec-680/wanna-return.jpg)
-
-![Compact phone and larger text](rec-680/adaptive-capture.jpg)
-
-![Dark invitation, Dark history and compact reminder settings](rec-680/adaptive-return.jpg)
-
-The notification concept is a SwiftUI preview, explicitly labeled in the
-harness. It is not a delivered OS notification or an APNs test. No reminders
-are scheduled. Settings demonstrate a possible preference, not a new default.
+Reproduction commands live in `preview/rec-680/README.md`.
 
 ## Recommendation
 
@@ -94,9 +94,9 @@ Nearby suggestions should never silently choose a venue or create a visit.
 | Useful details | Absent | Existing questions, Customize and per-answer visibility | Full catalog remains; no default answers |
 | Wanna plans | No date required | Planned date, people and existing supported detail | No false visit or rating |
 
-The native harness groups these controls to demonstrate hierarchy. It does
-not replace the production question catalog, media picker or friend chooser.
-Those should be reused during implementation. The revised native mock uses a
+The app review reuses the existing question catalog, media picker, friend
+chooser and list picker. Uploads, invitations and persistence still require
+production integration and regression coverage. The revised native mock uses a
 slider: neutral appearance and **Not rated** until the user interacts. The
 visual thumb position is independent of the optional stored rating. Opening
 the editor, scrolling past, or saving a note must not commit the midpoint. A
@@ -107,32 +107,27 @@ touch. This behavior must be verified in the production custom slider too.
 
 ## Returning to a specific visit
 
-All routes resolve the saved **visit ID** and its date/time. Place ID alone is
-insufficient: a person may have several visits to the same café, including
-multiple on one day. These navigation labels are proposed additions to the
-existing surfaces, not claims about currently shipped navigation.
+Use the navigation already in Astir. Profile has an Activity section and an
+Activity history screen with Check-ins / Wanna filters. A row opens the place's
+Check-in history. Each dated visit already has its own edit action. Add a
+clear **Add details** action to the owner's unrated visit ticket; do not invent
+another parallel history hierarchy.
 
-| Surface | Action | Destination |
+| Entry | Action | Destination |
 |---|---|---|
-| Save feedback | Add details | Editor for the event that just saved |
-| Next eligible Map return | Add details on private contextual invitation | Editor for the invitation's event |
-| Profile | Your check-ins | Chronological visit history, with place search |
-| Check-in history | Add details / Edit visit | Editor for that dated row |
-| Check-in history | Tap row | Specific visit page; Add details, Photos, Friends, More |
-| Place profile | Your visits → See all | Visits at that place, kept as distinct dated records |
-| Push notification | Tap | Editor for the exact referenced event after auth/ownership resolution |
-| Settings → Notifications | Check-in reminders | Reminder toggle and proposed timing preference |
-| Profile | Your Wanna | Saved Wanna → Add details, including optional plans |
+| After save | Add details | Editor for the just-saved visit |
+| Contextual map invitation | Add details | Editor for that exact visit |
+| Profile | Activity → Check-ins → dated row | Existing place history with dated visit tickets |
+| Place history | Add details or existing pencil | Existing editor for that ticket's visit |
+| Push notification | Tap | Same exact-visit editor after auth and ownership checks |
+| Settings → Notifications | Recent check-in reminders | Proposed preference alongside existing push types |
+| Profile | Activity → Wanna | Existing place history and Wanna editing |
 
-The Profile page adds history to an existing surface. The place profile adds a
-Your visits section; its See all view reuses the history row. Both the general
-history and place-filtered history use the same editor. Avoid separate edit
-implementations for push, context, history and place profile.
-
-Editor title: **Edit visit**. The original date/time remains visible; the action
-is **Save changes**. Saving returns to that visit with a small **Changes saved**
-confirmation. The historical timestamp and position stay unchanged. Dismissing
-an editor with changes offers Keep editing / Discard changes.
+The review preserves the app's current edit labels and controls. It does not
+introduce standalone Your visits, visit summary, or completion pages. During
+production implementation, deep links and history navigation should scroll to
+and highlight the referenced visit, especially when a place has many visits.
+Edits must keep the original visit ID and time unless the user changes the time.
 
 ## Contextual invitation and push reminder
 
@@ -173,7 +168,8 @@ Proposed scheduling policy for review, not yet implemented:
   ask for permission in the few-second check-in path. The mock shows an enabled
   example, not a decision to enable a new push type for all existing accounts.
 - Initial experiment: one push a few hours after capture, not after a backdated
-  visit timestamp. The next-day choice is an optional setting shown for review.
+  visit timestamp. Timing is a product decision; the mock shows the preference
+  and proposed copy, without adding a scheduling control.
 - At most one reminder per visit and one per account per day, coordinated with
   the existing notification budget. Hold during quiet hours; expire instead of
   delivering a backlog. Exact delay, quiet hours and expiry need product approval.
@@ -191,20 +187,17 @@ useful detail and opt-outs/dismissals against an in-app-only group. Low rating
 coverage alone is not a reason to increase reminders. Wanna planning stays
 separate from a visit-enrichment reminder.
 
-## Native prototype coverage
+## In-app review coverage
 
-`preview/rec-680/PreviewModels.swift` keeps optional rating state separate from
-its neutral slider position and updates history by stable event ID. The
-standalone model check covers untouched/midpoint/fractional/cleared ratings,
-notes without ratings, stable ID/time/order, preserved existing scores and
-invitation eligibility. It does not validate production persistence.
+The launch routes cover the current editor for comparison, compact check-in,
+past visit, full details, optional controls, compact and expanded Wanna,
+contextual invitation, Profile Activity, place history, exact-visit editing,
+and existing notification settings with a proposed reminder preference.
 
-The native harness includes actual buttons for Map invitation → editor,
-Profile → history → visit, place → its visits, save changes, removal of a rating,
-Wanna → editor, and reminder preview → event editor. Notes, time, audience,
-setting toggles and sample selections work in memory. Native photo import,
-friend invitations, full taxonomy/question customization, networking, durable
-drafts and the reminder scheduler are outside this design harness.
+The real editor's save callback is intercepted by the isolated review host. It
+updates a sample visit in memory, including an optional rating. No claim of
+production durable saving, offline recovery, remote invitation delivery, or
+scheduled reminders is made. Existing non-review behavior remains the baseline.
 
 ## Alternatives and tradeoffs
 
@@ -268,8 +261,8 @@ Required invariants for implementation:
 7. Adding friends later retains consent and acceptance rules. New invitations
    may notify their recipients; ordinary edits must not notify the whole audience
    again. Silent changes cannot retract already delivered notifications.
-8. Respect account-scoped defaults and private answers. The sample audience
-   in the mockup is Friends; it is not a change to the app's default privacy.
+8. Respect account-scoped defaults and private answers. The sample review uses the existing Stealth mode control; it is not a change
+   to account privacy defaults.
 9. Only show local success after durable local persistence. Show pending sync
    honestly and provide retry/error recovery. A failed enrichment leaves the
    original quick visit intact; list/photo failures remain recoverable separately.
@@ -325,23 +318,25 @@ switch, Wanna independence, historical time/order, visibility/invitations,
 aggregate null exclusion and list/photo partial failures. Run the full native
 suite plus hosted rolled-back save/RLS checks for any touched RPC contract.
 
-## Prototype validation
+## Review validation
 
-- Standalone native arm64 simulator compilation passed. Production targets,
-  schemas, analytics and notification delivery remain unchanged.
-- The focused Swift model check passed for nil/explicit/removed ratings and
-  exact-event update semantics. Production native/hosted tests were not run.
-- Simulator UI check: Save changes without touching the slider returned to the
-  same dated visit with **Changes saved** and **Not rated**; reopening preserved
-  that state. Further pointer/slider checks were not conclusive because a
-  concurrent simulator task changed the foreground window. Do not treat the
-  model check as validation of every native slider gesture or VoiceOver action.
-- Visual review covers iPhone 17 Pro and iPhone 17e on iOS 26.5, Light/Dark,
-  and accessibility1 text in the edit sheet. The larger-text screenshot gap from
-  the first exploration is resolved for that state. This is not a full
-  accessibility audit or a production QA sign-off.
-- Formal production engineering/design gates remain deferred: this package
-  changes only the proposal and isolated preview harness, not app runtime.
+The actual Wander Debug app builds successfully for the simulator. Focused
+native validation passed **20 tests, zero failures**: three review UI tests plus
+17 existing rating reaction/summary tests. The UI tests exercise compact and
+expanded untouched saves, a deliberate midpoint selection, editing an explicit
+rating, removing that rating, expansion into the existing editor, and Wanna
+without rating controls. The sample save preserves nil and an explicit 3.0.
+
+Screenshots were captured from the actual target on iPhone 17 Pro and iPhone
+17e (iOS 26.5). The final boards cover all review surfaces and the smaller-phone
+layout. Capture-script syntax, board composition and diff formatting also pass.
+Raw images and test results remain in the issue's evidence directory outside
+the worktree; only the five final boards are retained here.
+
+This is development review tooling. The full app test suite, production
+rating/save pipeline, hosted RPC checks and push delivery were not exercised.
+Those remain required for feature implementation. The earlier standalone
+model checks do not validate these actual app routes.
 
 ## Measure the tradeoff
 
@@ -377,8 +372,10 @@ available. Rollout metrics are a proposal, not instrumentation added here.
 - Make existing celebration behavior nonblocking on the quick path.
 - Define historical date precision if adding date-only or approximate inputs.
 
-This exploration does not change production SwiftUI, schemas, analytics,
-notifications or account data, and does not authorize a TestFlight release.
+This exploration adds explicit Debug simulator routes to the actual SwiftUI
+target. It does not enable the proposed flows during ordinary app launches or
+change schemas, analytics, notification delivery or account data. It does not
+authorize a TestFlight release.
 
 ## External design reference
 
@@ -387,6 +384,6 @@ and offering choices where practical. The compact capture recommendation
 applies those principles while leaving subjective ratings unfilled.
 [Apple HIG: Entering data](https://developer.apple.com/design/human-interface-guidelines/entering-data).
 
-The native slider provides editing-began/ended callbacks as well as a value binding.
-The prototype uses deliberate interaction, not the displayed fallback value, to
-assign a rating. [Apple SwiftUI Slider](https://developer.apple.com/documentation/swiftui/slider/init(value:in:step:oneditingchanged:)).
+The app has a custom rating track. The review calls its interaction callback
+before checking whether the numeric value changed, so a deliberate midpoint tap
+counts while untouched display state remains unrated.

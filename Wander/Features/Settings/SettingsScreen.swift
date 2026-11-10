@@ -411,6 +411,9 @@ struct NotificationSettingsSheet: View {
     @EnvironmentObject private var backend: WanderBackend
     @EnvironmentObject private var pushNotifications: PushNotificationManager
     @EnvironmentObject private var calendarReservations: CalendarReservationManager
+    #if DEBUG
+    @State private var reviewDetailRemindersEnabled = true
+    #endif
     @State private var preferences = NotificationPreferences.allDisabled
     @State private var isLoading = false
     @State private var isSaving = false
@@ -432,6 +435,26 @@ struct NotificationSettingsSheet: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
+                    #if DEBUG
+                    if QuickCaptureReviewRoute.resolved() == .reminders {
+                        VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
+                            SettingsSectionTitle("Check-in details")
+                            notificationToggle(title: "Recent check-in reminders", systemImage: "ticket",
+                                binding: $reviewDetailRemindersEnabled)
+                            Text("A gentle reminder to add details later. Your check-in is already saved.")
+                                .font(AstirTypography.bodySmall).foregroundStyle(brandMode.secondaryText)
+                            Text("Add details to your recent check-in")
+                                .font(AstirTypography.control)
+                                .padding(WanderTheme.spacing3)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(brandMode.recessedBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusMedium))
+                        }
+                        .padding(WanderTheme.spacing3)
+                        .background(brandMode.raisedBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: WanderTheme.radiusLarge))
+                    }
+                    #endif
                     statusBlock
 
                     VStack(alignment: .leading, spacing: WanderTheme.spacing3) {

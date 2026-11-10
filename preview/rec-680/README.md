@@ -1,75 +1,65 @@
-# Quick capture and later editing — REC-680
+# REC-680 — actual app review routes
 
-A real native SwiftUI design harness, built as a separate simulator app outside
-the production target. Fictional places/people/lists, in-memory state, MapKit
-context. No account, analytics, backend writes or scheduled notifications.
+The mockups now run inside the **Wander app target**, using its existing screens
+and components. The previous standalone app is superseded. The explicit
+`-WanderQuickCaptureReview` route only resolves in Debug simulator builds.
+Fixtures, auth, analytics and save callbacks are isolated; no real account is used.
 
-## Build and run
+## Build and capture
+
+Run from the repository root with a dedicated, booted simulator:
 
 ```sh
-bash preview/rec-680/render-build.sh /private/tmp/rec680-native
-xcrun simctl install <simulator-id> /private/tmp/rec680-native/QuickCapturePreview.app
-xcrun simctl launch <simulator-id> com.astir.preview.quickcapture --screen invitation
+bash preview/rec-680/render-build.sh <simulator-uuid> <derived-data-path> <optional-package-cache>
+python3 preview/rec-680/capture.py <simulator-uuid> <capture-root>/large
+python3 preview/rec-680/capture.py <small-simulator-uuid> <capture-root>/compact --only quick,details,history,reminders,wanna
+swift preview/rec-680/compose.swift <capture-root> <board-output>
 ```
 
-Start with `invitation` to explore Map → Add details, or `profile` to explore
-Profile → Your check-ins → a dated visit. Tap the place profile's Your visits
-section to distinguish multiple check-ins at the same place. Save changes
-updates the selected event without changing its timestamp or history position.
+Install the same built app on both devices before capture. Do not reuse another
+active task's simulator. Raw captures belong outside individual worktrees.
+`capture.py --only quick,details --delay 12` supports focused reruns.
 
-## Deterministic launch states
+## Routes
 
-| Area | `--screen` values |
+| Area | Route |
 |---|---|
-| Capture | `quick`, `later`, `details`, `saved` |
-| Return | `invitation`, `profile`, `history`, `place`, `visits`, `visit` |
-| Editing | `edit`, `rated`, `options` (scrolled optional fields), `updated` |
-| Reminder | `notification` (clearly labeled concept), `reminders`, `push-edit` |
-| Wanna | `wanna`, `wanna-saved`, `wannas`, `wanna-detail`, `wanna-edit`, `wanna-details` |
+| Existing UI comparison | `baselineMap`, `baselineEditor` |
+| Compact and full capture | `quick`, `past`, `details`, `options` |
+| Wanna | `wanna`, `wannaDetails` |
+| Return | `saved`, `invitation`, `history`, `placeHistory`, `edit` |
+| Existing notification settings | `reminders` |
 
-Terminate between deterministic states. Add `--dark` or `--large-text`
-(accessibility1) for adaptive captures. Large text is applied to the sheet too.
-
-The native slider reads an optional `PreviewRating`: its neutral visual value
-is 3 but its stored value is nil. Opening or saving without touching it never
-rates a visit. Touching the thumb deliberately selects the midpoint; adjustment
-selects half points. Remove rating restores nil. An existing explicit score is
-preserved when editing other fields.
-
-Notes, dates, audience, reminder preference, sample selections and navigation
-work in memory. Notification preview taps route to the sample event editor;
-this is not an APNs or OS banner test. Photo uploads, invitations, full question
-customization, sync and durable drafts reuse production contracts in a future
-implementation. Discover and unrelated profile capabilities are outside this
-scoped harness. `Friends` is the sample account audience, not a global default.
-
-## Model check
+Manual launch:
 
 ```sh
-xcrun swiftc preview/rec-680/PreviewModels.swift preview/rec-680/check-model.swift \
-  -o /private/tmp/rec680-model-check
-/private/tmp/rec680-model-check
+xcrun simctl launch <simulator-uuid> com.grayline.wander \
+  -WanderQuickCaptureReview quick -WanderAuthenticatedUITest \
+  -WanderUseDemoFixtures -WanderDisableWalkthroughs -WanderUnifiedLiveUITest
 ```
 
-Covers untouched/midpoint/fractional/cleared ratings, notes without ratings,
-stable ID/time/order during edits, existing-score preservation and invitation
-eligibility. It does not validate the production save boundary.
+The compact sheet expands the **same real editor**. The rating's neutral thumb
+is not a value: untouched saves submit nil; a deliberate midpoint tap counts;
+Remove rating restores nil. Existing explicit ratings are preserved on edit.
+The review save callback updates the sample visit only. Production create/edit,
+remote sync, durable drafts and notification scheduling are not implemented.
 
-## Reproduce screenshots
+Profile Activity and the place's Check-in history are existing app screens.
+The added ticket action and contextual invitation open the exact sample visit.
+Reminder copy appears within the actual Notifications sheet; it is not a
+screenshot of an OS push notification, and no push is sent or scheduled.
 
-Use dedicated booted simulators; do not interrupt another task's devices.
+Focused interaction coverage is in `WanderUITests/QuickCaptureReviewUITests.swift`.
+Run it on a dedicated simulator with the same build/package paths:
 
 ```sh
-python3 preview/rec-680/capture.py <large-simulator-id> /private/tmp/rec680-captures/large
-python3 preview/rec-680/capture.py <compact-simulator-id> /private/tmp/rec680-captures/compact --compact
-swift preview/rec-680/compose.swift /private/tmp/rec680-captures /private/tmp/rec680-boards
+xcodebuild test -project Wander.xcodeproj -scheme Wander -configuration Debug \
+  -destination 'platform=iOS Simulator,id=<simulator-uuid>' \
+  -derivedDataPath <derived-data-path> \
+  -only-testing:WanderUITests/QuickCaptureReviewUITests \
+  -only-testing:WanderTests/PlaceRatingReactionTests \
+  -only-testing:WanderTests/PlaceRatingSummariesTests \
+  -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO ONLY_ACTIVE_ARCH=YES
 ```
 
-The capture script supports `--only invitation,edit` and `--delay 20` for slower
-startup. Inspect resulting images; process completion alone does not guarantee
-that a sheet finished appearing. Board composition only scales the original
-simulator images and adds captions. Raw images stay outside Git; final boards
-must pass `scripts/check-review-storage.py`.
-
-See [the proposal](../../docs/designs/rec-680-quick-capture.md) for the complete
-screen set, product tradeoffs, event identity, reminder policy and rollout.
+Final validation and visual boards: [proposal](../../docs/designs/rec-680-quick-capture.md).
