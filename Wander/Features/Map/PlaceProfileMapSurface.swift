@@ -1801,10 +1801,12 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var providerPhoto: PlacePhoto?
+    @State private var isLoadingProviderPhoto = true
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
     @State private var galleryHasMore = true
     @State private var isLoadingGallery = false
+    @State private var hasLoadedGallery = false
     @State private var selectedHeaderPhotoID: String?
     @State private var viewerRoute: PlacePhotoGalleryViewerRoute?
     @StateObject private var presentedGallery = PlacePhotoGalleryState()
@@ -1822,6 +1824,7 @@ private struct PlaceProfileFullView: View {
                         PlaceProfileMapHeader(
                             place: place,
                             photos: galleryItems,
+                            isLoadingPhotos: isLoadingProviderPhoto || isLoadingGallery || !hasLoadedGallery,
                             selectedPhotoID: $selectedHeaderPhotoID,
                             topInset: headerTopInset,
                             onOpenPhoto: { photoID in
@@ -2082,14 +2085,17 @@ private struct PlaceProfileFullView: View {
     private func reloadProviderPhoto() async {
         if place.id.hasPrefix("walkthrough_place_") {
             providerPhoto = nil
+            isLoadingProviderPhoto = false
             reconcileSelectedPhoto()
             return
         }
 
+        isLoadingProviderPhoto = true
         providerPhoto = nil
         let resolvedProvider = await resolvedProviderPhoto()
         guard !Task.isCancelled else { return }
         providerPhoto = resolvedProvider
+        isLoadingProviderPhoto = false
         reconcileSelectedPhoto()
     }
 
@@ -2099,6 +2105,7 @@ private struct PlaceProfileFullView: View {
             galleryCursor = nil
             galleryHasMore = false
             isLoadingGallery = false
+            hasLoadedGallery = true
             reconcileSelectedPhoto()
             return
         }
@@ -2113,6 +2120,7 @@ private struct PlaceProfileFullView: View {
         galleryCursor = firstPage?.nextCursor
         galleryHasMore = firstPage?.hasMore ?? false
         isLoadingGallery = false
+        hasLoadedGallery = true
         reconcileSelectedPhoto()
     }
 
@@ -3339,6 +3347,7 @@ private struct PlaceProfileMapHeader: View {
 
     let place: PlaceSheetPlace
     let photos: [PlacePhotoGalleryItem]
+    let isLoadingPhotos: Bool
     @Binding var selectedPhotoID: String?
     let topInset: CGFloat
     let onOpenPhoto: (String) -> Void
@@ -3349,27 +3358,27 @@ private struct PlaceProfileMapHeader: View {
 
     var body: some View {
         ZStack {
-            if visualStyle == .astir {
-                AstirPlacePhotoAsset(stableKey: place.id)
-                    .accessibilityLabel("Photo of \(place.name)")
-            } else {
-                mapFallback
-            }
-
             if !photos.isEmpty {
                 photoPager
-            }
 
-            LinearGradient(
-                colors: [
-                    WanderTheme.surfaceBone.color.opacity(0.16),
-                    WanderTheme.surfaceBone.color.opacity(0.0),
-                    WanderTheme.surfaceBone.color.opacity(0.72)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .allowsHitTesting(false)
+                LinearGradient(
+                    colors: [
+                        WanderTheme.surfaceBone.color.opacity(0.16),
+                        WanderTheme.surfaceBone.color.opacity(0.0),
+                        WanderTheme.surfaceBone.color.opacity(0.72)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+            } else if isLoadingPhotos {
+                PlaceProfilePhotoLoadingIndicator()
+            } else {
+                Text("No photos available")
+                    .font(AstirTypography.metadata)
+                    .foregroundStyle(astirBrandMode.secondaryText)
+                    .accessibilityIdentifier("place-profile.photos-unavailable")
+            }
 
             if let selectedPhoto {
                 VStack {
@@ -3400,8 +3409,9 @@ private struct PlaceProfileMapHeader: View {
             }
 
         }
+        .frame(maxWidth: .infinity)
         .frame(height: 214 + topInset)
-        .background(WanderTheme.surfaceSand.color)
+        .background(astirBrandMode.background)
         .clipped()
     }
 
@@ -3419,6 +3429,7 @@ private struct PlaceProfileMapHeader: View {
                                 placeName: place.name,
                                 photoRequest: place.photoRequest,
                                 variant: .profile,
+                                showsLoadingIndicator: true,
                                 onLoadFailure: onPhotoLoadFailure
                             )
                             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -3488,32 +3499,10 @@ private struct PlaceProfileMapHeader: View {
         return "Open place photo of \(place.name) full screen"
     }
 
-    @ViewBuilder
-    private var mapFallback: some View {
-        if let latitude = place.latitude, let longitude = place.longitude {
-            Map(position: .constant(.region(headerRegion(latitude: latitude, longitude: longitude)))) {
-                Annotation(place.name, coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) {
-                    PlaceProfileCategoryThumb(emoji: place.categoryEmoji, size: 54)
-                        .shadow(color: WanderTheme.textInk.color.opacity(0.22), radius: 8, x: 0, y: 4)
-                }
-            }
-            .mapStyle(.standard(elevation: .flat, emphasis: .muted))
-            .allowsHitTesting(false)
-        } else {
-            PlaceProfileMapFallback()
-        }
-    }
-
     static func resolvedTopInset(from safeAreaTopInset: CGFloat) -> CGFloat {
         max(safeAreaTopInset, minimumFullBleedTopInset)
     }
 
-    private func headerRegion(latitude: Double, longitude: Double) -> MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-        )
-    }
 }
 
 struct PlaceProfilePhotoImage: View {
@@ -3523,6 +3512,7 @@ struct PlaceProfilePhotoImage: View {
     var photoRequest: PlacePhotoRequest? = nil
     var variant: PlacePhotoRenderVariant = .profile
     var contentMode: ContentMode = .fill
+    var showsLoadingIndicator = false
     var onLoadFailure: ((PlacePhoto) -> Void)? = nil
     @EnvironmentObject private var backend: WanderBackend
     @Environment(\.displayScale) private var displayScale
@@ -3553,7 +3543,9 @@ struct PlaceProfilePhotoImage: View {
                         .clipped()
                         .transition(.opacity)
                         .accessibilityLabel("Photo of \(placeName)")
-                    }
+                } else if showsLoadingIndicator {
+                    PlaceProfilePhotoLoadingIndicator()
+                }
             }
             .task(id: currentRenderKey) {
                 await loadImage(
@@ -3630,6 +3622,19 @@ struct PlaceProfilePhotoImage: View {
 
 }
 
+private struct PlaceProfilePhotoLoadingIndicator: View {
+    @Environment(\.astirBrandMode) private var astirBrandMode
+
+    var body: some View {
+        ProgressView()
+            .progressViewStyle(.circular)
+            .controlSize(.large)
+            .tint(astirBrandMode.secondaryText)
+            .accessibilityLabel("Loading place photo")
+            .accessibilityIdentifier("place-profile.photo-loading")
+    }
+}
+
 private struct PlaceProfileLoadedImage {
     let key: String
     let image: UIImage
@@ -3658,36 +3663,6 @@ private struct PlaceProfilePhotoThumb: View {
             }
         }
         .frame(width: size, height: size)
-    }
-}
-
-private struct PlaceProfileMapFallback: View {
-    var body: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [WanderTheme.surfaceSand.color, WanderTheme.skyTint.color.opacity(0.55)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                Canvas { context, size in
-                    let gridColor = WanderTheme.textInk.color.opacity(0.08)
-                    for x in stride(from: 0, through: size.width, by: 42) {
-                        var path = Path()
-                        path.move(to: CGPoint(x: x, y: 0))
-                        path.addLine(to: CGPoint(x: x, y: size.height))
-                        context.stroke(path, with: .color(gridColor), lineWidth: 1)
-                    }
-                    for y in stride(from: 0, through: size.height, by: 42) {
-                        var path = Path()
-                        path.move(to: CGPoint(x: 0, y: y))
-                        path.addLine(to: CGPoint(x: size.width, y: y))
-                        context.stroke(path, with: .color(gridColor), lineWidth: 1)
-                    }
-                }
-            )
     }
 }
 

@@ -5,6 +5,129 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceTests: XCTestCase {
+    func testProfileSpinnerCoversMetadataAndImageLoadingThenStopsOnSuccess() async throws {
+        try await withPhotoProfile { window, repository in
+            try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
+            try await self.waitUntil { self.photoSpinners(in: window).count == 1 }
+            self.capturePhotoProfile(window, name: "Photo metadata loading")
+            try self.assertPlainPhotoHeader(window)
+
+            repository.finishGallery()
+            repository.finishMetadata()
+            try await self.waitUntil { repository.image != nil }
+            try await self.waitUntil { self.photoSpinners(in: window).count == 1 }
+            self.capturePhotoProfile(window, name: "Photo image loading")
+            try self.assertPlainPhotoHeader(window)
+
+            let image = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
+                UIColor.green.setFill()
+                context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+            }
+            repository.finishImage(data: try XCTUnwrap(image.pngData()))
+            try await self.waitUntil { self.photoSpinners(in: window).isEmpty }
+            self.capturePhotoProfile(window, name: "Photo loaded")
+            let pixel = try self.photoHeaderPixel(window, x: 60)
+            XCTAssertGreaterThan(Int(pixel[1]) - Int(pixel[0]), 80, "The decoded photo must replace the loading surface.")
+        }
+    }
+
+    func testProfileSpinnerWaitsForBothPhotoSourcesAndStopsWhenNeitherHasAPhoto() async throws {
+        try await withPhotoProfile { window, repository in
+            try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
+            repository.finishMetadata(error: URLError(.resourceUnavailable))
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertEqual(self.photoSpinners(in: window).count, 1, "User photos are still pending.")
+            repository.finishGallery()
+            try await self.waitUntil { self.photoSpinners(in: window).isEmpty }
+            self.capturePhotoProfile(window, name: "No photos available")
+            try self.assertPlainPhotoHeader(window)
+        }
+    }
+
+    func testProfileSpinnerStopsWhenPhotoBytesCannotBeDecoded() async throws {
+        try await withPhotoProfile { window, repository in
+            try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
+            repository.finishGallery()
+            repository.finishMetadata()
+            try await self.waitUntil { repository.image != nil }
+            repository.finishImage(data: Data([0, 1, 2]))
+            try await self.waitUntil { self.photoSpinners(in: window).isEmpty }
+            self.capturePhotoProfile(window, name: "Photo download failed")
+            try self.assertPlainPhotoHeader(window)
+        }
+    }
+
+    private func withPhotoProfile(_ verify: (UIWindow, ProfileLoadingPhotoRepository) async throws -> Void) async throws {
+        let repository = ProfileLoadingPhotoRepository()
+        let store = WanderStore(fixtures: .empty())
+        let place = PlaceSheetPlace(candidate: PlaceCandidate(id: UUID().uuidString,
+            name: "Loading cafe", category: "cafe", latitude: nil, longitude: nil,
+            sourceProvider: "fixture", sourceProviderPlaceID: UUID().uuidString, confidence: 1))
+        let root = PlaceProfileFullScreen(place: place, saves: [], tasteSaves: [],
+            currentUserID: store.currentUser.id, action: .none, onBack: {}, onAction: {})
+            .environmentObject(store)
+            .environmentObject(WanderBackend(placePhotoRepository: repository))
+            .environmentObject(AuthSessionStore(provider: PreviewAuthSessionProvider()))
+            .environmentObject(PlaceSaveDraftStore(persistence: .ephemeral))
+            .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
+            .environment(\.scenePhase, .active)
+            .astirAdaptiveBrandMode()
+        let window = try makeTestWindow(size: UIScreen.main.bounds.size)
+        let previous = window.windowScene?.windows.first(where: \.isKeyWindow)
+        window.overrideUserInterfaceStyle = .light
+        window.rootViewController = UIHostingController(rootView: root)
+        window.makeKeyAndVisible()
+        defer {
+            repository.cancelPending()
+            window.isHidden = true
+            window.rootViewController = nil
+            previous?.makeKey()
+        }
+        try await verify(window, repository)
+    }
+
+    private func photoSpinners(in view: UIView) -> [UIActivityIndicatorView] {
+        let own = (view as? UIActivityIndicatorView).map { $0.isAnimating ? [$0] : [] } ?? []
+        return own + view.subviews.flatMap { photoSpinners(in: $0) }
+    }
+
+    private func capturePhotoProfile(_ window: UIWindow, name: String) {
+        window.layoutIfNeeded()
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let attachment = XCTAttachment(image: image)
+        attachment.name = "REC688 \(Int(window.bounds.width)) \(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    private func photoHeaderPixel(_ window: UIWindow, x: CGFloat) throws -> [UInt8] {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1), format: format).image { context in
+            context.cgContext.translateBy(x: -x, y: -175)
+            window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        try pixel.withUnsafeMutableBytes { bytes in
+            let context = try XCTUnwrap(CGContext(data: bytes.baseAddress, width: 1, height: 1,
+                bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(try XCTUnwrap(image.cgImage), in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return pixel
+    }
+
+    private func assertPlainPhotoHeader(_ window: UIWindow) throws {
+        for x in [CGFloat(30), 60, window.bounds.width - 60, window.bounds.width - 30] {
+            let pixel = try photoHeaderPixel(window, x: x)
+            for (actual, expected) in zip(pixel.prefix(3), [242, 233, 219]) {
+                XCTAssertLessThan(abs(Int(actual) - expected), 6, "Loading/empty headers must never show stock imagery.")
+            }
+        }
+    }
+
     func testCancelledProfileViewportRequestDoesNotReportRemoteError() async {
         for error: Error in [CancellationError(), URLError(.cancelled)] {
             let store = WanderStore(fixtures: .empty())
@@ -363,6 +486,64 @@ final class PlaceProfileAppearanceTests: XCTestCase {
         }
         XCTAssertEqual(Set(observations.values.map(\.identity)).count, 1,
                        "Changing appearance must retain the mounted profile's state.")
+    }
+}
+
+@MainActor
+private final class ProfileLoadingPhotoRepository: PlacePhotoRepository {
+    var metadata: CheckedContinuation<PlacePhoto, Error>?
+    var gallery: CheckedContinuation<PlacePhotoGalleryPage, Error>?
+    var image: CheckedContinuation<Data, Error>?
+    private let photoID = UUID().uuidString
+
+    func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        try await withCheckedThrowingContinuation { metadata = $0 }
+    }
+
+    func visibleUserPhoto(for request: PlacePhotoRequest) async throws -> PlacePhoto {
+        throw URLError(.resourceUnavailable)
+    }
+
+    func visiblePhotoGalleryPage(placeIDs: [String], after cursor: PlacePhotoGalleryCursor?, limit: Int) async throws -> PlacePhotoGalleryPage {
+        try await withCheckedThrowingContinuation { gallery = $0 }
+    }
+
+    func imageData(for photo: PlacePhoto) async throws -> Data {
+        try await withCheckedThrowingContinuation { image = $0 }
+    }
+
+    func finishMetadata(error: Error? = nil) {
+        let continuation = metadata
+        metadata = nil
+        if let error {
+            continuation?.resume(throwing: error)
+        } else {
+            continuation?.resume(returning: PlacePhoto(provider: "google_places", providerPlaceID: photoID,
+                photoURLString: "https://example.invalid/\(photoID)", width: 100, height: 100,
+                authorName: nil, authorProfileURLString: nil, authorAvatarURLString: nil,
+                sourcePhotoURLString: nil, flagContentURLString: nil,
+                storageBucket: nil, storagePath: nil, localAssetRef: nil))
+        }
+    }
+
+    func finishGallery() {
+        let continuation = gallery
+        gallery = nil
+        continuation?.resume(returning: PlacePhotoGalleryPage(items: [], nextCursor: nil, hasMore: false))
+    }
+
+    func finishImage(data: Data) {
+        let continuation = image
+        image = nil
+        continuation?.resume(returning: data)
+    }
+
+    func cancelPending() {
+        finishMetadata(error: CancellationError())
+        gallery?.resume(throwing: CancellationError())
+        gallery = nil
+        image?.resume(throwing: CancellationError())
+        image = nil
     }
 }
 
