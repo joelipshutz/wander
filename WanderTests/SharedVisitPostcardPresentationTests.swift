@@ -3,6 +3,25 @@ import XCTest
 
 @MainActor
 final class SharedVisitPostcardPresentationTests: XCTestCase {
+    func testSharedContributionsPreserveEachAuthorsRatingIncludingRatingWithoutNote() throws {
+        let source = post("source", actor: "alex", name: "Alex", note: "Owner note", rating: 3.5)
+        let accepted = post("accepted", actor: "sam", name: "Sam", rating: 4.5)
+        let unrated = post("unrated", actor: "lee", name: "Lee", note: "Note without rating")
+        let collection = try XCTUnwrap(SharedVisitPostCollection(groupID: "group", commentActivityID: source.id,
+            posts: [source, accepted, unrated]))
+        let presentation = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection,
+            viewerID: "viewer", permits: { _ in true }))
+        XCTAssertEqual(presentation.posts.first { $0.actor.id == "alex" }?.rating, 3.5)
+        XCTAssertEqual(presentation.posts.first { $0.actor.id == "sam" }?.rating, 4.5)
+        XCTAssertNil(presentation.posts.first { $0.actor.id == "sam" }?.note)
+        XCTAssertNil(presentation.posts.first { $0.actor.id == "lee" }?.rating)
+        XCTAssertEqual(presentation.posts.first { $0.actor.id == "lee" }?.note, "Note without rating")
+        let restricted = try XCTUnwrap(SharedVisitPostcardPresentation(collection: collection,
+            viewerID: "viewer", permits: { $0.id != "sam" }))
+        XCTAssertFalse(restricted.posts.contains { $0.actor.id == "sam" })
+        XCTAssertEqual(restricted.posts.compactMap(\.rating), [3.5])
+    }
+
     func testOneHeaderUsesCanonicalSourceAndBothAuthorizedNotesAndPhotoPile() throws {
         let source = post("source", actor: "alex", name: "Alex Example", note: "Source note", photos: ["source-photo"])
         let accepted = post("accepted", actor: "sam", name: "Sam Example", note: "Accepted note", photos: ["accepted-photo"])
@@ -104,13 +123,13 @@ final class SharedVisitPostcardPresentationTests: XCTestCase {
     private func profile(_ id: String, _ name: String) -> ProfileShell {
         .init(id: id, handle: id, displayName: name, avatarURL: nil, bio: nil, relationship: .mutual)
     }
-    private func post(_ id: String, actor: String, name: String, note: String? = nil, photos: [String] = []) -> FeedActivity {
+    private func post(_ id: String, actor: String, name: String, note: String? = nil, rating: Double? = nil, photos: [String] = []) -> FeedActivity {
         let place = LocalPlace(localID: "shared-place", canonicalName: "Example Café", category: "coffee", latitude: 0, longitude: 0)
         let parent = LocalUserPlace(localID: "save-\(actor)", userID: actor, placeID: place.id, status: .been,
             visibility: .followers, sourceType: "manual")
         return FeedActivity(id: id, kind: .placeBeen, actor: profile(actor, name),
             place: VisiblePlace(id: parent.id, place: place, userPlace: parent,
                 owner: LocalProfile(localID: actor, handle: actor, displayName: name)),
-            occurredAt: .distantPast, note: note, media: photos.map { .init(id: $0, accessibilityLabel: "Example photo") })
+            occurredAt: .distantPast, note: note, rating: rating, media: photos.map { .init(id: $0, accessibilityLabel: "Example photo") })
     }
 }

@@ -679,7 +679,7 @@ struct ActivityPostcardView: View {
 
     @ViewBuilder
     private var ratingBadge: some View {
-        if let rating = displayContext.rating {
+        if activeSharedGroupID == nil, let rating = displayContext.rating {
             HStack(spacing: 5) {
                 Image(systemName: "star.fill")
                     .accessibilityHidden(true)
@@ -828,11 +828,20 @@ struct ActivityPostcardView: View {
     @ViewBuilder private var sharedNotes: some View {
         if let presentation = sharedPresentation {
             ForEach(presentation.posts) { post in
-                if let note = post.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if post.rating != nil || post.note?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(post.actor.displayName).font(AstirTypography.label)
-                        Text("“\(note)”").font(AstirTypography.bodySmall)
-                            .fixedSize(horizontal: false, vertical: true)
+                        if let rating = post.rating {
+                            Label(PlaceRating.averageDisplay(rating), systemImage: "star.fill")
+                                .font(AstirTypography.label)
+                                .foregroundStyle(visualStyle == .astir ? astirBrandMode.accentText : WanderTheme.terracottaDark.color)
+                                .accessibilityLabel("\(post.actor.displayName)’s rating: \(PlaceRating.averageDisplay(rating)) out of 5")
+                                .accessibilityIdentifier("sharedVisit.post.\(post.id).rating")
+                        }
+                        if let note = post.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("“\(note)”").font(AstirTypography.bodySmall)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     .foregroundStyle(primaryText)
                     .padding(.horizontal, WanderTheme.spacing3).padding(.vertical, 10)
