@@ -111,9 +111,11 @@ jobs:
   native-main:
     if: ${{ !inputs.compact_only && !inputs.continuity_only && !inputs.continuity_remaining_only }}
     runs-on: macos-26
-    # Large-phone units, import stress and Replay retain their existing budget.
+    # Cold builds, large-phone units and all three imports can consume 90+ minutes.
+    # Leave bounded room for the four isolated Replay scenarios and evidence export.
+    # Individual test execution and measured performance budgets remain unchanged.
     # Compact UI has an independent runner so this work cannot consume its time.
-    timeout-minutes: 100
+    timeout-minutes: 130
     steps:
       - uses: actions/checkout@v4
         with:
