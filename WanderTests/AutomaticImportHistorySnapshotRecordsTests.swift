@@ -42,6 +42,7 @@ final class AutomaticImportHistorySnapshotRecordsTests: XCTestCase {
     func testEveryVisitFieldInvalidatesOnlyItsOwnRecord() throws {
         let mutations: [(String, (LocalPlaceVisit) -> Void)] = [
             ("senderNotificationJSON", { $0.senderNotificationJSON = "{\"changed\":true}" }),
+            ("detailsPending", { $0.detailsPending = true }),
             ("localID", { $0.localID = "changed-local" }),
             ("serverID", { $0.serverID = "changed-server" }),
             ("userPlaceID", { $0.userPlaceID = "changed-parent" }),

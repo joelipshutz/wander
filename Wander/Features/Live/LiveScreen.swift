@@ -815,13 +815,13 @@ struct LiveScreen: View {
         LiveFeedDrawer(height: height, minimum: max(70, drawerHeaderHeight),
                        middle: self.height(for: 1, available: mapSize.height), maximum: max(height, mapSize.height),
                        detent: detent, enabled: !showsFeedDestination,
-                       dragHandleHeight: 24, onDetent: { changeDetent($0) }) {
+                       onDetent: { changeDetent($0) }) { dragGesture in
             if !showsFeedDestination {
                 VStack(spacing: 0) {
                     LiveFeedHeader(scope: selection.feedLocationScope, summary: feedScopeSummary,
                         mapActivityCount: LiveMapPaging.countText(activity.count, complete: mapResults.complete),
                         showsReset: sharedFilterCount > 0, eventsAvailable: eventsAvailable,
-                        detent: detent, onScope: selectFeedLocation, onReset: resetSharedFilters,
+                        detent: detent, dragGesture: dragGesture, onScope: selectFeedLocation, onReset: resetSharedFilters,
                         onEvents: { showsEvents = true }, onInvite: { showsContactInvites = true },
                         onDetent: { changeDetent($0) })
                 }

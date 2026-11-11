@@ -1141,3 +1141,34 @@ and account change. Collapsing never writes a saved preference. Invite keeps
 the shelf available independently of contact permission/loading and hides it
 while filtering contacts. Existing follow and invite analytics contracts remain
 unchanged, including the historical `feed_people` invitation surface value.
+
+## REC-680 — quick capture and later visit details, 2026-11-10
+
+Check-in starts with a date-only When row, an Add details disclosure and Stealth
+mode below it. Expanding keeps the selected date and moves When into the full
+editor. All existing optional fields remain available. Wanna has the same quick
+capture pattern without a visit date or rating. Existing edits open the full
+editor. Repeat visits start with blank visit-specific details; existing visits
+and Wanna memories retain their own data when edited.
+
+Ratings are optional end to end. An untouched slider remains null even after
+opening details; explicitly touching the midpoint records 3. Removing a rating
+clears it. Historical saved ratings are unchanged. Version-1 unsaved drafts
+cannot distinguish a default midpoint from an intentional midpoint, so recovery
+clears that ambiguous value; other draft scores remain intact.
+
+Quick capture commits locally before background sync. Later enrichment, the
+contextual invitation, both history edit affordances and reminder links target
+the original visit ID. Per-visit serialized sync preserves newer edits when an
+older create response arrives. Dismissal and enrichment permanently resolve the
+visit's details invitation; stale retries cannot re-enroll it.
+
+Check-in reminders live with the other Push types and default on under the
+existing master push setting. They never request notification permission during
+capture. One eligible reminder waits about three hours from the original capture,
+respects 22:00–09:00 local quiet hours, expires after 48 hours, and reserves at
+most one recipient/local-day slot. Editing, dismissal, deletion or opt-out stops
+an unsent reminder; offline cancellation takes effect after sync. The contextual
+invitation remains available for recent eligible visits for seven days. Reminder
+copy is generic to avoid revealing a place on the lock screen; tapping opens the
+exact owned visit. The migration must precede deployment of the supporting app.

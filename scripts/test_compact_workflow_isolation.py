@@ -75,7 +75,8 @@ class CompactWorkflowIsolationTests(unittest.TestCase):
         for name in (FEED, PRIVACY):
             with self.subTest(workflow=name):
                 source, jobs = workflow(name)
-                for key, budget in (("native-main", 100), ("native-compact", 60)):
+                main_budget = 130 if name == FEED else 100
+                for key, budget in (("native-main", main_budget), ("native-compact", 60)):
                     self.assertNotIn("    needs:", jobs[key])
                     self.assertIn("    runs-on: macos-26\n", jobs[key])
                     self.assertIn(f"    timeout-minutes: {budget}\n", jobs[key])

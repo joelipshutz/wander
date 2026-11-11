@@ -4935,7 +4935,7 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-check-in\""))
         XCTAssertTrue(placeProfile.contains("\"place-profile.attached-wanna\""))
         XCTAssertTrue(placeProfile.contains(".accessibilityIdentifier(saveSheetAccessibilityIdentifier(for: context))"))
-        XCTAssertTrue(sheetWrapper.contains("static let compactHeight: CGFloat = 560"))
+        XCTAssertTrue(sheetWrapper.contains("static let compactHeight: CGFloat = 480"))
         XCTAssertTrue(sheetWrapper.contains("static let compactDetent = PresentationDetent.height(compactHeight)"))
         XCTAssertTrue(sheetWrapper.contains("[Self.compactDetent, .large]"))
         XCTAssertTrue(sheetWrapper.contains("selection: $selectedDetent"))

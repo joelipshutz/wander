@@ -287,7 +287,11 @@ final class LiveReviewContinuityUITests: XCTestCase {
         let tappedAt = ProcessInfo.processInfo.systemUptime
         let destinationDeadline = tappedAt + 10
         searchTarget.tap()
-        let searchBack = app.buttons["discover.searchBack"]
+        // This identifier belongs to one destination control. Stop traversing
+        // the native hierarchy at that control while measuring the response;
+        // verify uniqueness separately after the original deadline check.
+        let searchBackMatches = app.buttons.matching(identifier: "discover.searchBack")
+        let searchBack = searchBackMatches.firstMatch
         let reachedSearch = UIObservation.wait(timeout: max(0, destinationDeadline - ProcessInfo.processInfo.systemUptime)) {
             let exists = searchBack.exists
             return exists && ProcessInfo.processInfo.systemUptime <= destinationDeadline
@@ -302,6 +306,7 @@ final class LiveReviewContinuityUITests: XCTestCase {
                 queries: [("exact-Search-label", searchMatches)])
         }
         XCTAssertTrue(reachedSearch)
+        XCTAssertEqual(searchBackMatches.count, 1, "Search must expose one Back control")
         dismissFirstKeyboardTutorial(in: app)
         waitHittable(searchBack)
         assertEmbeddedDestinationFillsViewport(searchBack, in: app, topLimit: destinationTopLimit)

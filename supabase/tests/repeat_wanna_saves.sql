@@ -291,12 +291,14 @@ begin
   if exists(select 1 from public.feed_events where id=wanna_id)
     or exists(select 1 from public.user_places where id=parent_id and deleted_at is null) then
     raise exception 'Removed sole replacement Wanna left a ghost save'; end if;
-  -- Reanimate the container as a new check-in, then deliver an old Wanna create.
+  -- A deleted parent is no longer an editable identity. A new check-in resolves
+  -- the same provider place, then a stale Wanna create must still be rejected.
   other_visit_id := gen_random_uuid();
   set local role authenticated;
-  perform public.save_own_check_in(place_payload,
-    jsonb_build_object('id',parent_id,'status','been','visibility','self','source_type','manual','nearby_confirmed',false),
+  result := public.save_own_check_in(place_payload,
+    jsonb_build_object('status','been','visibility','self','source_type','manual','nearby_confirmed',false),
     '[]', jsonb_build_object('id',other_visit_id,'visited_at',now(),'note','New check-in','attribute_answers','[]'::jsonb));
+  if (result->>'user_place_id')::uuid <> parent_id then raise exception 'Provider re-save changed the parent identity'; end if;
   begin
     perform public.save_own_place_wanna(parent_id,payload);
     raise exception 'deleted-wanna-recreated';

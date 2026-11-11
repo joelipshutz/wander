@@ -11,6 +11,7 @@ struct LiveFeedHeader: View {
     let showsReset: Bool
     let eventsAvailable: Bool
     let detent: Int
+    let dragGesture: AnyGesture<DragGesture.Value>
     let onScope: (LiveFeedLocationScope) -> Void
     let onReset: () -> Void
     let onEvents: () -> Void
@@ -25,6 +26,9 @@ struct LiveFeedHeader: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 24)
                 .contentShape(Rectangle())
+                // The visible, accessible handle owns the native gesture.
+                // A separate overlay blocks its hit point and survives an empty header.
+                .gesture(dragGesture)
                 .accessibilityElement(children: .ignore)
                 .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel("Activity drawer, \(["collapsed", "half expanded", "expanded"][detent])")

@@ -369,6 +369,8 @@ final class WanderStore: ObservableObject {
     private var placeListsRefreshTask: (id: UUID, userID: String, task: Task<Void, Never>)?
     private var currentProfileRefreshTask: (id: UUID, userID: String, task: Task<Bool, Never>)?
     private var lastAppliedPlaceListsSnapshot: (userID: String, revision: UInt64, content: PlaceListsSnapshotContent)?
+    private var visitSyncTasks: [String: (id: UUID, task: Task<Bool, Never>)] = [:]
+
     private struct PlaceListsSnapshotContent: Equatable {
         let summaries: [RemotePlaceListSummary]
         let details: [RemotePlaceListDetail]
@@ -7546,7 +7548,8 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft] = [],
         visibility: PlaceVisibility? = nil,
         preservesPriorWanna: Bool = true,
-        senderNotificationPolicy: SenderNotificationPolicy = .standard
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        detailsPending: Bool = false
     ) -> LocalPlaceVisit? {
         let userPlace: LocalUserPlace
         if let localUserPlace = currentUserPlace(matching: userPlaceID) {
@@ -7575,7 +7578,8 @@ final class WanderStore: ObservableObject {
             localUpdatedAt: now,
             createdAt: now,
             updatedAt: now,
-            senderNotificationJSON: senderNotificationPolicy.persistedJSON
+            senderNotificationJSON: senderNotificationPolicy.persistedJSON,
+            detailsPending: detailsPending
         )
 
         if userPlace.status == .wannaGo && preservesPriorWanna {
@@ -7624,6 +7628,33 @@ final class WanderStore: ObservableObject {
         objectWillChange.send()
         persist()
         return visit
+    }
+
+    var pendingCheckInDetails: (LocalPlaceVisit, VisiblePlace)? {
+        let cutoff = Date.now.addingTimeInterval(-7 * 24 * 60 * 60)
+        let ownPlaces = currentUserVisiblePlaces
+        for visit in placeVisits.filter({
+            $0.detailsPending == true && $0.deletedAt == nil && $0.createdAt >= cutoff
+                && $0.ratingScore == nil && ($0.note ?? "").isEmpty
+        }).sorted(by: { $0.createdAt > $1.createdAt }) {
+            guard hasEditableVisitAnswers(visit),
+                  photos(for: visit.id).isEmpty,
+                  let own = ownPlaces.first(where: {
+                      [$0.userPlace.id, $0.userPlace.localID, $0.userPlace.serverID].contains(visit.userPlaceID)
+                  }) else { continue }
+            return (visit, own)
+        }
+        return nil
+    }
+
+    func dismissCheckInDetails(visitID: String) {
+        guard let visit = currentUserVisit(matching: visitID), visit.detailsPending == true else { return }
+        visit.detailsPending = false
+        visit.updatedAt = .now
+        visit.localUpdatedAt = visit.updatedAt
+        visit.syncStateRaw = visit.serverUpdatedAt == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
+        objectWillChange.send()
+        persist()
     }
 
     func canEditVisitAnswers(visitID: String) -> Bool {
@@ -7710,6 +7741,7 @@ final class WanderStore: ObservableObject {
                     : SyncState.pendingUpdate.rawValue
             }
         }
+        visit.detailsPending = false
         visit.updatedAt = now
         visit.localUpdatedAt = now
         visit.syncStateRaw = visit.serverID == nil ? SyncState.pendingCreate.rawValue : SyncState.pendingUpdate.rawValue
@@ -8541,13 +8573,14 @@ final class WanderStore: ObservableObject {
         attributes: [PlaceAttributeDraft]? = nil,
         requestsProductUpsell: Bool = true,
         isPrivateListCompanion: Bool = false,
-        senderNotificationPolicy: SenderNotificationPolicy = .standard
+        senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        detailsPending: Bool = false
     ) -> SaveResult {
         saveCandidate(candidate, status: status, visibility: visibility, note: note,
             sourceType: sourceType, ratingScore: ratingScore, visitedAt: visitedAt,
             plannedDate: plannedDate, attributes: attributes,
             requestsProductUpsell: requestsProductUpsell, isPrivateListCompanion: isPrivateListCompanion,
-            senderNotificationPolicy: senderNotificationPolicy, placeLookup: .unresolved)
+            senderNotificationPolicy: senderNotificationPolicy, detailsPending: detailsPending, placeLookup: .unresolved)
     }
 
     @discardableResult
@@ -8564,6 +8597,7 @@ final class WanderStore: ObservableObject {
         requestsProductUpsell: Bool = true,
         isPrivateListCompanion: Bool = false,
         senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        detailsPending: Bool = false,
         placeLookup: PlaceSaveLookup
     ) -> SaveResult {
         let resolvedVisibility = visibilityForSave(visibility)
@@ -8621,16 +8655,17 @@ final class WanderStore: ObservableObject {
             }
             if status == .been {
                 if previousStatus == .been || previousStatus == .wannaGo {
-                    _ = createVisit(
+                    let visit = createVisit(
                         userPlaceID: existing.id,
                         visitedAt: visitedAt,
                         note: note,
                         ratingScore: savedRatingScore,
                         attributes: attributeDrafts,
                         visibility: resolvedVisibility,
-                        senderNotificationPolicy: senderNotificationPolicy
+                        senderNotificationPolicy: senderNotificationPolicy,
+                        detailsPending: detailsPending
                     )
-                    return SaveResult(userPlaceID: existing.id, syncState: existing.syncState)
+                    return SaveResult(userPlaceID: existing.id, syncState: existing.syncState, visitID: visit?.id)
                 }
                 _ = createVisit(
                     userPlaceID: existing.id,
@@ -8639,7 +8674,8 @@ final class WanderStore: ObservableObject {
                     ratingScore: savedRatingScore,
                     attributes: attributeDrafts,
                     visibility: resolvedVisibility,
-                    senderNotificationPolicy: senderNotificationPolicy
+                    senderNotificationPolicy: senderNotificationPolicy,
+                    detailsPending: detailsPending
                 )
                 refreshUserPlaceVisitSummary(userPlaceID: existing.id)
             } else {
@@ -8695,15 +8731,17 @@ final class WanderStore: ObservableObject {
         if let attributes {
             replaceAttributes(for: userPlace.id, with: attributes, syncState: .pendingCreate)
         }
+        var createdVisit: LocalPlaceVisit?
         if status == .been {
-            _ = createVisit(
+            createdVisit = createVisit(
                 userPlaceID: userPlace.id,
                 visitedAt: visitedAt,
                 note: note,
                 ratingScore: savedRatingScore,
                 attributes: attributeDrafts,
                 visibility: resolvedVisibility,
-                senderNotificationPolicy: senderNotificationPolicy
+                senderNotificationPolicy: senderNotificationPolicy,
+                detailsPending: detailsPending
             )
         }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
@@ -8731,7 +8769,7 @@ final class WanderStore: ObservableObject {
         if requestsProductUpsell {
             productUpsellTriggerRequest = ProductUpsellTriggerRequest(trigger: .placeSaved)
         }
-        return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState)
+        return SaveResult(userPlaceID: userPlace.id, syncState: userPlace.syncState, visitID: createdVisit?.id)
     }
 
     func wannaSaves(for userPlace: LocalUserPlace) -> [PlaceWannaSave] {
@@ -9373,6 +9411,7 @@ final class WanderStore: ObservableObject {
         requestsProductUpsell: Bool = true,
         isPrivateListCompanion: Bool = false,
         senderNotificationPolicy: SenderNotificationPolicy = .standard,
+        detailsPending: Bool = false,
         backend: WanderBackend?
     ) async -> SaveResult {
         #if DEBUG
@@ -9390,7 +9429,8 @@ final class WanderStore: ObservableObject {
             attributes: attributes,
             requestsProductUpsell: requestsProductUpsell,
             isPrivateListCompanion: isPrivateListCompanion,
-            senderNotificationPolicy: senderNotificationPolicy
+            senderNotificationPolicy: senderNotificationPolicy,
+            detailsPending: detailsPending
         )
         #if DEBUG
         WanderDebugLog.sync.debug("direct save local row user_place=\(WanderDebugLog.shortID(localResult.userPlaceID), privacy: .public) local_sync_state=\(localResult.syncState.rawValue, privacy: .public)")
@@ -9413,7 +9453,7 @@ final class WanderStore: ObservableObject {
 
         if status == .been,
            let explicitVisit = visits(for: localResult.userPlaceID)
-            .first(where: { !$0.backfilledFromUserPlace && $0.syncState != .synced }) {
+            .first(where: { $0.id == localResult.visitID }) {
             let didSync = await syncVisit(visitID: explicitVisit.id, backend: backend)
             if didSync {
                 await refreshRemoteVisiblePlaces(backend: backend)
@@ -9429,7 +9469,8 @@ final class WanderStore: ObservableObject {
             return SaveResult(
                 userPlaceID: syncedUserPlace?.id ?? localResult.userPlaceID,
                 syncState: didSync ? .synced : .failed,
-                placeID: syncedPlace?.serverID
+                placeID: syncedPlace?.serverID,
+                visitID: explicitVisit.id
             )
         }
 
@@ -9779,16 +9820,52 @@ final class WanderStore: ObservableObject {
         return syncedCount
     }
 
+    /// A quick capture can be enriched while its initial request is in flight.
+    /// One writer per visit sends the newest durable snapshot after a stale ack.
     @discardableResult
     func syncVisit(visitID: String, backend: WanderBackend?) async -> Bool {
+        guard let backend, let visit = currentUserVisit(matching: visitID) else { return false }
+        let ownerID = currentUser.id
+        let generation = wannaRemovalAccountGeneration
+        let key = ownerID + ":" + generation.uuidString + ":" + visit.localID
+        while let active = visitSyncTasks[key] {
+            let result = await active.task.value
+            guard currentUser.id == ownerID, wannaRemovalAccountGeneration == generation else { return false }
+            if !result || visit.syncState == .synced { return result }
+            if visitSyncTasks[key]?.id == active.id { visitSyncTasks[key] = nil }
+        }
+        let operationID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            for _ in 0..<3 {
+                guard self.currentUser.id == ownerID, self.wannaRemovalAccountGeneration == generation,
+                      visit.deletedAt == nil else { return false }
+                switch await self.performVisitSync(visitID: visit.id, backend: backend) {
+                case .synced: return true
+                case .stale: continue
+                case .failed: return false
+                }
+            }
+            return false // Keep newer changes pending for ordinary outbox maintenance.
+        }
+        visitSyncTasks[key] = (operationID, task)
+        let result = await task.value
+        if visitSyncTasks[key]?.id == operationID { visitSyncTasks[key] = nil }
+        return currentUser.id == ownerID && wannaRemovalAccountGeneration == generation && result
+    }
+
+    private enum VisitSyncOutcome { case synced, stale, failed }
+
+    private func performVisitSync(visitID: String, backend: WanderBackend?) async -> VisitSyncOutcome {
+        let accountGeneration = wannaRemovalAccountGeneration
         guard let backend,
               let visit = placeVisits.first(where: { $0.deletedAt == nil && ($0.id == visitID || $0.localID == visitID || $0.serverID == visitID) }),
               let userPlace = userPlaces.first(where: { userPlace in
-                  userPlace.deletedAt == nil
+                  userPlace.userID == currentUser.id && userPlace.deletedAt == nil
                       && (userPlace.id == visit.userPlaceID || userPlace.localID == visit.userPlaceID || userPlace.serverID == visit.userPlaceID)
               })
         else {
-            return false
+            return .failed
         }
 
         guard userPlace.status == .been,
@@ -9796,7 +9873,7 @@ final class WanderStore: ObservableObject {
               userPlace.syncState != .serverDenied,
               userPlace.syncState != .tombstoned
         else {
-            return false
+            return .failed
         }
 
         if visit.backfilledFromUserPlace {
@@ -9807,20 +9884,20 @@ final class WanderStore: ObservableObject {
                     trigger: .signedInBackfill
                 )
                 guard case .succeeded = parentOutcome else {
-                    return false
+                    return .failed
                 }
             }
 
             guard let remoteUserPlaceID = userPlace.serverID else {
                 markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing remote user place id")
-                return false
+                return .failed
             }
-            return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend)
+            return await hydrateBackfilledVisit(visit, remoteUserPlaceID: remoteUserPlaceID, backend: backend) ? .synced : .failed
         }
 
         guard hasEditableVisitAnswers(visit) else {
             lastRemoteError = "Load this check-in's saved details before editing. Connect and try again."
-            return false
+            return .failed
         }
 
         if visit.serverID == nil {
@@ -9831,14 +9908,18 @@ final class WanderStore: ObservableObject {
 
         guard let checkInDraft = checkInDraft(for: visit.id, userPlace: userPlace) else {
             markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: "Missing check-in draft")
-            return false
+            return .failed
         }
 
+        let ownerID = currentUser.id
+        let submittedVersion = visit.localUpdatedAt
+        let parentVersion = userPlace.localUpdatedAt
         let writeKey = userPlace.localID
         activeUserPlaceWriteCounts[writeKey, default: 0] += 1
         defer { activeUserPlaceWriteCounts[writeKey, default: 1] -= 1 }
         do {
             let result = try await backend.saveCheckIn(checkInDraft)
+            guard currentUser.id == ownerID, wannaRemovalAccountGeneration == accountGeneration, visit.deletedAt == nil else { return .failed }
             if let placeID = result.saveResult.placeID {
                 markPlace(
                     localOrServerID: checkInDraft.userPlace.place.localID,
@@ -9849,8 +9930,9 @@ final class WanderStore: ObservableObject {
             markUserPlace(
                 userPlace,
                 serverID: result.saveResult.userPlaceID,
-                syncState: .synced
+                syncState: userPlace.localUpdatedAt == parentVersion ? .synced : .pendingUpdate
             )
+            guard visit.localUpdatedAt == submittedVersion else { return .stale }
             markPlaceVisit(
                 localOrServerID: visit.id,
                 serverID: result.visitResult.visitID,
@@ -9858,13 +9940,16 @@ final class WanderStore: ObservableObject {
                 result: result.visitResult
             )
             lastRemoteError = visit.lastSyncError
-            return true
+            return .synced
         } catch {
+            guard currentUser.id == ownerID, wannaRemovalAccountGeneration == accountGeneration,
+                  visit.deletedAt == nil else { return .failed }
+            guard visit.localUpdatedAt == submittedVersion else { return .stale }
             let message = remoteErrorMessage(error)
             markPlaceVisit(localOrServerID: visit.id, syncState: .failed, error: message)
             markUserPlace(userPlace, syncState: .failed, error: message)
             lastRemoteError = message
-            return false
+            return .failed
         }
     }
 
@@ -11428,7 +11513,8 @@ final class WanderStore: ObservableObject {
                     syncState: .synced,
                     createdAt: result.createdAt ?? result.visitedAt,
                     updatedAt: result.updatedAt ?? result.visitedAt,
-                    attributeAnswersAreComplete: result.attributeAnswersJSON != nil
+                    attributeAnswersAreComplete: result.attributeAnswersJSON != nil,
+                    detailsPending: result.detailsPending ?? false
                 )
             )
         }
@@ -11447,6 +11533,7 @@ final class WanderStore: ObservableObject {
         visit.visitedAt = result.visitedAt
         visit.note = result.note
         visit.ratingScore = PlaceRating.normalized(result.ratingScore)
+        if let pending = result.detailsPending { visit.detailsPending = pending }
         if let answers = result.attributeAnswersJSON {
             visit.attributeAnswersJSON = answers
             visit.attributeAnswersAreComplete = true
@@ -11646,7 +11733,8 @@ final class WanderStore: ObservableObject {
                         syncState: .synced,
                         createdAt: result.createdAt ?? result.visitedAt,
                         updatedAt: result.updatedAt ?? result.visitedAt,
-                        attributeAnswersAreComplete: result.attributeAnswersJSON != nil
+                        attributeAnswersAreComplete: result.attributeAnswersJSON != nil,
+                    detailsPending: result.detailsPending ?? false
                     )
                 )
             }
@@ -12818,6 +12906,7 @@ final class WanderStore: ObservableObject {
             visit.visitedAt = result.visitedAt
             visit.note = result.note
             visit.ratingScore = result.ratingScore
+            if let pending = result.detailsPending { visit.detailsPending = pending }
             if let answers = result.attributeAnswersJSON {
                 visit.attributeAnswersJSON = answers
                 visit.attributeAnswersAreComplete = true
@@ -12907,6 +12996,8 @@ final class WanderStore: ObservableObject {
             ratingScore: visit.ratingScore,
             attributeAnswersJSON: visit.attributeAnswersJSON,
             backfilledFromUserPlace: visit.backfilledFromUserPlace,
+            capturedAt: visit.createdAt,
+            detailsPending: visit.detailsPending == true,
             senderNotificationPolicy: visit.senderNotificationPolicy
         )
     }

@@ -452,6 +452,13 @@ struct NotificationSettingsSheet: View {
                             binding: preferenceBinding(\.sharedVisitsEnabled) { NotificationPreferencesUpdate(sharedVisitsEnabled: $0) }
                         )
                         notificationToggle(
+                            title: "Check-in reminders",
+                            systemImage: "bell.badge",
+                            binding: preferenceBinding(\.checkInRemindersEnabled) {
+                                NotificationPreferencesUpdate(checkInRemindersEnabled: $0)
+                            }
+                        )
+                        notificationToggle(
                             title: "Saves from your map",
                             systemImage: "map",
                             binding: preferenceBinding(\.recommendationsEnabled) { NotificationPreferencesUpdate(recommendationsEnabled: $0) }

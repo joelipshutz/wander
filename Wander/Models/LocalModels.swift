@@ -392,6 +392,7 @@ final class LocalPlaceAttribute {
 
 @Model
 final class LocalPlaceVisit {
+    var detailsPending: Bool? = nil
     var senderNotificationJSON: String? = nil
     var senderNotificationPolicy: SenderNotificationPolicy {
         SenderNotificationPolicy.restored(from: senderNotificationJSON)
@@ -431,7 +432,9 @@ final class LocalPlaceVisit {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         deletedAt: Date? = nil,
-        attributeAnswersAreComplete: Bool = true, senderNotificationJSON: String? = nil) {
+        attributeAnswersAreComplete: Bool = true, senderNotificationJSON: String? = nil,
+        detailsPending: Bool = false) {
+        self.detailsPending = detailsPending
         self.senderNotificationJSON = senderNotificationJSON
         self.localID = localID
         self.serverID = serverID

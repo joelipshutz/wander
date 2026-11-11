@@ -1215,7 +1215,7 @@ final class MapHitTestingTests: XCTestCase {
         let invalidation = map[invalidationStart.lowerBound..<invalidationEnd.lowerBound]
         XCTAssertTrue(invalidation.contains("deferredMapNavigationGate.invalidate()"))
         XCTAssertTrue(invalidation.contains("initialCameraState.resolve()"))
-        XCTAssertTrue(invalidation.contains("case .place, .sharedVisit:"))
+        XCTAssertTrue(invalidation.contains("case .place, .checkInDetails, .sharedVisit:"))
 
         for userIntentHandler in [
             "private func clearMapSearchPreviewForEditing()",

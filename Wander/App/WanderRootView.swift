@@ -2463,7 +2463,7 @@ struct WanderRootView: View {
         case .people, .drafts: .profile
         case .importReview: .map
         case .list, .listInvite: .lists
-        case .place, .sharedVisit, .calendarReservation: .map
+        case .place, .checkInDetails, .sharedVisit, .calendarReservation: .map
         case .activityComments, .checkInComments, .question: .discover
         case .discover: .discover
         }
@@ -3291,6 +3291,9 @@ struct WanderRootView: View {
         case .sharedActivity(let activityID):
             selectedTab = .discover
             activityNavigation.openComments(activityID: activityID)
+        case .checkInDetails(let userPlaceID, let visitID):
+            selectedTab = .map
+            pushNotifications.route(to: .checkInDetails(userPlaceID: userPlaceID, visitID: visitID))
         case .checkInActivity(let userPlaceID, let visitID):
             selectedTab = .discover
             activityNavigation.openCheckIn(userPlaceID: userPlaceID, visitID: visitID)

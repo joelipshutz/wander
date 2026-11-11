@@ -289,6 +289,7 @@ enum NotificationDestination: Equatable {
     case place(id: String)
     case activityComments(id: String)
     case question(id: String)
+    case checkInDetails(userPlaceID: String, visitID: String)
     case checkInComments(userPlaceID: String, visitID: String)
     case sharedVisit(participantID: String, generation: Int)
     case calendarReservation(id: String)
@@ -925,6 +926,13 @@ final class PushNotificationManager: ObservableObject {
         let deeplink = (payload?["deeplink_url"] as? String).flatMap(URL.init(string:))
         let data = payload?["data"] as? [String: Any]
 
+        if notificationType == "check_in_reminder" {
+            guard let parentID = data?["user_place_id"] as? String,
+                  let visitID = data?["visit_id"] as? String,
+                  UUID(uuidString: parentID) != nil, UUID(uuidString: visitID) != nil else { return nil }
+            return .checkInDetails(userPlaceID: parentID, visitID: visitID)
+        }
+
         // Older pushes carry a place URL even when the exact post/visit is in
         // data. Prefer that identity so repeat check-ins never open another post.
         if ["activity_liked", "activity_commented", "followed_place_visit",
@@ -994,6 +1002,7 @@ final class PushNotificationManager: ObservableObject {
             "capture_ready",
             "calendar_reservation_follow_up",
             "calendar_reservation_live",
+            "check_in_reminder",
             "followed_activity_digest",
             "followed_place_visit",
             "followed_you",
@@ -1030,6 +1039,7 @@ final class PushNotificationManager: ObservableObject {
         case .place:
             return "place"
         case .question: return "question"
+        case .checkInDetails: return "check_in_details"
         case .activityComments, .checkInComments:
             return "activity_comments"
         case .sharedVisit:
@@ -1055,6 +1065,8 @@ final class PushNotificationManager: ObservableObject {
                 return .quickCapture
             case .sharedProfile(let profileID):
                 return .profile(id: profileID)
+            case .checkInDetails(let parentID, let visitID):
+                return .checkInDetails(userPlaceID: parentID, visitID: visitID)
             case .sharedPlace(let placeID):
                 return .place(id: placeID)
             case .sharedQuestion(let id):
