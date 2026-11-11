@@ -2171,7 +2171,9 @@ private struct PlaceProfileFullView: View {
                 "place photo unavailable place=\(WanderDebugLog.shortID(place.id), privacy: .public) error=\(WanderDebugLog.errorSummary(error), privacy: .public)"
             )
             #endif
-            return nil
+            // A failed refresh must not discard a real photo already available
+            // from the preview. Recheck freshness and session scope here.
+            return cachedProviderPhoto
         }
     }
 

@@ -69,6 +69,29 @@ final class PlaceProfileAppearanceTests: XCTestCase {
         return try XCTUnwrap(image.pngData())
     }
 
+    func testProfileKeepsFreshPreviewPhotoWhenMetadataRefreshFails() async throws {
+        try await withPhotoProfile(prepare: { backend, place, repository in
+            let task = Task { try await backend.placePhoto(for: place.photoRequest.rendering(.card)) }
+            try await self.waitUntil { repository.metadata != nil }
+            repository.finishMetadata()
+            let photo = try await task.value
+            _ = await PlacePhotoImagePipeline.shared.image(from: try self.greenPhotoData(),
+                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                photoKey: photo.cacheKey, targetPixelSize: 1440)
+        }) { window, repository in
+            try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
+            repository.finishGallery()
+            repository.finishMetadata(error: URLError(.notConnectedToInternet))
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertTrue(self.photoSpinners(in: window).isEmpty)
+            XCTAssertNil(repository.image, "The fresh cached photo must not download again after a failed refresh.")
+            let pixel = try self.photoHeaderPixel(window, x: 60)
+            XCTAssertGreaterThan(Int(pixel[1]) - Int(pixel[0]), 80,
+                "A failed refresh must preserve the already displayed real photo.")
+            self.capturePhotoProfile(window, name: "Warm photo retained after metadata failure")
+        }
+    }
+
     func testProfileSpinnerCoversMetadataAndImageLoadingThenStopsOnSuccess() async throws {
         try await withPhotoProfile { window, repository in
             try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
