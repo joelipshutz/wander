@@ -458,6 +458,7 @@ final class WanderStore: ObservableObject {
     @Published private(set) var liveFeedExpansionStage: LiveFeedExpansionStage = .selected
     @Published private(set) var feedPaginationRevision: UInt64 = 0
     private var liveFeedRequestedCursors = Set<String>()
+    private var liveFeedNeedsExpansionPage = false
     @Published private(set) var liveFeedSocialExpired = false
     private var liveFeedDisplayLease = LiveFeedDisplayLease()
     private var liveFeedLeaseTask: Task<Void, Never>?
@@ -2395,8 +2396,9 @@ final class WanderStore: ObservableObject {
 
     /// A committed Live query is session-only and independent of Profile data.
     /// Cancel before replacement; explicit nil restores the legacy Feed API.
-    func selectLiveFeedQuery(_ query: LiveFeedQuery?, preservingMatchingContent: Bool = false) {
-        guard liveFeedQuery != query else { return }
+    func selectLiveFeedQuery(_ query: LiveFeedQuery?, preservingMatchingContent: Bool = false,
+                             resettingContinuation: Bool = false) {
+        guard liveFeedQuery != query || (resettingContinuation && liveFeedExpansionStage != .selected) else { return }
         let retainedVisibleLimit = feedVisibleTileLimit
         resetFeedPagination()
         if preservingMatchingContent { feedVisibleTileLimit = retainedVisibleLimit }
@@ -2596,8 +2598,16 @@ final class WanderStore: ObservableObject {
         )
         guard !Task.isCancelled, currentUser.id == requestUserID,
               feedRefreshTask?.id == requestID else { return false }
-        followedFeedPage = resolvedPage
-        acceptLiveFeedAuthorization(resolvedPage, at: liveFeedClock(), replacing: true)
+        if let retainedPage, let query, liveFeedExpansionStage == .everywhere {
+            let tail = retainedPage.activity.filter {
+                !query.includes($0) && query.includes($0, through: .everywhere)
+                    && canDisplayLiveMapActivity($0)
+                    && liveFeedDisplayLease.permits(activityID: $0.id, isOwn: $0.actor.id == currentUser.id, at: liveFeedClock())
+            }
+            followedFeedPage = FollowedFeedPage(activity: resolvedPage.activity + tail,
+                featuredPlaces: [], nextCursor: retainedPage.nextCursor, fetchedAt: resolvedPage.fetchedAt)
+        } else { followedFeedPage = resolvedPage }
+        acceptLiveFeedAuthorization(resolvedPage, at: liveFeedClock(), replacing: retainedPage == nil)
         feedLoadState = .loaded
         lastFeedRefreshAt = page.fetchedAt
         seedFixtureActivityEngagement(for: page.activity)
@@ -3581,7 +3591,7 @@ final class WanderStore: ObservableObject {
         let members = allowed.map {
             LiveFeedSectionMember(activityID: $0.id, placeID: $0.place?.place.id,
                                   ticketKind: $0.resolvedTicketKind,
-                                  stage: query.expansionStage(for: $0))
+                                  stage: query.expansionStage(for: $0, through: liveFeedExpansionStage))
         }
         // Future envelopes have time-dependent grouping and sort behavior. Keep
         // rebuilding those reads, including the five-minute clock-skew edge.
@@ -3647,7 +3657,7 @@ final class WanderStore: ObservableObject {
     }
 
     var hasMoreFeed: Bool {
-        groupedFeedActivity.count > feedVisibleTileLimit || followedFeedPage?.nextCursor != nil
+        liveFeedNeedsExpansionPage || groupedFeedActivity.count > feedVisibleTileLimit || followedFeedPage?.nextCursor != nil
             || (followedFeedPage != nil && liveFeedQuery?.nextExpansion(after: liveFeedExpansionStage) != nil)
     }
 
@@ -3674,8 +3684,23 @@ final class WanderStore: ObservableObject {
         feedPaginationFailed = false
         feedVisibleTileLimit = FeedPagination.pageSize
         liveFeedExpansionStage = .selected
+        liveFeedNeedsExpansionPage = false
         liveFeedRequestedCursors.removeAll()
         feedPaginationRevision &+= 1
+    }
+
+    @discardableResult
+    func showLiveFeedActivityEverywhere(backend: WanderBackend?) async -> Bool {
+        guard let query = liveFeedQuery, query.polygon != nil || query.center != nil,
+              liveFeedExpansionStage == .selected, !hasMoreFeed,
+              followedFeedPage != nil, feedLoadState == .loaded,
+              feedRefreshTask == nil, feedPageTask == nil else { return false }
+        // Keep the selected page and row identities mounted. Only the next
+        // request drops geography, starts at its own first cursor, and appends.
+        liveFeedExpansionStage = .everywhere
+        liveFeedNeedsExpansionPage = true
+        liveFeedRequestedCursors.removeAll()
+        return await loadMoreFeed(backend: backend)
     }
 
     @discardableResult
@@ -3737,7 +3762,9 @@ final class WanderStore: ObservableObject {
                         // The server is authoritative; this guard also protects
                         // fixture parity and malformed/stale response payloads.
                         let filtered = FollowedFeedPage(
-                            activity: next.activity.filter(requestQuery.includes), featuredPlaces: [],
+                            activity: next.activity.filter {
+                                requestQuery.includes($0) && (acceptedStage != .everywhere || !query.includes($0))
+                            }, featuredPlaces: [],
                             nextCursor: next.nextCursor, fetchedAt: next.fetchedAt
                         )
                         page = FeedPagination.appending(filtered, to: currentPage)
@@ -3760,6 +3787,7 @@ final class WanderStore: ObservableObject {
                 )
                 let latest = self.followedFeedPage ?? currentPage
                 self.liveFeedExpansionStage = acceptedStage
+                self.liveFeedNeedsExpansionPage = false
                 self.liveFeedRequestedCursors = requestedCursors
                 self.followedFeedPage = self.displayableFeedPage(FeedPagination.appending(appended, to: latest))
                 self.acceptLiveFeedAuthorization(appended, at: authorizedAt ?? self.liveFeedClock(), replacing: false)

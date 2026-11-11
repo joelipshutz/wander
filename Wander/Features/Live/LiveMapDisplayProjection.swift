@@ -20,4 +20,8 @@ struct LiveMapDisplayProjection {
     }
 
     func pin(id: String?) -> LivePlacePin? { id.flatMap { pinByID[$0] } }
+
+    func places(in area: LiveDrawnArea) -> [VisiblePlace] {
+        pins.filter { area.contains(.init(latitude: $0.place.place.latitude, longitude: $0.place.place.longitude)) }.map(\.place)
+    }
 }

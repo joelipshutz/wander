@@ -341,11 +341,13 @@ enum FeedPresentation {
     ) -> [LiveFeedActivitySection] {
         let eligible = activity.filter { query.includes($0, through: stage) }
         var representedSharedGroups: Set<String> = []
-        return LiveFeedExpansionStage.allCases.filter {
-            $0.rawValue <= stage.rawValue && ($0 != .older || query.occurredAfter != nil)
-        }.map { sectionStage in
+        let stages: [LiveFeedExpansionStage] = stage == .everywhere ? [.selected, .everywhere]
+            : LiveFeedExpansionStage.allCases.filter {
+                $0 != .everywhere && $0.rawValue <= stage.rawValue && ($0 != .older || query.occurredAfter != nil)
+            }
+        return stages.map { sectionStage in
             let groups = groupedActivity(eligible.filter {
-                query.expansionStage(for: $0) == sectionStage
+                query.expansionStage(for: $0, through: stage) == sectionStage
             }, relativeTo: now).filter { group in
                 guard let sharedID = group.sharedVisitGroupID else { return true }
                 return representedSharedGroups.insert(sharedID).inserted

@@ -1117,7 +1117,8 @@ context for distant activity.
 Map area uses committed geography: Nearby radius, an applied drawn area, or
 Search this area. Panning alone does not commit a new area. Explicit areas
 replace Nearby and choosing Nearby clears an explicit area. Geographic changes
-preserve the Everywhere Feed query, pagination and scroll revision. Switching
+preserve the Everywhere Feed query, pagination and scroll revision, except that
+applying a drawn area explicitly selects Map area (REC-689 below). Switching
 Feed scope explicitly starts the corresponding query; bookmarks retain the choice.
 
 Feed pagination never silently broadens time, geography or shared filters.
@@ -1126,6 +1127,24 @@ when relevant. **Reset filters** is visible in the drawer whenever shared
 filters are active and clears them without changing the map area or Feed scope.
 **Clear area** removes an applied drawn/searched area separately. The Filters
 sheet follows the same reset contract, with changes staged until Apply.
+
+## REC-689 — drawn-area actions and Feed continuation, 2026-11-11
+
+Applying a drawn area selects **Feed: Map area** and uses the exact polygon for
+place activity and question posts. The circle control stays anchored left;
+**Add to list** followed by **Clear area** reveals to its right. Reduce Motion
+disables the slide and accessibility text can stack the actions. Add to list
+uses the existing multi-place picker for distinct map places inside the polygon
+after the applied map query has finished loading.
+
+The footer's **Show activity everywhere** appends geographically unrestricted
+activity below the existing posts and an **Activity everywhere** divider. It
+keeps shared filters, the fixed time window, authorization, row identities and
+scroll position. The original Map area section remains first, even when outside
+posts are newer; duplicate pages cannot repeat the selected posts. The header's
+Everywhere choice remains a replacement query. Reapplying an area or choosing
+Map area again closes the continuation; failed continuation loads retain the
+selected posts and expose the existing pagination retry.
 
 ## REC-682 — people discovery placement, 2026-11-10
 

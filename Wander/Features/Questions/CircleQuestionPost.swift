@@ -188,17 +188,33 @@ struct CircleQuestionFeedSection: View {
     @EnvironmentObject private var store: WanderStore
     @ObservedObject var state: CircleQuestionStore
     let userID: String
+    var locationQuery: LiveFeedQuery?
+    var outsideLocation = false
     @State private var selected: CircleQuestionPresentation?
     var body: some View {
         VStack(spacing: 16) {
-            ForEach(state.items.filter { !store.isBlockedBetweenCurrentUser(and: $0.author.id) }) { question in
+            ForEach(state.items.filter { !store.isBlockedBetweenCurrentUser(and: $0.author.id)
+                && matchesLocation($0) }) { question in
                 CircleQuestionCard(question: question, open: { selected = .init(question: question, action: "open") }, like: {
                     Task { _ = await state.perform { try await $0.setLike(questionID: question.id, liked: !question.liked) } }
                 }, comment: { selected = .init(question: question, action: "comment") }, share: { selected = .init(question: question, action: "share") }, privateReply: { selected = .init(question: question, action: "private") })
             }
-        }.task(id: userID) { state.analytics = store.productAnalytics; await state.load(userID: userID) }
-            .onChange(of: store.followedFeedPage?.fetchedAt) { _, _ in Task { await state.load(userID: userID) } }
+        }.task(id: userID) {
+            guard !outsideLocation else { return }
+            state.analytics = store.productAnalytics; await state.load(userID: userID)
+        }
+            .onChange(of: store.followedFeedPage?.fetchedAt) { _, _ in
+                if !outsideLocation { Task { await state.load(userID: userID) } }
+            }
             .sheet(item: $selected) { route in NavigationStack { CircleQuestionDetail(state: state, initial: route.question, initialAction: route.action) } }
+    }
+
+    private func matchesLocation(_ question: CircleQuestion) -> Bool {
+        guard let locationQuery, locationQuery.polygon != nil || locationQuery.center != nil else { return !outsideLocation }
+        let inside = question.draft.area.map {
+            locationQuery.includesLocation(latitude: $0.latitude, longitude: $0.longitude)
+        } ?? false
+        return outsideLocation ? !inside : inside
     }
 }
 
