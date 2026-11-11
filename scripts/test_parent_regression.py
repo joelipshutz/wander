@@ -618,8 +618,9 @@ class PerformanceProductsTests(unittest.TestCase):
 class ReplayFixtureHostTests(unittest.TestCase):
     @staticmethod
     def admission():
-        return {"schema": 1, "requested": True, "mode": "inert", "expected_host": True,
+        return {"schema": 2, "requested": True, "mode": "inert", "expected_host": True,
                 "inert_root_mounted": True, "ordinary_root_mounted": False,
+                "host_uses_noop_analytics": True,
                 "admitted": True, "elapsed_ms": 12, "limit_ms": 10000}
 
     @contextlib.contextmanager
@@ -654,6 +655,7 @@ class ReplayFixtureHostTests(unittest.TestCase):
         for field, value in [("requested", False), ("mode", "ordinary"), ("mode", "unknown"),
                              ("expected_host", False), ("inert_root_mounted", False),
                              ("ordinary_root_mounted", True), ("admitted", False),
+                             ("host_uses_noop_analytics", False), ("schema", 1),
                              ("elapsed_ms", -1), ("elapsed_ms", 10000),
                              ("elapsed_ms", 10001), ("limit_ms", 10001)]:
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
@@ -667,6 +669,7 @@ class ReplayFixtureHostTests(unittest.TestCase):
                 regression.validate_replay_host_admission(value)
         for field, value in [("schema", True), ("requested", 1), ("expected_host", "true"),
                              ("inert_root_mounted", 1), ("ordinary_root_mounted", 0),
+                             ("host_uses_noop_analytics", 1),
                              ("admitted", 1), ("elapsed_ms", True), ("elapsed_ms", 1.5),
                              ("limit_ms", 10000.0)]:
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):

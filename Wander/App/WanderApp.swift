@@ -43,6 +43,10 @@ enum ReplayFixtureHostPolicy {
     }
     static private(set) var inertRootMounted = false
     static private(set) var ordinaryRootMounted = false
+    static private(set) var hostUsesNoopAnalytics = false
+    static func recordHostAnalytics(_ client: AnalyticsClient) {
+        hostUsesNoopAnalytics = client is NoopAnalyticsClient
+    }
     static func recordInertRootMounted() { inertRootMounted = true }
     static func recordOrdinaryRootMounted() {
         guard hasRequest else { return }
@@ -170,18 +174,25 @@ struct WanderApp: App {
         let configuration = WanderBackendConfiguration.current()
         #if DEBUG
         let usesNativeReview = NativeOnboardingReviewRoute.resolved() != nil || SenderNotificationReviewRoute.resolved() != nil || QuickCaptureUITestRoute.resolved() != nil
+        let usesReplayFixtureHost = ReplayFixtureHostPolicy.usesInertRoot
         #else
         let usesNativeReview = false
+        let usesReplayFixtureHost = false
         #endif
         let usesSimulatorTestSession = SimulatorTestSessionPolicy.isActive()
         let forcedOnboardingStep = SimulatorTestSessionPolicy.forcedOnboardingStep()
         let analyticsClient: AnalyticsClient
-        if !usesNativeReview, !usesSimulatorTestSession,
+        // The offline Replay fixture must own the SDK's process-wide recorder.
+        // A configured local token must not start the ordinary host's recorder first.
+        if !usesNativeReview, !usesSimulatorTestSession, !usesReplayFixtureHost,
            let postHog = PostHogAnalyticsClient(configuration: .current()) {
             analyticsClient = postHog
         } else {
             analyticsClient = NoopAnalyticsClient()
         }
+        #if DEBUG
+        ReplayFixtureHostPolicy.recordHostAnalytics(analyticsClient)
+        #endif
         let contextualAnalytics = ContextualAnalyticsClient(client: analyticsClient)
         analytics = contextualAnalytics
         analyticsLifecycle = AppAnalyticsLifecycleTracker(analytics: contextualAnalytics)

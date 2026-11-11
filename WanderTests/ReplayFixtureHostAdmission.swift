@@ -13,7 +13,8 @@ extension XCTestCase {
         var admitted = !requested
         if requested, ReplayFixtureHostPolicy.mode == .inert, ReplayFixtureHostPolicy.isExpectedHost {
             while ContinuousClock.now < deadline, !Task.isCancelled {
-                if ReplayFixtureHostPolicy.inertRootMounted, !ReplayFixtureHostPolicy.ordinaryRootMounted {
+                if ReplayFixtureHostPolicy.inertRootMounted, !ReplayFixtureHostPolicy.ordinaryRootMounted,
+                   ReplayFixtureHostPolicy.hostUsesNoopAnalytics {
                     admitted = ContinuousClock.now < deadline
                     break
                 }
@@ -24,11 +25,12 @@ extension XCTestCase {
         let elapsed = start.duration(to: ContinuousClock.now)
         let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
         let observation: [String: Any] = [
-            "schema": 1, "requested": requested,
+            "schema": 2, "requested": requested,
             "mode": requested ? (ReplayFixtureHostPolicy.mode == .inert ? "inert" : "invalid") : "ordinary",
             "expected_host": ReplayFixtureHostPolicy.isExpectedHost,
             "inert_root_mounted": ReplayFixtureHostPolicy.inertRootMounted,
             "ordinary_root_mounted": ReplayFixtureHostPolicy.ordinaryRootMounted,
+            "host_uses_noop_analytics": ReplayFixtureHostPolicy.hostUsesNoopAnalytics,
             "admitted": admitted, "elapsed_ms": Int(seconds * 1_000), "limit_ms": 10_000
         ]
         do {
@@ -42,7 +44,7 @@ extension XCTestCase {
             return false
         }
         guard admitted else {
-            XCTFail("Explicit Replay inert-host mode requires one valid mode pair and the actual exclusive inert root before fixture creation.")
+            XCTFail("Explicit Replay inert-host mode requires the exclusive inert root and Noop host analytics before fixture creation.")
             return false
         }
         #endif
