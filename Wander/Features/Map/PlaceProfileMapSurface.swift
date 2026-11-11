@@ -1801,6 +1801,7 @@ private struct PlaceProfileFullView: View {
     @EnvironmentObject private var store: WanderStore
     @EnvironmentObject private var walkthroughs: FirstVisitWalkthroughCoordinator
     @State private var providerPhoto: PlacePhoto?
+    @State private var providerPhotoKey: String?
     @State private var isLoadingProviderPhoto = true
     @State private var userPhotos: [PlacePhotoGalleryItem] = []
     @State private var galleryCursor: PlacePhotoGalleryCursor?
@@ -1910,7 +1911,7 @@ private struct PlaceProfileFullView: View {
                 )
             }
         }
-        .task(id: place.photoLookupKey) {
+        .task(id: providerPhotoRequestKey) {
             await reloadProviderPhoto()
         }
         .task(id: photoPlaceIDs) {
@@ -2066,10 +2067,25 @@ private struct PlaceProfileFullView: View {
 
     private var galleryItems: [PlacePhotoGalleryItem] {
         PlacePhotoGalleryPresenter.items(
-            providerPhoto: providerPhoto,
+            providerPhoto: providerPhotoKey == providerPhotoRequestKey ? providerPhoto : cachedProviderPhoto,
             userPhotos: userPhotos,
             excludingUserPhotoIDs: store.deletedVisitPhotoReferenceIDs
         )
+    }
+
+    private var providerPhotoRequestKey: String {
+        "\(place.photoLookupKey)|\(backend.photoViewerID ?? "local")|\(backend.photoSessionRevision)"
+    }
+
+    private var cachedProviderPhoto: PlacePhoto? {
+        guard !place.id.hasPrefix("walkthrough_place_") else { return nil }
+        for variant in [PlacePhotoRenderVariant.profile, .card] {
+            if let photo = backend.cachedPlacePhoto(for: place.photoRequest.rendering(variant)),
+               photo.isGooglePlacesPhoto, !photo.requiresAccessCheck {
+                return photo
+            }
+        }
+        return nil
     }
 
     private var photoPlaceIDs: [String] {
@@ -2083,6 +2099,9 @@ private struct PlaceProfileFullView: View {
     }
 
     private func reloadProviderPhoto() async {
+        let key = providerPhotoRequestKey
+        providerPhoto = cachedProviderPhoto
+        providerPhotoKey = key
         if place.id.hasPrefix("walkthrough_place_") {
             providerPhoto = nil
             isLoadingProviderPhoto = false
@@ -2091,12 +2110,22 @@ private struct PlaceProfileFullView: View {
         }
 
         isLoadingProviderPhoto = true
-        providerPhoto = nil
         let resolvedProvider = await resolvedProviderPhoto()
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, providerPhotoRequestKey == key else { return }
         providerPhoto = resolvedProvider
         isLoadingProviderPhoto = false
         reconcileSelectedPhoto()
+
+        // Photo metadata -> header/image loading. Category persistence and its
+        // remote save retries must not be on the photo's critical path.
+        await Task.yield()
+        guard !Task.isCancelled, providerPhotoRequestKey == key, let resolvedProvider else { return }
+        await store.applyProviderCategoryEnrichment(
+            placeID: place.id,
+            primaryType: resolvedProvider.providerPrimaryType,
+            types: resolvedProvider.providerTypes ?? [],
+            backend: backend
+        )
     }
 
     private func reloadVisibleUserPhotos() async {
@@ -2131,12 +2160,6 @@ private struct PlaceProfileFullView: View {
             )
             try Task.checkCancellation()
             if remotePhoto.isGooglePlacesPhoto {
-                await store.applyProviderCategoryEnrichment(
-                    placeID: place.id,
-                    primaryType: remotePhoto.providerPrimaryType,
-                    types: remotePhoto.providerTypes ?? [],
-                    backend: backend
-                )
                 return remotePhoto
             }
             return nil

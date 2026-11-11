@@ -5,6 +5,70 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceTests: XCTestCase {
+    func testProfilePhotoAppearsWhileCategorySyncIsStillPending() async throws {
+        let store = WanderStore(fixtures: .empty())
+        let candidate = PlaceCandidate(id: UUID().uuidString, name: "Loading cafe", category: "place",
+            latitude: nil, longitude: nil, sourceProvider: "fixture", confidence: 1)
+        store.saveCandidate(candidate, status: .been, visibility: .followers,
+            note: nil, sourceType: .manual, ratingScore: 4)
+        if let celebration = store.saveStreakCelebration {
+            store.dismissSaveStreakCelebration(id: celebration.id)
+        }
+        let local = try XCTUnwrap(store.places.first)
+        let place = PlaceSheetPlace(candidate: PlaceCandidate(id: local.id, name: local.canonicalName,
+            category: "place", latitude: nil, longitude: nil, sourceProvider: "fixture", confidence: 1))
+        let sync = ProfileLoadingSaveRepository()
+        defer { sync.cancelPending() }
+        try await withPhotoProfile(store: store, place: place, saveRepository: sync) { window, repository in
+            // This locally saved place has no server UUID, so the existing
+            // gallery path correctly returns empty without a remote request.
+            try await self.waitUntil { repository.metadata != nil }
+            repository.finishGallery()
+            repository.primaryType = "cafe"
+            repository.finishMetadata()
+            try await self.waitUntil { sync.pending != nil }
+            try await self.waitUntil { repository.image != nil }
+            repository.finishImage(data: try self.greenPhotoData())
+            try await self.waitUntil { self.photoSpinners(in: window).isEmpty }
+            XCTAssertNotNil(sync.pending, "The real photo must render before category sync completes.")
+            let pixel = try self.photoHeaderPixel(window, x: 60)
+            XCTAssertGreaterThan(Int(pixel[1]) - Int(pixel[0]), 80)
+            self.capturePhotoProfile(window, name: "Photo visible while category sync waits")
+        }
+    }
+
+    func testProfileReusesPreviewPhotoImmediatelyWhileProfileMetadataIsPending() async throws {
+        try await withPhotoProfile(prepare: { backend, place, repository in
+            let task = Task { try await backend.placePhoto(for: place.photoRequest.rendering(.card)) }
+            try await self.waitUntil { repository.metadata != nil }
+            repository.finishMetadata()
+            let photo = try await task.value
+            _ = await PlacePhotoImagePipeline.shared.image(from: try self.greenPhotoData(),
+                canonicalPlaceKey: place.photoRequest.canonicalPhotoCacheKey,
+                photoKey: photo.cacheKey, targetPixelSize: 1440)
+        }) { window, repository in
+            try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
+            try await self.waitUntil { self.photoSpinners(in: window).isEmpty }
+            let pixel = try self.photoHeaderPixel(window, x: 60)
+            XCTAssertGreaterThan(Int(pixel[1]) - Int(pixel[0]), 80)
+            XCTAssertNil(repository.image, "A cached adequate decode must not download again.")
+            self.capturePhotoProfile(window, name: "Warm profile photo before metadata finishes")
+            repository.finishGallery()
+            repository.finishMetadata()
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertNil(repository.image)
+            XCTAssertTrue(self.photoSpinners(in: window).isEmpty)
+        }
+    }
+
+    private func greenPhotoData() throws -> Data {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 100, height: 100)).image { context in
+            UIColor.green.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+        }
+        return try XCTUnwrap(image.pngData())
+    }
+
     func testProfileSpinnerCoversMetadataAndImageLoadingThenStopsOnSuccess() async throws {
         try await withPhotoProfile { window, repository in
             try await self.waitUntil { repository.metadata != nil && repository.gallery != nil }
@@ -57,19 +121,26 @@ final class PlaceProfileAppearanceTests: XCTestCase {
         }
     }
 
-    private func withPhotoProfile(_ verify: (UIWindow, ProfileLoadingPhotoRepository) async throws -> Void) async throws {
+    private func withPhotoProfile(store suppliedStore: WanderStore? = nil, place suppliedPlace: PlaceSheetPlace? = nil,
+                                  saveRepository: (any UserPlaceRepository)? = nil,
+                                  prepare: ((WanderBackend, PlaceSheetPlace, ProfileLoadingPhotoRepository) async throws -> Void)? = nil,
+                                  _ verify: (UIWindow, ProfileLoadingPhotoRepository) async throws -> Void) async throws {
         let repository = ProfileLoadingPhotoRepository()
-        let store = WanderStore(fixtures: .empty())
-        let place = PlaceSheetPlace(candidate: PlaceCandidate(id: UUID().uuidString,
+        let store = suppliedStore ?? WanderStore(fixtures: .empty())
+        let place = suppliedPlace ?? PlaceSheetPlace(candidate: PlaceCandidate(id: UUID().uuidString,
             name: "Loading cafe", category: "cafe", latitude: nil, longitude: nil,
             sourceProvider: "fixture", sourceProviderPlaceID: UUID().uuidString, confidence: 1))
+        let backend = WanderBackend(userPlaceRepository: saveRepository, placePhotoRepository: repository,
+            placePhotoDataDiskCache: .disabled)
+        try await prepare?(backend, place, repository)
         let root = PlaceProfileFullScreen(place: place, saves: [], tasteSaves: [],
             currentUserID: store.currentUser.id, action: .none, onBack: {}, onAction: {})
             .environmentObject(store)
-            .environmentObject(WanderBackend(placePhotoRepository: repository))
+            .environmentObject(backend)
             .environmentObject(AuthSessionStore(provider: PreviewAuthSessionProvider()))
             .environmentObject(PlaceSaveDraftStore(persistence: .ephemeral))
             .environmentObject(FirstVisitWalkthroughCoordinator(isEnabled: false))
+            .environmentObject(ProductUpsellCoordinator())
             .environment(\.scenePhase, .active)
             .astirAdaptiveBrandMode()
         let window = try makeTestWindow(size: UIScreen.main.bounds.size)
@@ -495,6 +566,7 @@ private final class ProfileLoadingPhotoRepository: PlacePhotoRepository {
     var gallery: CheckedContinuation<PlacePhotoGalleryPage, Error>?
     var image: CheckedContinuation<Data, Error>?
     private let photoID = UUID().uuidString
+    var primaryType: String?
 
     func photo(for request: PlacePhotoRequest) async throws -> PlacePhoto {
         try await withCheckedThrowingContinuation { metadata = $0 }
@@ -519,7 +591,7 @@ private final class ProfileLoadingPhotoRepository: PlacePhotoRepository {
             continuation?.resume(throwing: error)
         } else {
             continuation?.resume(returning: PlacePhoto(provider: "google_places", providerPlaceID: photoID,
-                photoURLString: "https://example.invalid/\(photoID)", width: 100, height: 100,
+                providerPrimaryType: primaryType, photoURLString: "https://example.invalid/\(photoID)", width: 100, height: 100,
                 authorName: nil, authorProfileURLString: nil, authorAvatarURLString: nil,
                 sourcePhotoURLString: nil, flagContentURLString: nil,
                 storageBucket: nil, storagePath: nil, localAssetRef: nil))
@@ -693,4 +765,16 @@ private struct WannaAppearanceProbe: View {
         .background(brand.background)
         .ignoresSafeArea()
     }
+}
+
+@MainActor
+private final class ProfileLoadingSaveRepository: UserPlaceRepository {
+    var pending: CheckedContinuation<SaveResult, Error>?
+    func save(_ draft: UserPlaceDraft) async throws -> SaveResult {
+        try await withCheckedThrowingContinuation { pending = $0 }
+    }
+    func cancelPending() { pending?.resume(throwing: CancellationError()); pending = nil }
+    func userPlaces(for userID: String, filters: PlaceFilters) async throws -> [VisiblePlace] { [] }
+    func updateVisibility(userPlaceID: String, visibility: PlaceVisibility) async throws {}
+    func delete(userPlaceID: String) async throws {}
 }
