@@ -5,6 +5,58 @@ import XCTest
 
 @MainActor
 final class PlaceProfileAppearanceTests: XCTestCase {
+    func testListPhotosShowSpinnerUntilImageLoadsAndStopForUnavailablePhotos() async throws {
+        for succeeds in [true, false] {
+            let repository = ProfileLoadingPhotoRepository()
+            let backend = WanderBackend(placePhotoRepository: repository, placePhotoDataDiskCache: .disabled)
+            let place = PlaceSheetPlace(candidate: PlaceCandidate(id: UUID().uuidString,
+                name: "Loading cafe", category: "cafe", latitude: nil, longitude: nil,
+                sourceProvider: "fixture", sourceProviderPlaceID: UUID().uuidString, confidence: 1))
+            let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+            let previous = scene.windows.first { $0.isKeyWindow }
+            let window = UIWindow(windowScene: scene)
+            window.rootViewController = UIHostingController(rootView: listPhotoLoadingTestView(place: place)
+                .frame(width: 200, height: 160).environmentObject(backend).environment(\.scenePhase, .active))
+            window.makeKeyAndVisible()
+            defer {
+                repository.cancelPending()
+                window.isHidden = true
+                window.rootViewController = nil
+                previous?.makeKey()
+            }
+            try await waitUntil { repository.metadata != nil }
+            XCTAssertEqual(photoSpinners(in: window).count, 1)
+            capturePhotoProfile(window, name: "List photo metadata loading")
+            let loadingPixel = try photoHeaderPixel(window, x: window.bounds.midX - 50, y: window.bounds.midY - 30)
+            XCTAssertLessThan(abs(Int(loadingPixel[0]) - Int(loadingPixel[1])), 3)
+            XCTAssertLessThan(abs(Int(loadingPixel[1]) - Int(loadingPixel[2])), 3)
+
+            if succeeds {
+                repository.finishMetadata()
+                try await waitUntil { repository.image != nil }
+                XCTAssertEqual(photoSpinners(in: window).count, 1)
+                repository.finishImage(data: try greenPhotoData())
+            } else {
+                repository.finishMetadata(error: URLError(.resourceUnavailable))
+            }
+            try await waitUntil { self.photoSpinners(in: window).isEmpty }
+            capturePhotoProfile(window, name: succeeds ? "List photo loaded" : "List photo unavailable")
+            if succeeds {
+                let pixel = try photoHeaderPixel(window, x: window.bounds.midX - 50, y: window.bounds.midY - 30)
+                XCTAssertGreaterThan(Int(pixel[1]) - Int(pixel[0]), 80)
+                window.rootViewController = UIHostingController(rootView: listPhotoLoadingTestView(place: place)
+                    .frame(width: 200, height: 160).environmentObject(backend).environment(\.scenePhase, .active))
+                window.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(150))
+                XCTAssertTrue(photoSpinners(in: window).isEmpty)
+                XCTAssertNil(repository.metadata)
+                XCTAssertNil(repository.image)
+                capturePhotoProfile(window, name: "List cached photo remounted")
+            }
+
+        }
+    }
+
     func testProfilePhotoAppearsWhileCategorySyncIsStillPending() async throws {
         let store = WanderStore(fixtures: .empty())
         let candidate = PlaceCandidate(id: UUID().uuidString, name: "Loading cafe", category: "place",
@@ -196,11 +248,11 @@ final class PlaceProfileAppearanceTests: XCTestCase {
         add(attachment)
     }
 
-    private func photoHeaderPixel(_ window: UIWindow, x: CGFloat) throws -> [UInt8] {
+    private func photoHeaderPixel(_ window: UIWindow, x: CGFloat, y: CGFloat = 175) throws -> [UInt8] {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         let image = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1), format: format).image { context in
-            context.cgContext.translateBy(x: -x, y: -175)
+            context.cgContext.translateBy(x: -x, y: -y)
             window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
         var pixel = [UInt8](repeating: 0, count: 4)
