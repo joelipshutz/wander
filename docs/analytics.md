@@ -66,6 +66,8 @@ previews, context titles, message bodies, and composer inputs use
 REC-626 treatment. The authenticated simulator-only messaging fixture always
 uses Noop analytics and displays an explicit simulation label.
 
+The Debug Simulator Replay host (`-WanderReplayFixtureHost inert`) uses Noop app analytics even when local PostHog configuration is present. Only the test's offline SDK owns Replay; host admission verifies the actual analytics client before capture. This prevents the ordinary host from claiming the SDK's process-wide Replay integration or sending fixture activity to the configured project.
+
 ### Release verification
 
 1. Run `BuildConfigurationTests` and store identity/profile tests; verify the complete unit suite.

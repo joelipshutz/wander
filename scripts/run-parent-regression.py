@@ -160,11 +160,11 @@ def replay_fixture_host(products: Path):
 
 def validate_replay_host_admission(value: dict) -> None:
     keys = {"schema", "requested", "mode", "expected_host", "inert_root_mounted",
-            "ordinary_root_mounted", "admitted", "elapsed_ms", "limit_ms"}
+            "ordinary_root_mounted", "host_uses_noop_analytics", "admitted", "elapsed_ms", "limit_ms"}
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError("Replay admission schema mismatch")
-    if (type(value["schema"]) is not int or value["schema"] != 1 or value["mode"] != "inert"
-            or any(value[k] is not True for k in ["requested", "expected_host", "inert_root_mounted", "admitted"])
+    if (type(value["schema"]) is not int or value["schema"] != 2 or value["mode"] != "inert"
+            or any(value[k] is not True for k in ["requested", "expected_host", "inert_root_mounted", "host_uses_noop_analytics", "admitted"])
             or value["ordinary_root_mounted"] is not False or type(value["limit_ms"]) is not int
             or value["limit_ms"] != 10000 or type(value["elapsed_ms"]) is not int
             or not 0 <= value["elapsed_ms"] < 10000):
