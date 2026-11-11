@@ -1449,6 +1449,8 @@ struct PlaceListUpsertDraft: Equatable {
     let name: String
     let description: String
     let visibility: PlaceListVisibility
+    var snapshotCaptureID: String? = nil
+    var snapshotUserPlaceIDs: [String]? = nil
 }
 
 struct PlaceListItemDraft: Equatable {

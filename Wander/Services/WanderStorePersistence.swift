@@ -1178,6 +1178,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
         let syncStateRaw: String
         let snapshotCoverData: Data?
         let snapshotCoverPath: String?
+        let snapshotCaptureID: String?
+        let snapshotInitialItemIDs: [String]?
         let cachedItemCount: Int?
         let createdAt: Date
         let updatedAt: Date
@@ -1193,6 +1195,8 @@ struct WanderStoreSnapshot: Codable, Equatable {
             syncStateRaw = list.syncStateRaw
             snapshotCoverData = list.snapshotCoverData
             snapshotCoverPath = list.snapshotCoverPath
+            snapshotCaptureID = list.snapshotCaptureID
+            snapshotInitialItemIDs = list.snapshotInitialItemIDs
             cachedItemCount = list.cachedItemCount
             createdAt = list.createdAt
             updatedAt = list.updatedAt
@@ -1200,7 +1204,7 @@ struct WanderStoreSnapshot: Codable, Equatable {
         }
 
         func model() -> LocalPlaceList {
-            LocalPlaceList(
+            var list = LocalPlaceList(
                 localID: localID,
                 serverID: serverID,
                 ownerUserID: ownerUserID,
@@ -1215,6 +1219,9 @@ struct WanderStoreSnapshot: Codable, Equatable {
                 updatedAt: updatedAt,
                 deletedAt: deletedAt
             )
+            list.snapshotCaptureID = snapshotCaptureID
+            list.snapshotInitialItemIDs = snapshotInitialItemIDs
+            return list
         }
     }
 

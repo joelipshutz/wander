@@ -22,20 +22,24 @@ struct ActivityPostcardReviewRoot: View {
         let arguments = ProcessInfo.processInfo.arguments
         let hasLongTitle = arguments.contains("-WanderFeedPhotoStackLongTitle")
         let reportReview = arguments.contains("-WanderActivityReportMenuUITest")
+        let snapshotReview = arguments.contains("-WanderMapSnapshotFeedReview")
         context = ActivityEngagementContext(
             activityID: reportReview ? "65200000-0000-0000-0000-000000000001" : "fixture-feed-photo-stack",
             actor: ProfileShell(
                 id: "user_ryan", handle: "ryan", displayName: "Ryan Lieblein",
                 avatarURL: nil, bio: nil, relationship: .follower
             ),
-            placeName: hasLongTitle ? "Blue Ribbon Sushi Palisades Village" : "Bacio di Latte",
+            placeName: snapshotReview ? "A Saturday around town" : (hasLongTitle ? "Blue Ribbon Sushi Palisades Village" : "Bacio di Latte"),
             placeServerID: nil,
-            placeDetail: hasLongTitle ? "Sushi · Pacific Palisades · CA" : "Ice cream · Santa Monica · CA",
-            ticketKind: .checkIn,
+            placeDetail: snapshotReview ? "7 places" : (hasLongTitle ? "Sushi · Pacific Palisades · CA" : "Ice cream · Santa Monica · CA"),
+            ticketKind: snapshotReview ? .list : .checkIn,
             occurredAt: .now,
-            note: "A favorite place worth returning to. Bring a friend and take your time.",
-            rating: hasLongTitle ? 4 : 5,
-            media: arguments.contains("-WanderFeedPhotoStackNoPhotos") ? [] : ActivityPostcardPhotoUITestFixtures.photos()
+            note: snapshotReview ? nil : "A favorite place worth returning to. Bring a friend and take your time.",
+            rating: snapshotReview ? nil : (hasLongTitle ? 4 : 5),
+            ticketEyebrow: snapshotReview ? "CREATED A MAP SNAPSHOT" : nil,
+            attributionAction: snapshotReview ? "created a map snapshot" : nil,
+            media: snapshotReview ? ActivityPostcardPhotoUITestFixtures.snapshot()
+                : (arguments.contains("-WanderFeedPhotoStackNoPhotos") ? [] : ActivityPostcardPhotoUITestFixtures.photos())
         )
     }
 
@@ -66,8 +70,10 @@ struct ActivityPostcardReviewRoot: View {
                     openProfile: { selectedDestination = .profile },
                     actorAccessibilityIdentifier: "feed.photo-stack.actor",
                     destinationAccessibilityIdentifier: "feed.photo-stack.place",
-                    postcardAccessibilityIdentifier: "feed.photo-stack.postcard"
+                    postcardAccessibilityIdentifier: "feed.photo-stack.postcard",
+                    openPhotos: context.ticketKind == .list ? { selectedDestination = .place } : nil
                 )
+                .environment(\.activityPostcardVisualStyle, context.ticketKind == .list ? .astir : .standard)
                 .padding(WanderTheme.spacing4)
             }
             .navigationTitle("Feed")
@@ -123,6 +129,31 @@ enum ActivityPostcardPhotoUITestFixtures {
     private static let preparedPhotos = preparePhotos()
 
     static func photos() -> [ActivityEngagementMedia] { preparedPhotos.map(\.media) }
+
+    static func snapshot() -> [ActivityEngagementMedia] {
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 240, height: 180)).image { context in
+            UIColor.systemGray5.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 240, height: 180))
+            UIColor.white.setStroke()
+            let roads = UIBezierPath()
+            for x in stride(from: 20, through: 220, by: 40) {
+                roads.move(to: CGPoint(x: x, y: 0)); roads.addLine(to: CGPoint(x: x, y: 180))
+            }
+            for y in stride(from: 20, through: 160, by: 35) {
+                roads.move(to: CGPoint(x: 0, y: y)); roads.addLine(to: CGPoint(x: 240, y: y))
+            }
+            roads.lineWidth = 6; roads.stroke()
+            UIColor.systemOrange.setFill()
+            for index in 0..<7 {
+                UIBezierPath(ovalIn: CGRect(x: 28 + (index * 37) % 185, y: 25 + (index * 29) % 125,
+                    width: 12, height: 12)).fill()
+            }
+        }
+        guard let data = image.jpegData(compressionQuality: 0.85),
+              let ref = VisitPhotoLocalFileStore.save(data: data, id: UUID(), contentType: "image/jpeg") else { return [] }
+        return [ActivityEngagementMedia(id: "snapshot-review", localAssetRef: ref,
+            storageBucket: "list-snapshots", isPendingLocalCapture: true, accessibilityLabel: "Sample map snapshot")]
+    }
 
     static func isLiveEnabled(arguments: [String]) -> Bool {
         #if targetEnvironment(simulator)

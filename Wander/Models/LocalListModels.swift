@@ -29,6 +29,10 @@ struct LocalPlaceList: Identifiable, Equatable, Hashable {
     var syncStateRaw: String
     var snapshotCoverData: Data?
     var snapshotCoverPath: String?
+    /// Stable operation identity and captured members survive offline restarts.
+    /// Later additions are deliberately absent from this immutable batch.
+    var snapshotCaptureID: String? = nil
+    var snapshotInitialItemIDs: [String]? = nil
     var cachedItemCount: Int?
     var createdAt: Date
     var updatedAt: Date

@@ -163,6 +163,57 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertTrue(storage.signedURLs.isEmpty)
     }
 
+    func testSnapshotCreationUsesAtomicRPCAndEditsKeepOrdinaryUpsert() async throws {
+        let rpc = RecordingRPC()
+        let id = "11111111-1111-4111-8111-111111111111"
+        let source = "22222222-2222-4222-8222-222222222222"
+        rpc.responses["create_map_snapshot_list"] = Data("\"\(id)\"".utf8)
+        rpc.responses["upsert_place_list"] = Data("\"\(id)\"".utf8)
+        let repository = SupabasePlaceListRepository(rpc: rpc)
+        let draft = PlaceListUpsertDraft(id: nil, name: "Map snapshot", description: "", visibility: .stealth,
+            snapshotCaptureID: id, snapshotUserPlaceIDs: [source])
+        let createdID = try await repository.upsert(draft)
+        XCTAssertEqual(createdID, id)
+        _ = try await repository.upsert(draft)
+        XCTAssertEqual(rpc.rawBodies[0]["input_snapshot_id"] as? String, id)
+        XCTAssertEqual(rpc.rawBodies[1]["input_snapshot_id"] as? String, id)
+        XCTAssertEqual(rpc.rawBodies[0]["input_user_place_ids"] as? [String], [source])
+        XCTAssertEqual(Set(rpc.rawBodies[0].keys), ["input_snapshot_id", "input_list", "input_user_place_ids"])
+        _ = try await repository.upsert(.init(id: id, name: "Renamed", description: "", visibility: .stealth,
+            snapshotCaptureID: id, snapshotUserPlaceIDs: [source]))
+        XCTAssertEqual(rpc.calls.map(\.name), ["create_map_snapshot_list", "create_map_snapshot_list", "upsert_place_list"])
+    }
+
+    func testSnapshotCreationFailureNeverFallsBackToOrdinaryListRPC() async throws {
+        let rpc = RecordingRPC()
+        rpc.errors = [WanderRemoteError.notConfigured]
+        do {
+            _ = try await SupabasePlaceListRepository(rpc: rpc).upsert(.init(id: nil, name: "Snapshot",
+                description: "", visibility: .stealth, snapshotCaptureID: UUID().uuidString,
+                snapshotUserPlaceIDs: [UUID().uuidString]))
+            XCTFail("An unavailable atomic RPC must keep the operation pending")
+        } catch { }
+        XCTAssertEqual(rpc.calls.map(\.name), ["create_map_snapshot_list"])
+    }
+
+    func testFeedListDecodesSnapshotCoverAndRetainsLegacyCompatibility() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let legacy = """
+        {"id":"list","owner_user_id":"owner","name":"Weekend","description":"","visibility":"stealth",
+        "item_count":7,"created_at":"2026-11-11T12:00:00Z","updated_at":"2026-11-11T12:00:00Z"}
+        """
+        let old = try decoder.decode(RemoteFeedListDTO.self, from: Data(legacy.utf8)).localList()
+        XCTAssertNil(old.snapshotCaptureID)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(legacy.utf8)) as? [String: Any])
+        json["snapshot_capture_id"] = "capture"
+        json["snapshot_cover_path"] = "list/snapshot.jpg"
+        let list = try decoder.decode(RemoteFeedListDTO.self, from: JSONSerialization.data(withJSONObject: json)).localList()
+        XCTAssertEqual(list.snapshotCaptureID, "capture")
+        XCTAssertEqual(list.snapshotCoverPath, "list/snapshot.jpg")
+        XCTAssertEqual(list.cachedItemCount, 7)
+    }
+
     func testListSnapshotRejectsInvalidIDAndOversizeBeforeUpload() async {
         let rpc = RecordingRPC()
         let storage = RecordingStorage()
