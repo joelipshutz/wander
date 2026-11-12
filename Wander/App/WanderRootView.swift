@@ -185,6 +185,10 @@ struct WanderDeepLinkPresentationRegistry {
         return presentedTokens.union(dismissingTokens)
     }
 
+    var blocksSaveStreakPresentation: Bool {
+        tokensAwaitingDismissal.contains { $0.surface == .legacyMapDestination }
+    }
+
     @discardableResult
     mutating func presentationDidAppear(
         _ token: WanderDeepLinkPresentationToken
@@ -681,6 +685,7 @@ struct WanderRootView: View {
         .environmentObject(store)
         .sheet(isPresented: $showsLegacyMapDestination, onDismiss: {
             handleDeepLinkPresentationDismissal(of: .legacyMapDestination)
+            queueSaveStreakCelebration(store.saveStreakCelebration)
         }) {
             WanderRootPresentationLifecycle(surface: .legacyMapDestination,
                                             onPresent: handleDeepLinkPresentation,
@@ -693,11 +698,28 @@ struct WanderRootView: View {
                     presentationResetRequest: presentationResetRequest,
                     searchLaunchRequest: mapSearchLaunchRequest,
                     onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                    // Only this host's editor may close it. Another Add flow
+                    // can finish dismissing while this destination resolves.
+                    onSaveFlowDismissed: { showsLegacyMapDestination = false },
                     onAdd: presentAddSheet
                 )
-                .toolbar { ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showsLegacyMapDestination = false }
-                } }
+            }
+            // MapScreen hides its navigation bar. Keep the host's exit outside
+            // that bar so unresolved/read-only destinations always have a way back.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button { showsLegacyMapDestination = false } label: {
+                        Text("Done")
+                            .font(AstirTypography.control)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(astirBrandMode.accentText)
+                    .background(astirBrandMode.background, in: Capsule())
+                    .accessibilityIdentifier("legacy-map.close")
+                }
+                .padding(.horizontal, WanderTheme.spacing4)
             }
             .environmentObject(store)
             .environmentObject(walkthroughs)
@@ -962,6 +984,23 @@ struct WanderRootView: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
                     .environmentObject(walkthroughs)
+                    #if DEBUG && targetEnvironment(simulator)
+                    .overlay(alignment: .bottom) {
+                        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+                           ProcessInfo.processInfo.arguments.contains("-WanderSharedVisitAddOverlapUITest") {
+                            Button("Simulate shared check-in notification") {
+                                pushNotifications.openSharedVisit(
+                                    participantID: SimulatorSharedVisitNavigationRepository.participantID,
+                                    generation: 1
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .frame(minHeight: 44)
+                            .padding(.bottom, 64)
+                            .accessibilityIdentifier("fixture.sharedVisitNotification")
+                        }
+                    }
+                    #endif
                     .interactiveDismissDisabled(
                         walkthroughs.activeSurface == .add
                             || walkthroughs.activeSurface == .saveFlow
@@ -1155,7 +1194,7 @@ struct WanderRootView: View {
 
     private var authObservedRoot: some View {
         lifecycleRoot
-        .onChange(of: pushNotifications.navigationRequest) { _, request in
+        .onChange(of: pushNotifications.navigationRequest, initial: true) { _, request in
             #if DEBUG
             WanderDebugLog.remote.debug("root observed notification navigation request destination=\(String(describing: request?.destination), privacy: .public) session_validated=\(isSessionValidated, privacy: .public)")
             #endif
@@ -2376,9 +2415,12 @@ struct WanderRootView: View {
         foregroundEntryPolicy.recordNotificationNavigation(requestID: request.id)
         preserveExplicitEntryDestination()
         if unifiedLiveEnabled,
-           deepLinkPresentations.presentedTokens.contains(where: { $0.surface == .liveModal }) {
+           deepLinkPresentationTokensAwaitingDismissal().contains(where: {
+               $0.surface == .liveModal || $0.surface == .add
+           }) {
             // Own a copy while the physical sheet dismisses: tab observers may
             // consume the shared request even while their tab is off screen.
+            // Root Add also has to finish before another root sheet can appear.
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .feed, resuming: request)
             return
@@ -2423,7 +2465,15 @@ struct WanderRootView: View {
         isPresentingAdd = false
         initialPresentation = nil
 
-        selectedTab = Self.notificationTab(for: request.destination)
+        let destinationTab = Self.notificationTab(for: request.destination)
+        if unifiedLiveEnabled, destinationTab == .map {
+            // Live owns the selected tab. Present the legacy destination directly;
+            // the TabView binding can coalesce a transient .map back to .discover.
+            showsLegacyMapDestination = true
+            selectedTab = .discover
+        } else {
+            selectedTab = destinationTab
+        }
         if request.destination == .discover {
             pushNotifications.consumeNavigationRequest(id: request.id)
         }
@@ -3397,6 +3447,11 @@ struct WanderRootView: View {
         }
     }
 
+    private var isSaveStreakPresentationBlocked: Bool {
+        store.isSaveFlowPresented || showsLegacyMapDestination
+            || deepLinkPresentations.blocksSaveStreakPresentation
+    }
+
     private func queueSaveStreakCelebration(_ celebration: SaveStreakCelebration?) {
         saveStreakCelebrationTask?.cancel()
 
@@ -3414,7 +3469,7 @@ struct WanderRootView: View {
 
         guard SaveStreakPresentationPolicy.canPresent(
             celebration: celebration,
-            isSaveFlowPresented: store.isSaveFlowPresented
+            isSaveFlowPresented: isSaveStreakPresentationBlocked
         ) else {
             return
         }
@@ -3437,7 +3492,7 @@ struct WanderRootView: View {
                 return
             }
 
-            guard !store.isSaveFlowPresented else { return }
+            guard !isSaveStreakPresentationBlocked else { return }
 
             withAnimation(accessibilityReduceMotion ? nil : .easeOut(duration: 0.18)) {
                 presentedSaveStreakCelebration = celebration
@@ -3727,6 +3782,15 @@ struct WanderRootView: View {
 
     static func resolvedFixtures(from arguments: [String] = ProcessInfo.processInfo.arguments) -> WanderFixtures {
         let fixtures = resolvedFixtures(mode: resolvedFixtureMode(from: arguments))
+        #if DEBUG && targetEnvironment(simulator)
+        if SimulatorTestSessionPolicy.isActive(arguments: arguments),
+           arguments.contains("-WanderSharedVisitNavigationUITest"),
+           !arguments.contains("-WanderSharedVisitSameDayUITest") {
+            // Exercise the first-save daily takeover instead of seeded same-day confetti.
+            let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now)!
+            fixtures.userPlaces.forEach { $0.savedAt = yesterday }
+        }
+        #endif
         #if DEBUG
         if arguments.contains("-WanderREC386PhotoFixture") {
             return rec386PhotoVisibilityFixtures(from: fixtures)

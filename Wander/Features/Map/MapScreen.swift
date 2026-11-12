@@ -1531,6 +1531,7 @@ struct MapScreen: View {
     private let presentationResetRequest: WanderPresentationResetRequest?
     private let searchLaunchRequest: WanderMapSearchLaunchRequest?
     private let onSearchLaunchRequestHandled: (UUID) -> Void
+    private let onSaveFlowDismissed: () -> Void
     private let onAdd: () -> Void
 
     private func baseVisiblePlaces(
@@ -1655,6 +1656,7 @@ struct MapScreen: View {
         presentationResetRequest: WanderPresentationResetRequest? = nil,
         searchLaunchRequest: WanderMapSearchLaunchRequest? = nil,
         onSearchLaunchRequestHandled: @escaping (UUID) -> Void = { _ in },
+        onSaveFlowDismissed: @escaping () -> Void = {},
         onAdd: @escaping () -> Void = {}
     ) {
         self.initialPlaceQuery = initialPlaceQuery
@@ -1666,6 +1668,7 @@ struct MapScreen: View {
         self.presentationResetRequest = presentationResetRequest
         self.searchLaunchRequest = searchLaunchRequest
         self.onSearchLaunchRequestHandled = onSearchLaunchRequestHandled
+        self.onSaveFlowDismissed = onSaveFlowDismissed
         self.onAdd = onAdd
         _isPlaceProfilePresented = State(initialValue: startsExpanded)
         _isPlaceProfileMounted = State(initialValue: startsExpanded)
@@ -2546,6 +2549,7 @@ struct MapScreen: View {
                 if let result = mapSaveFlowSelection.saveFlowDidDismiss() {
                     selectSavedResult(result)
                 }
+                onSaveFlowDismissed()
             }) { context in
                 MapPlaceSaveFlowSheet(context: context) { submission in
                     await saveMapFlowSubmission(submission)

@@ -395,6 +395,31 @@ final class SaveStreakCalculatorTests: XCTestCase {
 
 @MainActor
 final class SaveStreakStoreTests: XCTestCase {
+    func testLegacyMapBlocksStreakUntilPhysicalDismissalInEitherCallbackOrder() {
+        let store = WanderStore(fixtures: .empty())
+        let celebration = SaveStreakCelebration(kind: .dailyTakeover, placeName: "Cafe",
+            placeDetail: nil, status: .been, streakCount: 1, saveDate: .now)
+        for disappearsFirst in [true, false] {
+            var registry = WanderDeepLinkPresentationRegistry()
+            let token = WanderDeepLinkPresentationToken(surface: .legacyMapDestination)
+            registry.presentationDidAppear(token)
+            store.saveFlowDidPresent(.saveSheet)
+            XCTAssertFalse(SaveStreakPresentationPolicy.canPresent(celebration: celebration,
+                isSaveFlowPresented: store.isSaveFlowPresented || registry.blocksSaveStreakPresentation))
+            store.saveFlowDidDismiss(.saveSheet)
+            XCTAssertFalse(SaveStreakPresentationPolicy.canPresent(celebration: celebration,
+                isSaveFlowPresented: store.isSaveFlowPresented || registry.blocksSaveStreakPresentation))
+            if disappearsFirst {
+                registry.presentationWillDisappear(token)
+                XCTAssertTrue(registry.blocksSaveStreakPresentation, "The closing animation still covers the root")
+            }
+            XCTAssertEqual(registry.sheetDidDismiss(surface: .legacyMapDestination), token)
+            if !disappearsFirst { registry.presentationWillDisappear(token) }
+            XCTAssertTrue(SaveStreakPresentationPolicy.canPresent(celebration: celebration,
+                isSaveFlowPresented: store.isSaveFlowPresented || registry.blocksSaveStreakPresentation))
+        }
+    }
+
     func testSaveFlowPresentationRemainsActiveUntilHostDismissalCompletes() {
         let store = WanderStore(fixtures: .empty())
 

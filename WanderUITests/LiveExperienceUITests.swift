@@ -4,6 +4,114 @@ import XCTest
 final class LiveExperienceUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testSharedVisitNotificationCancelReturnsToLive() {
+        let app = launchSharedVisitNotification()
+        let close = app.buttons["save.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 20))
+        capture("REC692-shared-check-in-editor")
+        pressSharedVisitControl(close)
+        assertReturnedToLive(app)
+        capture("REC692-cancel-returned-to-live")
+    }
+
+    func testSharedVisitNotificationSaveShowsUncoveredStreakThenLive() {
+        let app = launchSharedVisitNotification()
+        let submit = app.buttons["save.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20))
+        pressSharedVisitControl(submit)
+        let streak = app.otherElements.matching(NSPredicate(format: "label CONTAINS %@", "day streak.")).firstMatch
+        XCTAssertTrue(streak.waitForExistence(timeout: 20), "Daily streak must appear above the dismissed notification host")
+        settleSharedVisitControl(streak)
+        XCTAssertFalse(app.buttons["legacy-map.close"].exists)
+        capture("REC692-uncovered-streak")
+        // Confetti expands the labeled container beyond the screen. Aim at the
+        // visible CTA within the app viewport, not that animated container.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).press(forDuration: 0.2)
+        assertReturnedToLive(app)
+        capture("REC692-save-returned-to-live")
+    }
+
+    func testUnavailableSharedVisitNotificationHasVisibleExit() {
+        let app = launchSharedVisitNotification(extra: ["-WanderUnavailableSharedVisitUITest"])
+        XCTAssertTrue(app.staticTexts["That shared check-in is no longer available."].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.buttons["save.submit"].exists)
+        let close = app.buttons["legacy-map.close"]
+        XCTAssertTrue(close.waitForExistence(timeout: 20))
+        XCTAssertTrue(close.isHittable)
+        capture("REC692-unavailable-with-visible-exit")
+        pressSharedVisitControl(close)
+        assertReturnedToLive(app)
+    }
+
+    func testSharedVisitNotificationSurvivesUnrelatedAddDismissal() {
+        let app = launchSharedVisitApp(extra: ["-WanderSharedVisitAddOverlapUITest"])
+        XCTAssertTrue(app.buttons["live.feed.scope.menu"].waitForExistence(timeout: 20))
+        // The Live plus button opens the root Add sheet and registers .addSheet.
+        pressSharedVisitControl(app.buttons["Add a place"])
+        let notification = app.buttons["fixture.sharedVisitNotification"]
+        XCTAssertTrue(notification.waitForExistence(timeout: 20))
+        pressSharedVisitControl(notification)
+        let submit = app.buttons["save.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20), "Add dismissal must not discard the pending invitation")
+        XCTAssertTrue(app.staticTexts["Navigation Test Cafe"].exists)
+        capture("REC692-shared-check-in-after-add-dismissal")
+        pressSharedVisitControl(app.buttons["save.close"])
+        assertReturnedToLive(app)
+    }
+
+    private func launchSharedVisitApp(extra: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
+            "-WanderUnifiedLiveUITest", "-WanderSharedVisitNavigationUITest", "-WanderInitialTab", "discover",
+            "-astir.live.introduction.v1.user_joe.acknowledged", "YES",
+            "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"] + extra
+        app.launch()
+        return app
+    }
+
+    private func launchSharedVisitNotification(extra: [String] = []) -> XCUIApplication {
+        let app = launchSharedVisitApp(extra: extra)
+        let notifications = app.buttons["Notifications"]
+        XCTAssertTrue(notifications.waitForExistence(timeout: 20))
+        pressSharedVisitControl(notifications)
+        let review = app.buttons["Review & save"]
+        XCTAssertTrue(review.waitForExistence(timeout: 20))
+        pressSharedVisitControl(review)
+        return app
+    }
+
+    private func pressSharedVisitControl(_ element: XCUIElement) {
+        settleSharedVisitControl(element)
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 0.2)
+    }
+
+    private func settleSharedVisitControl(_ element: XCUIElement) {
+        // UIKit can expose a hittable target before its navigation/sheet animation
+        // stops moving. Require stable geometry before sending a physical touch.
+        var previousFrame = CGRect.null
+        var stableSince = ProcessInfo.processInfo.systemUptime
+        waitForCondition(timeout: 20) {
+            guard element.exists, element.isHittable else { return false }
+            let frame = element.frame
+            if frame != previousFrame {
+                previousFrame = frame
+                stableSince = ProcessInfo.processInfo.systemUptime
+                return false
+            }
+            return ProcessInfo.processInfo.systemUptime - stableSince >= 0.8
+        }
+    }
+
+    private func assertReturnedToLive(_ app: XCUIApplication) {
+        let tab = app.tabBars.buttons["Live"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 10))
+        expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: tab)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(tab.isSelected)
+        XCTAssertFalse(app.buttons["legacy-map.close"].exists)
+        XCTAssertTrue(app.buttons["live.feed.scope.menu"].isHittable)
+    }
+
     func testAppliedAreaOffersListsAndAppendsEverywhereWithoutJumpingToTop() throws {
         let app = launch(extraArguments: ["-astir.live.introduction.v1.user_joe.acknowledged", "YES"], selectsMapArea: false)
         waitLiveCount(4, in: app)
