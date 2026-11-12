@@ -698,6 +698,9 @@ struct WanderRootView: View {
                     presentationResetRequest: presentationResetRequest,
                     searchLaunchRequest: mapSearchLaunchRequest,
                     onSearchLaunchRequestHandled: consumeMapSearchLaunchRequest,
+                    // Only this host's editor may close it. Another Add flow
+                    // can finish dismissing while this destination resolves.
+                    onSaveFlowDismissed: { showsLegacyMapDestination = false },
                     onAdd: presentAddSheet
                 )
             }
@@ -981,6 +984,23 @@ struct WanderRootView: View {
                     .environmentObject(auth)
                     .environmentObject(backend)
                     .environmentObject(walkthroughs)
+                    #if DEBUG && targetEnvironment(simulator)
+                    .overlay(alignment: .bottom) {
+                        if ProcessInfo.processInfo.arguments.contains("-WanderAuthenticatedUITest"),
+                           ProcessInfo.processInfo.arguments.contains("-WanderSharedVisitAddOverlapUITest") {
+                            Button("Simulate shared check-in notification") {
+                                pushNotifications.openSharedVisit(
+                                    participantID: SimulatorSharedVisitNavigationRepository.participantID,
+                                    generation: 1
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .frame(minHeight: 44)
+                            .padding(.bottom, 64)
+                            .accessibilityIdentifier("fixture.sharedVisitNotification")
+                        }
+                    }
+                    #endif
                     .interactiveDismissDisabled(
                         walkthroughs.activeSurface == .add
                             || walkthroughs.activeSurface == .saveFlow
@@ -1308,12 +1328,6 @@ struct WanderRootView: View {
             if isPresented {
                 saveStreakCelebrationTask?.cancel()
             } else {
-                // A notification's compatibility map is only a host for the
-                // editor. Save and cancel both return to Live after the inner
-                // sheet finishes dismissing; the outer onDismiss releases streaks.
-                if showsLegacyMapDestination {
-                    showsLegacyMapDestination = false
-                }
                 queueSaveStreakCelebration(store.saveStreakCelebration)
             }
         }
@@ -2401,9 +2415,12 @@ struct WanderRootView: View {
         foregroundEntryPolicy.recordNotificationNavigation(requestID: request.id)
         preserveExplicitEntryDestination()
         if unifiedLiveEnabled,
-           deepLinkPresentations.presentedTokens.contains(where: { $0.surface == .liveModal }) {
+           deepLinkPresentationTokensAwaitingDismissal().contains(where: {
+               $0.surface == .liveModal || $0.surface == .add
+           }) {
             // Own a copy while the physical sheet dismisses: tab observers may
             // consume the shared request even while their tab is off screen.
+            // Root Add also has to finish before another root sheet can appear.
             pushNotifications.consumeNavigationRequest(id: request.id)
             beginDeepLinkHandoff(to: .feed, resuming: request)
             return

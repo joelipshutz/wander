@@ -649,6 +649,10 @@ final class SimulatorSharedVisitNavigationRepository: SharedVisitRepository {
         participantID == Self.participantID && generation == 1 ? invitation : nil
     }
     func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? {
+        if ProcessInfo.processInfo.arguments.contains("-WanderSharedVisitAddOverlapUITest") {
+            // Let the unrelated Add sheet finish dismissing before resolving.
+            try await Task.sleep(for: .seconds(2))
+        }
         guard participantID == Self.participantID,
               !ProcessInfo.processInfo.arguments.contains("-WanderUnavailableSharedVisitUITest") else { return nil }
         return SharedVisitDestination(participantID: participantID, requestedGeneration: generation,

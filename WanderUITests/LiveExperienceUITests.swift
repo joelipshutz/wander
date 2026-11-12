@@ -43,13 +43,34 @@ final class LiveExperienceUITests: XCTestCase {
         assertReturnedToLive(app)
     }
 
-    private func launchSharedVisitNotification(extra: [String] = []) -> XCUIApplication {
+    func testSharedVisitNotificationSurvivesUnrelatedAddDismissal() {
+        let app = launchSharedVisitApp(extra: ["-WanderSharedVisitAddOverlapUITest"])
+        XCTAssertTrue(app.buttons["live.feed.scope.menu"].waitForExistence(timeout: 20))
+        // The Live plus button opens the root Add sheet and registers .addSheet.
+        pressSharedVisitControl(app.buttons["Add a place"])
+        let notification = app.buttons["fixture.sharedVisitNotification"]
+        XCTAssertTrue(notification.waitForExistence(timeout: 20))
+        pressSharedVisitControl(notification)
+        let submit = app.buttons["save.submit"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 20), "Add dismissal must not discard the pending invitation")
+        XCTAssertTrue(app.staticTexts["Navigation Test Cafe"].exists)
+        capture("REC692-shared-check-in-after-add-dismissal")
+        pressSharedVisitControl(app.buttons["save.close"])
+        assertReturnedToLive(app)
+    }
+
+    private func launchSharedVisitApp(extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures", "-WanderDisableWalkthroughs",
             "-WanderUnifiedLiveUITest", "-WanderSharedVisitNavigationUITest", "-WanderInitialTab", "discover",
             "-astir.live.introduction.v1.user_joe.acknowledged", "YES",
             "-recme.productUpsell.notification_app_open.user_joe.impressionCount.v1", "3"] + extra
         app.launch()
+        return app
+    }
+
+    private func launchSharedVisitNotification(extra: [String] = []) -> XCUIApplication {
+        let app = launchSharedVisitApp(extra: extra)
         let notifications = app.buttons["Notifications"]
         XCTAssertTrue(notifications.waitForExistence(timeout: 20))
         pressSharedVisitControl(notifications)
