@@ -51,7 +51,8 @@ struct SharedVisitReviewRoot: View {
     static let groupID = "96000000-0000-4000-8000-000000000001"
     static let ids = ["96000000-0000-4000-8000-000000000011", "96000000-0000-4000-8000-000000000012"]
     static var posts: [FeedActivity] {
-        ["Alex", "Sam"].enumerated().map { index, name in
+        let ratingOnly = ProcessInfo.processInfo.arguments.contains("-WanderSharedVisitRatingOnly")
+        return ["Alex", "Sam"].enumerated().map { index, name in
             let userID = index == 0 ? "user_joe" : "fixture_sam"
             let place = LocalPlace(localID: "shared-review-cafe", canonicalName: "Juniper Café", category: "coffee", latitude: 34, longitude: -118)
             let save = LocalUserPlace(localID: "shared-review-save-\(index)", userID: userID, placeID: place.id,
@@ -62,7 +63,8 @@ struct SharedVisitReviewRoot: View {
                 place: VisiblePlace(id: save.id, place: place, userPlace: save,
                     owner: LocalProfile(localID: userID, handle: name.lowercased(), displayName: name)),
                 occurredAt: Date(timeIntervalSince1970: 1_792_627_200 + Double(index)),
-                note: index == 0 ? "The shaded patio made a perfect afternoon stop." : "Loved the cardamom latte. Next time, let’s try breakfast.",
+                note: index == 0 ? "The shaded patio made a perfect afternoon stop." : (ratingOnly ? nil : "Loved the cardamom latte. Next time, let’s try breakfast."),
+                rating: index == 0 ? (ratingOnly ? nil : 4) : 4.5,
                 media: ActivityPostcardPhotoUITestFixtures.photos().enumerated().filter { $0.offset % 2 == index }.map {
                     FeedMediaPreview(id: $0.element.id, accessibilityLabel: $0.element.accessibilityLabel)
                 }, sharedVisit: .init(groupID: groupID, visitID: "review-visit-\(index)", companions: [
