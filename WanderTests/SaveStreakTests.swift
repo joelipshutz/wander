@@ -425,7 +425,7 @@ final class SaveStreakStoreTests: XCTestCase {
         XCTAssertEqual(store.saveStreakSummary.currentCount, 1)
     }
 
-    func testEditingAnExistingSaveDoesNotTriggerAStreakEvent() throws {
+    func testConvertingWannaToCheckInCountsWithoutAddingAnotherDay() throws {
         let store = WanderStore(fixtures: .empty())
         let place = candidate(id: "maru", name: "Maru Coffee")
 
@@ -447,8 +447,38 @@ final class SaveStreakStoreTests: XCTestCase {
             sourceType: .manual
         )
 
-        XCTAssertNil(store.saveStreakCelebration)
+        XCTAssertEqual(store.saveStreakCelebration?.kind, .sameDayConfetti)
         XCTAssertEqual(store.saveStreakSummary.currentCount, 1)
+    }
+
+    func testRepeatCheckInRecordsTodayEvenWhenVisitDateIsHistorical() throws {
+        let store = WanderStore(fixtures: .empty())
+        let result = store.saveCandidate(candidate(id: "repeat", name: "Coffee"),
+            status: .been, visibility: .followers, note: nil, sourceType: .manual)
+        let before = store.saveStreakDatesByUserID[store.currentUser.id, default: []].count
+        let visit = store.createVisit(userPlaceID: result.userPlaceID,
+            visitedAt: Date.distantPast)
+        XCTAssertNotNil(visit)
+        let dates = store.saveStreakDatesByUserID[store.currentUser.id, default: []]
+        XCTAssertEqual(dates.count, before + 1)
+        XCTAssertTrue(Calendar.current.isDateInToday(try XCTUnwrap(dates.last)))
+        XCTAssertEqual(store.saveStreakSummary.currentCount, 1)
+    }
+
+    func testExistingPlaceCheckInRecoversStreakForBeenAndWanna() throws {
+        for status in [PlaceStatus.been, .wannaGo] {
+            let fixtures = recoveryEligibleFixtures()
+            let saved = try XCTUnwrap(fixtures.userPlaces.first)
+            saved.statusRaw = status.rawValue
+            let store = WanderStore(fixtures: fixtures)
+            XCTAssertFalse(store.saveStreakSummary.isTodayCovered)
+            XCTAssertTrue(store.saveStreakSummary.isRecoveryAvailable)
+            XCTAssertNotNil(store.createVisit(userPlaceID: saved.id))
+            XCTAssertTrue(store.saveStreakSummary.isTodayCovered)
+            XCTAssertEqual(store.saveStreakSummary.currentCount, 4)
+            XCTAssertNotNil(store.saveStreakCelebration?.recoveryDate)
+            XCTAssertEqual(store.saveStreakCelebration?.kind, .dailyTakeover)
+        }
     }
 
     func testStreakLedgerPersistsAndMovesFromGuestToSignedInUser() throws {

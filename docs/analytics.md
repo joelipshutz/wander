@@ -409,3 +409,5 @@ Check-in reminder opens use `notification_type=check_in_reminder`,
 deduplication prevents duplicate opens; neither the event ID nor the destination
 IDs are exported. The push worker allowlists the same type in the existing
 aggregate delivery/frequency metrics. The dashboard structure is unchanged.
+
+Existing-place check-ins, including Wanna conversions, emit the existing save-streak celebration events on creation. Historical visit dates count on the day the check-in is recorded. Edits do not create another streak entry.

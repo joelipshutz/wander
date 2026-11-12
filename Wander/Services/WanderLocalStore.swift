@@ -7639,7 +7639,8 @@ final class WanderStore: ObservableObject {
         visibility: PlaceVisibility? = nil,
         preservesPriorWanna: Bool = true,
         senderNotificationPolicy: SenderNotificationPolicy = .standard,
-        detailsPending: Bool = false
+        detailsPending: Bool = false,
+        recordsSaveStreak: Bool = true
     ) -> LocalPlaceVisit? {
         let userPlace: LocalUserPlace
         if let localUserPlace = currentUserPlace(matching: userPlaceID) {
@@ -7652,6 +7653,7 @@ final class WanderStore: ObservableObject {
             return nil
         }
 
+        let streakSummaryBeforeSave = saveStreakSummary
         let now = Date.now
         let isRepeatCheckIn = !visits(for: userPlace.id).isEmpty
         let attributeAnswersJSON = VisitAttributeAnswers.encoded(from: attributes)
@@ -7714,6 +7716,11 @@ final class WanderStore: ObservableObject {
                 ]
             )
         )
+
+        if recordsSaveStreak, let place = place(matching: userPlace.placeID) {
+            recordNewSaveForStreak(place: place, status: .been, savedAt: now,
+                                   previousSummary: streakSummaryBeforeSave)
+        }
 
         objectWillChange.send()
         persist()
@@ -8831,7 +8838,8 @@ final class WanderStore: ObservableObject {
                 attributes: attributeDrafts,
                 visibility: resolvedVisibility,
                 senderNotificationPolicy: senderNotificationPolicy,
-                detailsPending: detailsPending
+                detailsPending: detailsPending,
+                recordsSaveStreak: false
             )
         }
         refreshUserPlaceVisitSummary(userPlaceID: userPlace.id)
