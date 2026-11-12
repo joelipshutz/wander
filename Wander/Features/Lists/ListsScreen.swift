@@ -4175,6 +4175,7 @@ private struct ListPlacePhotoMedia: View {
     var eligibleUserIDs: [String]? = nil
     @State private var resolvedPhoto: ListPlaceResolvedPhoto?
     @State private var resolvedPhotoKey: String?
+    @State private var completedRequestKey: String?
 
     var body: some View {
         GeometryReader { proxy in
@@ -4183,6 +4184,7 @@ private struct ListPlacePhotoMedia: View {
                 Int(ceil(max(proxy.size.width, proxy.size.height) * displayScale))
             )
             let resolutionKey = photoResolutionKey
+            let requestKey = "\(resolutionKey)|target-px:\(targetPixelSize)"
             let cachedPhoto = ListPlacePhotoResolver.cachedResolvedPhoto(
                 request: place.canonicalProfilePlace.photoRequest,
                 preferredUserPhoto: place.preferredUserPhoto,
@@ -4199,9 +4201,6 @@ private struct ListPlacePhotoMedia: View {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(place.tint)
 
-                AstirPlacePhotoAsset(stableKey: place.id)
-                    .accessibilityHidden(true)
-
                 if let displayedPhoto {
                     Image(uiImage: displayedPhoto.image)
                         .resizable()
@@ -4209,17 +4208,26 @@ private struct ListPlacePhotoMedia: View {
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
                         .transition(.opacity)
+                } else if completedRequestKey == requestKey {
+                    Image(systemName: "photo")
+                        .font(.system(size: fallbackEmojiSize))
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("No photos available")
+                } else {
+                    ProgressView()
+                        .accessibilityLabel("Loading photo")
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .task(id: "\(resolutionKey)|target-px:\(targetPixelSize)") {
+            .task(id: requestKey) {
                 guard scenePhase == .active else { return }
                 if let cachedPhoto {
                     resolvedPhoto = cachedPhoto
                     resolvedPhotoKey = resolutionKey
                     return
                 }
+                completedRequestKey = nil
                 resolvedPhoto = nil
                 resolvedPhotoKey = resolutionKey
                 let resolved = await ListPlacePhotoResolver.resolve(
@@ -4234,11 +4242,13 @@ private struct ListPlacePhotoMedia: View {
                 withAnimation(.easeOut(duration: 0.2)) {
                     resolvedPhoto = resolved
                     resolvedPhotoKey = resolutionKey
+                    completedRequestKey = requestKey
                 }
             }
         }
         .clipped()
         .onDisappear {
+            completedRequestKey = nil
             resolvedPhotoKey = nil
             resolvedPhoto = nil
         }
@@ -6174,3 +6184,12 @@ struct ListDetailHeaderToolbar<Content: View>: ToolbarContent {
         .buttonStyle(.plain)
     }
 }
+
+#if DEBUG
+@MainActor
+func listPhotoLoadingTestView(place: PlaceSheetPlace) -> some View {
+    ListPlacePhotoMedia(place: ListPlaceMock(id: place.photoLookupKey, name: "Test place",
+        category: "cafe", metadata: "", tint: .gray.opacity(0.15), pinPosition: .zero,
+        profilePlace: place), cornerRadius: 16, fallbackEmojiSize: 22)
+}
+#endif
