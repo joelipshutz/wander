@@ -2002,7 +2002,11 @@ final class WanderStore: ObservableObject {
             nil
         }
         if let recoveryDate {
-            saveStreakRecoveryDatesByUserID[currentUser.id, default: []].append(recoveryDate)
+            for offset in 0..<previousSummary.recoverableMissedDayCount {
+                if let day = calendar.date(byAdding: .day, value: -offset, to: recoveryDate) {
+                    saveStreakRecoveryDatesByUserID[currentUser.id, default: []].append(day)
+                }
+            }
         }
 
         saveStreakDatesByUserID[currentUser.id, default: []].append(savedAt)
@@ -2023,7 +2027,8 @@ final class WanderStore: ObservableObject {
             status: status,
             streakCount: updatedSummary.currentCount,
             saveDate: savedAt,
-            recoveryDate: recoveryDate
+            recoveryDate: recoveryDate,
+            recoveryDayCount: previousSummary.recoverableMissedDayCount
         )
 
         if saveStreakCelebration?.kind != .dailyTakeover || kind == .dailyTakeover {
