@@ -35,6 +35,7 @@ on:
       - 'scripts/test_replay_isolation_workflows.py'
       - 'WanderTests/WanderStoreTests.swift'
       - 'WanderUITests/FeedPaginationUITests.swift'
+      - 'WanderUITests/MapSnapshotFeedUITests.swift'
       - 'WanderUITests/FeedAudienceUITests.swift'
       - 'WanderUITests/FeedConsolidationUITests.swift'
       - 'WanderUITests/MapFilterInteractionUITests.swift'
@@ -165,6 +166,7 @@ jobs:
           -skip-testing:WanderTests/FeedScreenScrollingPerformanceTests/testPerformanceMountedFeedScrollWith600EventsAndActualReplay
           -skip-testing:WanderTests/PostHogReplayPerformanceTests/testPerformanceActualReplayMaskedScroll
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/MapSnapshotFeedUITests
           -only-testing:WanderUITests/LiveDrawerActionsUITests
           -only-testing:WanderUITests/FeedAudienceUITests
           -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
@@ -452,6 +454,7 @@ jobs:
           -destination "platform=iOS Simulator,id=$SMALL_DEVICE_ID"
           -derivedDataPath "$RUNNER_TEMP/DerivedData" -jobs 2 -parallel-testing-enabled NO
           -only-testing:WanderUITests/FeedPaginationUITests
+          -only-testing:WanderUITests/MapSnapshotFeedUITests
           -only-testing:WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge
           -only-testing:WanderUITests/FeedConsolidationUITests/testUnseenDotsClearOnlyAfterBrowsingAndPersistAcrossReopening
           -only-testing:WanderUITests/LiveDrawerActionsUITests

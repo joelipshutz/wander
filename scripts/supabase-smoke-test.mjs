@@ -200,6 +200,7 @@ async function main() {
         console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
         await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
         await client.query(readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8"));
+        await client.query(readFileSync(new URL("./sql/map-snapshot-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - owner visit details preserve answers without exposing another user’s history");
         await client.query("savepoint events_interest_smoke");
         await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
@@ -2941,6 +2942,7 @@ reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8")}
+${readFileSync(new URL("./sql/map-snapshot-smoke.sql", import.meta.url), "utf8")}
 savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;

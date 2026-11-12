@@ -2219,6 +2219,15 @@ struct SupabasePlaceListRepository: PlaceListRepository {
 
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String {
         try CommunityContentPolicy.validate(draft.name, draft.description)
+        if draft.id == nil, let captureID = draft.snapshotCaptureID {
+            // A missing migration must fail, never silently create noisy posts
+            // through the legacy per-item path.
+            return try await rpc.call("create_map_snapshot_list", params: CreateMapSnapshotListParams(
+                inputSnapshotID: captureID,
+                inputList: UpsertPlaceListBody(draft: draft),
+                inputUserPlaceIDs: draft.snapshotUserPlaceIDs ?? []
+            ))
+        }
         return try await rpc.call(
             "upsert_place_list",
             params: UpsertPlaceListParams(draft: draft)
@@ -2229,6 +2238,13 @@ struct SupabasePlaceListRepository: PlaceListRepository {
         let _: EmptyRPCResponse = try await rpc.call(
             "delete_place_list",
             params: PlaceListIDParams(inputListID: listID)
+        )
+    }
+
+    func deleteSnapshot(captureID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "delete_map_snapshot_list",
+            params: PlaceListIDParams(inputListID: captureID)
         )
     }
 
@@ -3721,6 +3737,18 @@ private struct UpsertPlaceListParams: Encodable {
 
     enum CodingKeys: String, CodingKey {
         case inputList = "input_list"
+    }
+}
+
+private struct CreateMapSnapshotListParams: Encodable {
+    let inputSnapshotID: String
+    let inputList: UpsertPlaceListBody
+    let inputUserPlaceIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case inputSnapshotID = "input_snapshot_id"
+        case inputList = "input_list"
+        case inputUserPlaceIDs = "input_user_place_ids"
     }
 }
 
