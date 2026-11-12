@@ -59,13 +59,22 @@ private final class PlacePhotoImageMemoryCache: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        guard let entry = entries[key] else {
+        // A card decoded at a larger size can render the same profile photo
+        // immediately. Never promote a smaller decode to a larger request.
+        let resolvedKey = entries[key] != nil ? key : entries.keys
+            .filter {
+                $0.canonicalPlaceKey == key.canonicalPlaceKey
+                    && $0.photoKey == key.photoKey
+                    && $0.targetPixelSize >= key.targetPixelSize
+            }
+            .min { $0.targetPixelSize < $1.targetPixelSize }
+        guard let resolvedKey, let entry = entries[resolvedKey] else {
             misses += 1
             return nil
         }
         hits += 1
         accessCounter &+= 1
-        entries[key]?.lastAccess = accessCounter
+        entries[resolvedKey]?.lastAccess = accessCounter
         return entry.image
     }
 
