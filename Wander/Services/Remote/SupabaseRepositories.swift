@@ -2241,6 +2241,13 @@ struct SupabasePlaceListRepository: PlaceListRepository {
         )
     }
 
+    func deleteSnapshot(captureID: String) async throws {
+        let _: EmptyRPCResponse = try await rpc.call(
+            "delete_map_snapshot_list",
+            params: PlaceListIDParams(inputListID: captureID)
+        )
+    }
+
     func leave(listID: String) async throws {
         let _: EmptyRPCResponse = try await rpc.call(
             "leave_place_list",

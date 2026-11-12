@@ -7,7 +7,8 @@ Last updated: 2026-11-11
 Creating a map snapshot emits one list creation post with its cover and place
 count. The captured members are seeded atomically without individual list-add
 events; later manual additions still emit ordinary activity. Capture identity
-survives offline restarts and retries. Existing list privacy and source saves
+survives offline restarts and retries. Canceled capture IDs retain a server
+tombstone so a delayed create cannot resurrect them. Existing list privacy and source saves
 remain authoritative. Historical cleanup requires reliable capture provenance;
 deleted snapshots stay deleted and timestamp proximity alone is not evidence.
 

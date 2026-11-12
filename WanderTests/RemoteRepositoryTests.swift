@@ -184,6 +184,16 @@ final class RemoteRepositoryTests: XCTestCase {
         XCTAssertEqual(rpc.calls.map(\.name), ["create_map_snapshot_list", "create_map_snapshot_list", "upsert_place_list"])
     }
 
+    func testSnapshotDeletionUsesDurableCancellationRPC() async throws {
+        let rpc = RecordingRPC()
+        rpc.responses["delete_map_snapshot_list"] = Data("null".utf8)
+        let id = UUID().uuidString.lowercased()
+        try await WanderBackend(placeListRepository: SupabasePlaceListRepository(rpc: rpc))
+            .deletePlaceList(listID: id, snapshotCaptureID: id)
+        XCTAssertEqual(rpc.calls.map(\.name), ["delete_map_snapshot_list"])
+        XCTAssertEqual(rpc.rawBodies.first?["input_list_id"] as? String, id)
+    }
+
     func testSnapshotCreationFailureNeverFallsBackToOrdinaryListRPC() async throws {
         let rpc = RecordingRPC()
         rpc.errors = [WanderRemoteError.notConfigured]

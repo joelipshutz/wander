@@ -59,7 +59,7 @@ struct ActivityPostcardReviewRoot: View {
                 ActivityPostcardView(
                     context: context,
                     visiblePlace: nil,
-                    metadataIcon: "fork.knife",
+                    metadataIcon: context.ticketKind == .list ? PlaceListSymbol.systemImage : "fork.knife",
                     secondaryMetadataTitle: nil,
                     secondaryMetadataAction: nil,
                     secondaryMetadataAccessibilityLabel: nil,

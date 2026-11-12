@@ -89,6 +89,36 @@ revoke all on function public.create_map_snapshot_list(uuid, jsonb, uuid[]) from
 grant execute on function app.create_map_snapshot_list(uuid, jsonb, uuid[]) to authenticated;
 grant execute on function public.create_map_snapshot_list(uuid, jsonb, uuid[]) to authenticated;
 
+-- A cancellation writes the same unique key as creation. INSERT ... ON CONFLICT
+-- waits for an in-flight creator, or reserves a tombstone if deletion arrives
+-- first. No late request or retry can resurrect a canceled snapshot.
+create function app.delete_map_snapshot_list(input_list_id uuid)
+returns void language plpgsql volatile security definer
+set search_path = pg_catalog, public, app
+as $$
+declare
+  viewer_id text := app.current_user_id();
+  output_id uuid;
+begin
+  if viewer_id is null then raise exception 'not_authenticated'; end if;
+  if input_list_id is null then raise exception 'invalid_snapshot_capture'; end if;
+  insert into public.place_lists(id, owner_user_id, name, description, visibility, snapshot_capture_id, deleted_at)
+  values (input_list_id, viewer_id, 'Map snapshot', '', 'stealth', input_list_id, now())
+  on conflict (id) do update set deleted_at = coalesce(place_lists.deleted_at, now())
+  where place_lists.owner_user_id = viewer_id and place_lists.snapshot_capture_id = input_list_id
+  returning id into output_id;
+  if output_id is null then raise exception 'place_list_not_found_or_forbidden'; end if;
+end;
+$$;
+create function public.delete_map_snapshot_list(input_list_id uuid)
+returns void language sql volatile security invoker
+set search_path = pg_catalog, public, app
+as $$ select app.delete_map_snapshot_list(input_list_id); $$;
+revoke all on function app.delete_map_snapshot_list(uuid) from public, anon;
+revoke all on function public.delete_map_snapshot_list(uuid) from public, anon;
+grant execute on function app.delete_map_snapshot_list(uuid) to authenticated;
+grant execute on function public.delete_map_snapshot_list(uuid) to authenticated;
+
 -- Preserve the private STABLE definer projection from 20260725214600.
 -- Visibility stays with the existing feed/detail callers and storage RLS.
 create or replace function app.feed_list_projection(input_list_id uuid)

@@ -87,7 +87,7 @@ do $$ begin
  end;
 end $$;
 select set_config('request.jwt.claim.sub', 'user_codex_supabase_smoke', true);
-select public.delete_place_list('68720000-0000-4000-8000-000000000001');
+select public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000001');
 do $$ begin
  begin
   perform public.create_map_snapshot_list('68720000-0000-4000-8000-000000000001', '{"name":"Deleted capture retry"}', '{}'::uuid[]);
@@ -108,3 +108,64 @@ do $$ begin
  end;
 end $$;
 reset role;
+
+-- Cancel-before-create must reserve the capture key without publishing a post.
+select pg_temp.snapshot_assert(
+ (select prosecdef and provolatile = 'v' and 'search_path=pg_catalog, public, app' = any(proconfig)
+ from pg_proc where oid = 'app.delete_map_snapshot_list(uuid)'::regprocedure)
+ and (select not prosecdef and provolatile = 'v' and 'search_path=pg_catalog, public, app' = any(proconfig)
+ from pg_proc where oid = 'public.delete_map_snapshot_list(uuid)'::regprocedure)
+ and has_function_privilege('authenticated', 'public.delete_map_snapshot_list(uuid)', 'execute')
+ and has_function_privilege('authenticated', 'app.delete_map_snapshot_list(uuid)', 'execute')
+ and not has_function_privilege('anon', 'public.delete_map_snapshot_list(uuid)', 'execute')
+ and not has_function_privilege('anon', 'app.delete_map_snapshot_list(uuid)', 'execute'), 'cancellation security metadata');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_supabase_smoke', true);
+select public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000004');
+select public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000004');
+do $$ begin
+ begin
+  perform public.create_map_snapshot_list('68720000-0000-4000-8000-000000000004', '{"name":"Late request"}', array['68710000-0000-4000-8000-000000000001'::uuid]);
+  raise exception 'Canceled capture unexpectedly created';
+ exception when raise_exception then
+  if sqlerrm <> 'place_list_not_found_or_forbidden' then raise; end if;
+ end;
+end $$;
+select set_config('request.jwt.claim.sub', 'user_codex_supabase_smoke_stranger', true);
+do $$ begin
+ begin
+  perform public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000004');
+  raise exception 'Foreign cancellation unexpectedly accepted';
+ exception when raise_exception then
+  if sqlerrm <> 'place_list_not_found_or_forbidden' then raise; end if;
+ end;
+end $$;
+reset role;
+select pg_temp.snapshot_assert(not exists(select 1 from public.feed_events where list_id = '68720000-0000-4000-8000-000000000004'), 'cancel-before-create emits no post');
+select pg_temp.snapshot_assert((select deleted_at is not null and owner_user_id = 'user_codex_supabase_smoke'
+ from public.place_lists where id = '68720000-0000-4000-8000-000000000004'), 'cancellation retains owner tombstone');
+set local role anon;
+do $$ begin
+ begin
+  perform public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000004');
+  raise exception 'Anonymous cancellation unexpectedly accepted';
+ exception when insufficient_privilege then null;
+ end;
+end $$;
+reset role;
+
+insert into public.place_lists(id, owner_user_id, name, description, visibility)
+values ('68720000-0000-4000-8000-000000000005', 'user_codex_supabase_smoke', 'Ordinary list', '', 'stealth');
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'user_codex_supabase_smoke', true);
+do $$ begin
+ begin
+  perform public.delete_map_snapshot_list('68720000-0000-4000-8000-000000000005');
+  raise exception 'Ordinary list unexpectedly canceled';
+ exception when raise_exception then
+  if sqlerrm <> 'place_list_not_found_or_forbidden' then raise; end if;
+ end;
+end $$;
+reset role;
+select pg_temp.snapshot_assert((select deleted_at is null and snapshot_capture_id is null
+ from public.place_lists where id = '68720000-0000-4000-8000-000000000005'), 'ordinary list preserved');

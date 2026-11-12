@@ -5410,7 +5410,7 @@ final class WanderStore: ObservableObject {
             }
 
             do {
-                try await backend.deletePlaceList(listID: remoteListID)
+                try await backend.deletePlaceList(listID: remoteListID, snapshotCaptureID: list.snapshotCaptureID)
                 guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
@@ -5476,7 +5476,7 @@ final class WanderStore: ObservableObject {
             // The capture UUID is also the server list ID, so neither case can
             // leave an orphan snapshot behind.
             if placeLists.first(where: { $0.localID == list.localID })?.deletedAt != nil {
-                try await backend.deletePlaceList(listID: remoteListID)
+                try await backend.deletePlaceList(listID: remoteListID, snapshotCaptureID: list.snapshotCaptureID)
                 guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
@@ -13431,10 +13431,13 @@ final class WanderStore: ObservableObject {
 
     private func shouldPreserveLocalPlaceListChanges(remoteListID: String) -> Bool {
         guard let localList = placeLists.first(where: { list in
-            list.id == remoteListID || list.serverID == remoteListID
+            list.id == remoteListID || list.serverID == remoteListID || list.snapshotCaptureID == remoteListID
         }), localList.ownerUserID == currentUser.id else {
             return false
         }
+
+        // A delayed pre-delete snapshot must not resurrect an acknowledged capture cancellation.
+        if localList.snapshotCaptureID != nil && localList.deletedAt != nil { return true }
 
         switch localList.syncState {
         case .pendingCreate, .pendingUpdate, .pendingDelete, .failed, .serverDenied:
@@ -13449,6 +13452,7 @@ final class WanderStore: ObservableObject {
 
         if let index = placeLists.firstIndex(where: { list in
             list.serverID == serverID || list.localID == remoteList.localID || list.id == serverID
+                || list.snapshotCaptureID == serverID
         }) {
             let previousID = placeLists[index].id
             placeLists[index].serverID = serverID

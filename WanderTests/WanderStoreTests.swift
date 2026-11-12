@@ -10834,6 +10834,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
         for place in store.currentUserVisiblePlaces {
             place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
             place.userPlace.serverID = UUID().uuidString
         }
         let ownPlaces = store.currentUserVisiblePlaces
@@ -12544,6 +12545,7 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertGreaterThan(own.count, 2)
         for place in own {
             place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
             place.userPlace.serverID = UUID().uuidString
         }
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
@@ -12562,6 +12564,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
         let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
         own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
         own.userPlace.serverID = UUID().uuidString
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
         let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
@@ -12577,6 +12580,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
         let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
         own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
         own.userPlace.serverID = UUID().uuidString
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
         let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
@@ -12593,6 +12597,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
         let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
         own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
         own.userPlace.serverID = UUID().uuidString
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
         let first = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
@@ -12614,6 +12619,46 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(store.placeLists.first { $0.localID == second.localID }?.syncState, .tombstoned)
     }
 
+    func testSnapshotRefreshAfterLostReplyPreservesOnePendingListAndDeletion() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
+        own.userPlace.serverID = UUID().uuidString
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let captureID = try XCTUnwrap(list.snapshotCaptureID)
+        let repository = FakePlaceListRepository(upsertResult: captureID)
+        repository.upsertFailuresRemaining = 1
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertTrue(store.updatePlaceList(id: list.id, name: "Edited offline", description: "",
+            visibility: .stealth, collaboratorUserIDs: []))
+        let initialIDs = store.placeLists.first { $0.localID == list.localID }?.snapshotInitialItemIDs
+        let remote = LocalPlaceList(localID: "remote_snapshot", serverID: captureID,
+            ownerUserID: store.currentUser.id, name: list.name, description: "", visibility: .stealth, syncState: .synced)
+        let surface = FakeSurfaceSnapshotRepository()
+        surface.listSnapshot = PlaceListsRemoteSnapshot(summaries: [RemotePlaceListSummary(list: remote,
+            owner: ProfileShell(id: store.currentUser.id, handle: store.currentUser.handle,
+                displayName: store.currentUser.displayName, avatarURL: nil, bio: nil, relationship: .owner),
+            collaborators: [], itemCount: 1)],
+            details: [RemotePlaceListDetail(list: remote, collaborators: [], items: [])],
+            visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        let refreshBackend = WanderBackend(surfaceSnapshotRepository: surface)
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        XCTAssertEqual(store.placeLists.filter { $0.snapshotCaptureID == captureID || $0.id == captureID }.count, 1)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.name, "Edited offline")
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.snapshotInitialItemIDs, initialIDs)
+        XCTAssertTrue(store.deletePlaceList(id: list.id))
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        XCTAssertEqual(repository.deletedListIDs.last, captureID)
+        XCTAssertEqual(store.placeLists.filter { $0.snapshotCaptureID == captureID || $0.id == captureID }.count, 1)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .tombstoned)
+        XCTAssertNotNil(store.placeLists.first { $0.localID == list.localID }?.deletedAt)
+    }
+
     func testSnapshotWithPendingSourceFailsWithoutPublishingPartialBatch() async throws {
         let store = makeStore()
         let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
@@ -12630,6 +12675,7 @@ final class WanderStoreTests: XCTestCase {
         let store = makeStore()
         for place in store.currentUserVisiblePlaces {
             place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
             place.userPlace.serverID = UUID().uuidString
         }
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
@@ -13904,6 +13950,10 @@ private final class FakePlaceListRepository: PlaceListRepository {
             throw TestError.expected
         }
         return upsertResults[min(upsertedDrafts.count - 1, upsertResults.count - 1)]
+    }
+
+    func deleteSnapshot(captureID: String) async throws {
+        try await delete(listID: captureID)
     }
 
     func delete(listID: String) async throws {
