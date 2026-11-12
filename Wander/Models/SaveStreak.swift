@@ -2,7 +2,8 @@ import Foundation
 
 enum SaveStreakWindow {
     static let dayCount = 7
-    static let minimumRecoveryStreakCount = 2
+    static let minimumRecoveryStreakCount = 1
+    static let maximumRecoveryMissedDays = 2
     static let recoveryCooldownDayCount = 30
 }
 
@@ -20,6 +21,7 @@ struct SaveStreakSummary: Equatable {
     let recentDayStates: [SaveStreakDayState]
     let isRecoveryAvailable: Bool
     let recoverableCount: Int
+    let recoverableMissedDayCount: Int
     let hasRecoveryEntitlement: Bool
 
     init(
@@ -30,6 +32,7 @@ struct SaveStreakSummary: Equatable {
         recentDayStates: [SaveStreakDayState] = [],
         isRecoveryAvailable: Bool = false,
         recoverableCount: Int = 0,
+        recoverableMissedDayCount: Int = 0,
         hasRecoveryEntitlement: Bool = true
     ) {
         self.currentCount = currentCount
@@ -39,6 +42,7 @@ struct SaveStreakSummary: Equatable {
         self.recentDayStates = recentDayStates
         self.isRecoveryAvailable = isRecoveryAvailable
         self.recoverableCount = recoverableCount
+        self.recoverableMissedDayCount = recoverableMissedDayCount
         self.hasRecoveryEntitlement = hasRecoveryEntitlement
     }
 
@@ -138,17 +142,21 @@ enum SaveStreakCalculator {
         }
 
         var recoverableCount = 0
-        if !isTodayCovered,
-           let yesterday,
-           !coveredDaySet.contains(yesterday),
-           let dayBeforeYesterday = calendar.date(byAdding: .day, value: -1, to: yesterday) {
-            var cursor = dayBeforeYesterday
-            while coveredDaySet.contains(cursor) {
-                recoverableCount += 1
-                guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else {
-                    break
-                }
+        var missedDayCount = 0
+        if !isTodayCovered, let yesterday, !coveredDaySet.contains(yesterday) {
+            var cursor = yesterday
+            while !coveredDaySet.contains(cursor),
+                  missedDayCount <= SaveStreakWindow.maximumRecoveryMissedDays {
+                missedDayCount += 1
+                guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
                 cursor = previous
+            }
+            if missedDayCount <= SaveStreakWindow.maximumRecoveryMissedDays {
+                while coveredDaySet.contains(cursor) {
+                    recoverableCount += 1
+                    guard let previous = calendar.date(byAdding: .day, value: -1, to: cursor) else { break }
+                    cursor = previous
+                }
             }
         }
         let isRecoveryAvailable = hasRecoveryEntitlement
@@ -162,6 +170,7 @@ enum SaveStreakCalculator {
             recentDayStates: recentDayStates,
             isRecoveryAvailable: isRecoveryAvailable,
             recoverableCount: isRecoveryAvailable ? recoverableCount : 0,
+            recoverableMissedDayCount: isRecoveryAvailable ? missedDayCount : 0,
             hasRecoveryEntitlement: hasRecoveryEntitlement
         )
     }
@@ -181,6 +190,7 @@ struct SaveStreakCelebration: Identifiable, Equatable {
     let streakCount: Int
     let saveDate: Date
     let recoveryDate: Date?
+    let recoveryDayCount: Int
 
     init(
         id: UUID = UUID(),
@@ -190,7 +200,8 @@ struct SaveStreakCelebration: Identifiable, Equatable {
         status: PlaceStatus,
         streakCount: Int,
         saveDate: Date,
-        recoveryDate: Date? = nil
+        recoveryDate: Date? = nil,
+        recoveryDayCount: Int = 1
     ) {
         self.id = id
         self.kind = kind
@@ -200,6 +211,7 @@ struct SaveStreakCelebration: Identifiable, Equatable {
         self.streakCount = streakCount
         self.saveDate = saveDate
         self.recoveryDate = recoveryDate
+        self.recoveryDayCount = recoveryDate == nil ? 0 : recoveryDayCount
     }
 }
 
@@ -231,6 +243,7 @@ enum SaveStreakCelebrationPresentation {
         streakCount: Int,
         endingOn saveDate: Date,
         recoveryDate: Date? = nil,
+        recoveryDayCount: Int = 1,
         calendar: Calendar = .current
     ) -> [SaveStreakWeekday] {
         let endDay = calendar.startOfDay(for: saveDate)
@@ -251,7 +264,11 @@ enum SaveStreakCelebrationPresentation {
                 symbol: symbol,
                 isCovered: offset >= firstCoveredOffset,
                 isToday: offset == 0,
-                isRecoveryDay: recoveryDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+                isRecoveryDay: recoveryDate.map { recoveryEnd in
+                    let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                                         to: calendar.startOfDay(for: recoveryEnd)).day ?? -1
+                    return (0..<max(0, recoveryDayCount)).contains(offset)
+                } ?? false
             )
         }
     }

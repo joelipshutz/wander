@@ -79,7 +79,8 @@ struct SaveStreakCelebrationView: View {
                     SaveStreakWeekCard(
                         streakCount: celebration.streakCount,
                         saveDate: celebration.saveDate,
-                        recoveryDate: celebration.recoveryDate
+                        recoveryDate: celebration.recoveryDate,
+                        recoveryDayCount: celebration.recoveryDayCount
                     )
                     .frame(maxWidth: 340)
                     .frame(maxWidth: .infinity)
@@ -259,6 +260,7 @@ private struct SaveStreakWeekCard: View {
     let streakCount: Int
     let saveDate: Date
     let recoveryDate: Date?
+    let recoveryDayCount: Int
 
     var body: some View {
         let days = weekdays
@@ -321,14 +323,15 @@ private struct SaveStreakWeekCard: View {
         SaveStreakCelebrationPresentation.weekdays(
             streakCount: streakCount,
             endingOn: saveDate,
-            recoveryDate: recoveryDate
+            recoveryDate: recoveryDate,
+            recoveryDayCount: recoveryDayCount
         )
     }
 
     private func weekAccessibilityLabel(for days: [SaveStreakWeekday]) -> String {
         let coveredCount = days.filter(\.isCovered).count
         let recoveryCopy = days.contains(where: \.isRecoveryDay)
-            ? " One missed day used a Streak Save."
+            ? " Missed days were protected by a Streak Save."
             : ""
         return "Last \(SaveStreakWindow.dayCount) days. \(coveredCount) days complete. Today complete.\(recoveryCopy)"
     }

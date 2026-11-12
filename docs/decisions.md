@@ -1220,3 +1220,7 @@ changes, backgrounding and failed refreshes clear the previous values. Obsolete
 responses cannot replace newer results. The server remains authoritative for
 the independent own, friends and Astir aggregates; visible client history never
 substitutes for the Astir average.
+
+### REC-693: More forgiving private streak recovery
+
+A streak of at least one saved day can recover after one or two consecutive missed local calendar days. The next qualifying save bridges all missed dates; three missed days expire eligibility. The existing rolling 30-day recovery cooldown remains. A new list candidate still counts via its companion Wanna save; moving an existing save into another list does not add credit.
