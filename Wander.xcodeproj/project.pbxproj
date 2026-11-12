@@ -648,6 +648,7 @@
 		EAAA2737ACAAE2C8F6FF4491 /* FeatureFlagTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C0F41DD41C9EF1F84B70E3 /* FeatureFlagTests.swift */; };
 		EB7CF4105102AA307E93BB79 /* AutomaticImportProjectionContextTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FA86430F0DD648D5CBF0AB7 /* AutomaticImportProjectionContextTests.swift */; };
 		EB8B2939D8177A23894D5A83 /* NativeAuthFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEFE0C041379DF5F5E0E2E0C /* NativeAuthFlowView.swift */; };
+		ECA972195A895BA83CEC2B8E /* MapSnapshotFeedUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D15945940925049DB5BAA78 /* MapSnapshotFeedUITests.swift */; };
 		ECDD1D96B99E5D8E77B6D14C /* PlaceCardPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1989A2162AE02769ADE7449 /* PlaceCardPresentation.swift */; };
 		ED7FBD2192A27D918C6BFC4C /* SenderNotificationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAFCF9252AA43A1F33A4E33 /* SenderNotificationPolicyTests.swift */; };
 		EDB83B1727C9B8248A3652E3 /* AstirLaunchLockup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 484626AF99E16AF15EF641E2 /* AstirLaunchLockup.swift */; };
@@ -997,6 +998,7 @@
 		4C425E62A869F6D5434E793A /* CommonGroundMockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonGroundMockData.swift; sourceTree = "<group>"; };
 		4C69EF7C0576FE9B5A2753DC /* SharedVisitReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedVisitReview.swift; sourceTree = "<group>"; };
 		4CB61A3E9EE230B88E703ECF /* LiveMapPlaceDiscoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveMapPlaceDiscoveryTests.swift; sourceTree = "<group>"; };
+		4D15945940925049DB5BAA78 /* MapSnapshotFeedUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSnapshotFeedUITests.swift; sourceTree = "<group>"; };
 		4E041C0E0118EF24A45BB0F3 /* PlaceCheckInQuestionCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceCheckInQuestionCatalogTests.swift; sourceTree = "<group>"; };
 		4EA9C4F456C7AF33B5D9EA15 /* ProfileHeaderMotionStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileHeaderMotionStateTests.swift; sourceTree = "<group>"; };
 		4EAC12B0ACB3D0718B1015B2 /* FeedAudienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedAudienceTests.swift; sourceTree = "<group>"; };
@@ -2462,6 +2464,7 @@
 				4A2839D4D34880097648330C /* MapPlaceCardActionInteractionUITests.swift */,
 				1298AD8BFB2F48775C139D2A /* MapPlaceCardUITests.swift */,
 				B4A1FD4B9091340EC2C9AD84 /* MapPlaceListPickerUITests.swift */,
+				4D15945940925049DB5BAA78 /* MapSnapshotFeedUITests.swift */,
 				F10F507051C471BA4CDC757B /* NativeAccountSetupUITests.swift */,
 				6A963E95AA51DC53770B6037 /* NativeOnboardingFlowUITests.swift */,
 				3D9DFF7A35C04AB097295A4F /* NotificationPromptUITestSupport.swift */,
@@ -3568,6 +3571,7 @@
 				31E27F44912FDDF3AF00306E /* MapPlaceCardActionInteractionUITests.swift in Sources */,
 				7DBA8FFEFBD203678ABD914A /* MapPlaceCardUITests.swift in Sources */,
 				F10A05C9F200042467B5C25D /* MapPlaceListPickerUITests.swift in Sources */,
+				ECA972195A895BA83CEC2B8E /* MapSnapshotFeedUITests.swift in Sources */,
 				A806E95B43AF1BC571465A0F /* NativeAccountSetupUITests.swift in Sources */,
 				CB77D6EE6AB6A8CC004C8947 /* NativeOnboardingFlowUITests.swift in Sources */,
 				F6A2BB2699161C8DEDDC8B9F /* NotificationPromptUITestSupport.swift in Sources */,

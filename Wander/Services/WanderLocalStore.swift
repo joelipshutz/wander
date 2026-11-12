@@ -5099,12 +5099,14 @@ final class WanderStore: ObservableObject {
                 visibility: .stealth
             ), let index = placeLists.firstIndex(where: { $0.localID == list.localID }) else { return nil }
             placeLists[index].snapshotCoverData = coverData
+            placeLists[index].snapshotCaptureID = UUID().uuidString.lowercased()
             for place in owned {
                 let result = addCurrentUserPlace(userPlaceID: place.userPlace.id, to: list)
                 if result.outcome == .added {
                     trackListPlaceAdded(to: list, companionSave: .none, surface: "map_snapshot")
                 }
             }
+            placeLists[index].snapshotInitialItemIDs = listItems(for: placeLists[index]).map(\.localID)
             persist()
             return placeLists[index]
         }
@@ -5429,14 +5431,14 @@ final class WanderStore: ObservableObject {
         let previousID = list.id
 
         if list.deletedAt != nil || list.syncState == .pendingDelete {
-            guard let remoteListID = remoteID(list.serverID ?? list.id) else {
+            guard let remoteListID = remoteID(list.serverID ?? list.snapshotCaptureID ?? list.id) else {
                 placeLists[index].syncStateRaw = SyncState.tombstoned.rawValue
                 persist()
                 return true
             }
 
             do {
-                try await backend.deletePlaceList(listID: remoteListID)
+                try await backend.deletePlaceList(listID: remoteListID, snapshotCaptureID: list.snapshotCaptureID)
                 guard currentUser.id == ownerID else { return false }
                 if let currentIndex = placeLists.firstIndex(where: { $0.id == previousID || $0.serverID == remoteListID }) {
                     placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
@@ -5460,12 +5462,30 @@ final class WanderStore: ObservableObject {
             .map(\.userID)
             .filter { $0 != currentUser.id }
             .sorted()
-        let draft = PlaceListUpsertDraft(
+        var draft = PlaceListUpsertDraft(
             id: remoteID(list.serverID ?? list.id),
             name: list.name,
             description: list.description,
             visibility: list.visibility
         )
+
+        if draft.id == nil, let captureID = list.snapshotCaptureID {
+            let initialIDs = Set(list.snapshotInitialItemIDs ?? [])
+            let initialItems = placeListItems.filter {
+                initialIDs.contains($0.localID) && $0.deletedAt == nil
+            }
+            let sourceIDs = initialItems.compactMap { $0.ownerUserPlaceID.flatMap(remoteUserPlaceID) }
+            guard sourceIDs.count == initialItems.count else {
+                // Fail visibly and leave the batch durable; never fall back to
+                // ordinary per-item creation while its source saves are pending.
+                placeLists[index].syncStateRaw = SyncState.failed.rawValue
+                lastRemoteError = "Sync the snapshot's saved places, then retry the list."
+                persist()
+                return false
+            }
+            draft.snapshotCaptureID = captureID
+            draft.snapshotUserPlaceIDs = sourceIDs
+        }
 
         #if DEBUG
         WanderDebugLog.sync.debug("place-list sync attempt list=\(WanderDebugLog.shortID(previousID), privacy: .public) state=\(list.syncState.rawValue, privacy: .public) has_remote_id=\((draft.id != nil), privacy: .public) collaborator_count=\(collaboratorUserIDs.count, privacy: .public)")
@@ -5478,6 +5498,48 @@ final class WanderStore: ObservableObject {
                 placeLists[currentIndex].serverID = remoteListID
                 replaceListIDReferences(previousID: previousID, canonicalID: placeLists[currentIndex].id)
                 placeLists[currentIndex].cachedItemCount = listItems(for: placeLists[currentIndex]).count
+            }
+
+            // Deletion may race the atomic create or follow a lost response.
+            // The capture UUID is also the server list ID, so neither case can
+            // leave an orphan snapshot behind.
+            if placeLists.first(where: { $0.localID == list.localID })?.deletedAt != nil {
+                try await backend.deletePlaceList(listID: remoteListID, snapshotCaptureID: list.snapshotCaptureID)
+                guard currentUser.id == ownerID else { return false }
+                if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
+                    placeLists[currentIndex].syncStateRaw = SyncState.tombstoned.rawValue
+                }
+                persist()
+                return true
+            }
+
+            if list.snapshotCaptureID != nil, let capturedItemIDs = list.snapshotInitialItemIDs {
+                // Hydrate the atomically seeded member IDs before ordinary
+                // outbox work. A removal during the request remains a deletion,
+                // not a local tombstone that later refresh could resurrect.
+                guard let detail = try await backend.placeListDetail(listID: remoteListID) else {
+                    throw WanderRemoteError.invalidResponse("Snapshot membership is unavailable. Try syncing the list again.")
+                }
+                guard currentUser.id == ownerID else { return false }
+                let initialIDs = Set(capturedItemIDs)
+                let remoteItems = Dictionary(detail.items.compactMap { item in
+                    item.ownerUserPlaceID.map { ($0, item) }
+                }, uniquingKeysWith: { first, _ in first })
+                for itemIndex in placeListItems.indices where initialIDs.contains(placeListItems[itemIndex].localID)
+                    && placeListItems[itemIndex].serverID == nil {
+                    guard let sourceID = placeListItems[itemIndex].ownerUserPlaceID.flatMap(remoteUserPlaceID),
+                          let remoteItem = remoteItems[sourceID] else { continue }
+                    placeListItems[itemIndex].serverID = remoteItem.id
+                    placeListItems[itemIndex].syncStateRaw = placeListItems[itemIndex].deletedAt == nil
+                        ? SyncState.synced.rawValue : SyncState.pendingDelete.rawValue
+                }
+                // Once IDs are durable, the ordinary outbox owns membership.
+                // Do not rematch a removed seed to a later re-add of that place
+                // if the independent cover upload needs another retry.
+                if let currentIndex = placeLists.firstIndex(where: { $0.localID == list.localID }) {
+                    placeLists[currentIndex].snapshotInitialItemIDs = nil
+                }
+                persist()
             }
 
             try await backend.setPlaceListCollaborators(listID: remoteListID, userIDs: collaboratorUserIDs)
@@ -13397,10 +13459,13 @@ final class WanderStore: ObservableObject {
 
     private func shouldPreserveLocalPlaceListChanges(remoteListID: String) -> Bool {
         guard let localList = placeLists.first(where: { list in
-            list.id == remoteListID || list.serverID == remoteListID
+            list.id == remoteListID || list.serverID == remoteListID || list.snapshotCaptureID == remoteListID
         }), localList.ownerUserID == currentUser.id else {
             return false
         }
+
+        // A delayed pre-delete snapshot must not resurrect an acknowledged capture cancellation.
+        if localList.snapshotCaptureID != nil && localList.deletedAt != nil { return true }
 
         switch localList.syncState {
         case .pendingCreate, .pendingUpdate, .pendingDelete, .failed, .serverDenied:
@@ -13415,6 +13480,7 @@ final class WanderStore: ObservableObject {
 
         if let index = placeLists.firstIndex(where: { list in
             list.serverID == serverID || list.localID == remoteList.localID || list.id == serverID
+                || list.snapshotCaptureID == serverID
         }) {
             let previousID = placeLists[index].id
             placeLists[index].serverID = serverID

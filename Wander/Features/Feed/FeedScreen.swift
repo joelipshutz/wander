@@ -1655,6 +1655,7 @@ private struct FeedActivityModule: View {
             onPrivateReply: privateReplyAction,
             activityGroup: group.isCombined || group.sharedVisitGroupID != nil ? group : nil,
             openActivityList: openList,
+            openPhotos: activity.isMapSnapshotCreation ? activityDestinationAction : nil,
             sharedVisitCompanions: visibleCompanions,
             sharedVisitCurrentUserID: store.currentUser.id,
             openSharedVisitProfile: { userID in
@@ -1800,11 +1801,11 @@ extension FeedActivity {
     }
 
     fileprivate var postcardTicketEyebrow: String {
-        kind == .listCreated ? "CREATED A LIST" : resolvedTicketKind.defaultTicketEyebrow
+        kind == .listCreated ? creationEyebrow : resolvedTicketKind.defaultTicketEyebrow
     }
 
     fileprivate var postcardAttributionAction: String {
-        kind == .listCreated ? "created a list" : resolvedTicketKind.defaultAttributionAction
+        kind == .listCreated ? creationAttribution : resolvedTicketKind.defaultAttributionAction
     }
 }
 

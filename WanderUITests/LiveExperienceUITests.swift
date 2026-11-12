@@ -541,10 +541,50 @@ final class LiveExperienceUITests: XCTestCase {
         }
     }
 
+    func testSharedVisitRatingsStayAttributedInFeedAndActivity() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderFeedPhotoStackUITest",
+                               "-WanderSharedVisitReview", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let first = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000011"].firstMatch
+        let second = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000012"].firstMatch
+        XCTAssertTrue(second.waitForExistence(timeout: 15))
+        XCTAssertTrue(first.label.contains("Alex’s rating: 4 out of 5"))
+        XCTAssertTrue(first.label.contains("The shaded patio"))
+        XCTAssertTrue(second.label.contains("Sam’s rating: 4.5 out of 5"))
+        XCTAssertTrue(second.label.contains("Loved the cardamom latte"))
+        XCTAssertFalse(app.staticTexts["sharedVisit.review.postcard.rating.value"].exists)
+        capture("shared-ratings-feed")
+        let comments = app.buttons["Open comments"]
+        for _ in 0..<5 where !comments.isHittable { app.swipeUp() }
+        comments.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["comments.activity.postcard"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(second.waitForExistence(timeout: 10))
+        XCTAssertTrue(first.label.contains("Alex’s rating: 4 out of 5"))
+        XCTAssertTrue(second.label.contains("Sam’s rating: 4.5 out of 5"))
+        XCTAssertFalse(app.staticTexts["comments.activity.postcard.rating.value"].exists)
+        capture("shared-ratings-activity")
+    }
+
+    func testSharedVisitRatingWithoutNoteAndNoteWithoutRating() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderFeedPhotoStackUITest",
+                               "-WanderSharedVisitReview", "-WanderSharedVisitRatingOnly", "-WanderDisableWalkthroughs"]
+        app.launch()
+        let first = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000011"].firstMatch
+        let second = app.descendants(matching: .any)["sharedVisit.post.96000000-0000-4000-8000-000000000012"].firstMatch
+        XCTAssertTrue(second.waitForExistence(timeout: 15))
+        XCTAssertTrue(first.label.contains("The shaded patio"))
+        XCTAssertFalse(first.label.contains("rating"))
+        XCTAssertTrue(second.label.contains("Sam’s rating: 4.5 out of 5"))
+        XCTAssertFalse(second.label.contains("Loved the cardamom latte"))
+        capture("shared-rating-only")
+    }
+
     /// Use production postcard/discussion views with isolated synthetic content.
     func testSharedVisitPostcardAndCombinedCommentsExample() {
         let app = XCUIApplication()
-        app.launchArguments = ["-WanderFeedPhotoStackUITest", "-WanderSharedVisitReview",
+        app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderFeedPhotoStackUITest", "-WanderSharedVisitReview",
                                "-WanderDisableWalkthroughs"]
         app.launch()
         XCTAssertTrue(app.descendants(matching: .any)["sharedVisit.review.postcard"].firstMatch.waitForExistence(timeout: 15))
@@ -555,6 +595,9 @@ final class LiveExperienceUITests: XCTestCase {
         let attribution = app.staticTexts["sharedVisit.review.postcard.companions"]
         XCTAssertTrue(attribution.waitForExistence(timeout: 5))
         XCTAssertEqual(attribution.label, "Alex checked-in with Sam")
+        XCTAssertTrue(first.label.contains("Alex’s rating: 4 out of 5"))
+        XCTAssertTrue(second.label.contains("Sam’s rating: 4.5 out of 5"))
+        XCTAssertFalse(app.staticTexts["sharedVisit.review.postcard.rating.value"].exists)
         XCTAssertFalse(app.staticTexts["Invitation pending"].exists)
         XCTAssertFalse(app.staticTexts["Invitations pending"].exists)
         XCTAssertFalse(app.buttons["View activity"].exists)

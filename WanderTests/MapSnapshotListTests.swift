@@ -42,6 +42,8 @@ final class MapSnapshotListTests: XCTestCase {
         XCTAssertTrue(list.isStealth)
         XCTAssertEqual(list.snapshotCoverData, data)
         XCTAssertNil(list.snapshotCoverPath)
+        XCTAssertNotNil(list.snapshotCaptureID.flatMap(UUID.init(uuidString:)))
+        XCTAssertEqual(Set(list.snapshotInitialItemIDs ?? []), Set(store.placeListItems.filter { $0.listID == list.id && $0.deletedAt == nil }.map(\.localID)))
         XCTAssertEqual(Set(store.visiblePlaces(in: list).map { $0.place.id }), Set(own.map { $0.place.id }))
         XCTAssertEqual(store.currentUserVisiblePlaces.map { $0.userPlace.id }, before.map { $0.0 })
         XCTAssertEqual(store.currentUserVisiblePlaces.map { $0.userPlace.status }, before.map { $0.1 })
@@ -49,6 +51,8 @@ final class MapSnapshotListTests: XCTestCase {
         let restored = WanderStore(fixtures: .empty(), persistence: persistence)
         let restoredList = try XCTUnwrap(restored.placeLists.first { $0.localID == list.localID })
         XCTAssertEqual(restoredList.snapshotCoverData, data)
+        XCTAssertEqual(restoredList.snapshotCaptureID, list.snapshotCaptureID)
+        XCTAssertEqual(restoredList.snapshotInitialItemIDs, list.snapshotInitialItemIDs)
         XCTAssertEqual(restored.visiblePlaces(in: restoredList).count, store.visiblePlaces(in: list).count)
         XCTAssertTrue(restored.updatePlaceList(id: list.localID, name: "Weekend", description: "A plan",
                                                visibility: .stealth, collaboratorUserIDs: []))
@@ -62,6 +66,38 @@ final class MapSnapshotListTests: XCTestCase {
         XCTAssertNil(store.createMapSnapshotList(placeIDs: ["missing"], coverData: jpeg()))
         XCTAssertNil(store.createMapSnapshotList(placeIDs: store.currentUserVisiblePlaces.map { $0.place.id }, coverData: Data([1, 2])))
         XCTAssertEqual(store.placeLists.count, count)
+    }
+
+    func testLaterAdditionsDoNotJoinInitialBatch() throws {
+        let store = WanderStore(fixtures: .seed())
+        let own = store.currentUserVisiblePlaces
+        XCTAssertGreaterThan(own.count, 1)
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own[0].place.id], coverData: jpeg()))
+        let initialIDs = try XCTUnwrap(list.snapshotInitialItemIDs)
+        XCTAssertEqual(initialIDs.count, 1)
+        _ = store.addCurrentUserPlace(userPlaceID: own[1].userPlace.id, to: list)
+        let updated = try XCTUnwrap(store.placeLists.first { $0.localID == list.localID })
+        XCTAssertEqual(updated.snapshotInitialItemIDs, initialIDs)
+        XCTAssertEqual(store.visiblePlaces(in: updated).count, 2)
+    }
+
+    func testSnapshotFeedHasOneCoverAndUsesListIdentity() throws {
+        let store = WanderStore(fixtures: .seed())
+        var list = try XCTUnwrap(store.createMapSnapshotList(
+            placeIDs: store.currentUserVisiblePlaces.map { $0.place.id }, coverData: jpeg()))
+        list.snapshotCoverPath = "snapshot-id/snapshot.jpg"
+        let actor = ProfileShell(id: "owner", handle: "owner", displayName: "Owner", avatarURL: nil,
+            bio: nil, relationship: .owner)
+        let creation = FeedActivity(id: "one-post", kind: .listCreated, actor: actor, list: list, occurredAt: .now)
+        XCTAssertTrue(creation.isMapSnapshotCreation)
+        XCTAssertEqual(creation.creationAttribution, "created a map snapshot")
+        XCTAssertEqual(creation.media.count, 1)
+        XCTAssertEqual(creation.media.first?.storageBucket, "list-snapshots")
+        XCTAssertEqual(creation.media.first?.storagePath, list.snapshotCoverPath)
+        XCTAssertEqual(creation.list?.id, list.id)
+        let later = FeedActivity(id: "later-add", kind: .listItemAdded, actor: actor, list: list, occurredAt: .now)
+        XCTAssertFalse(later.isMapSnapshotCreation)
+        XCTAssertTrue(later.media.isEmpty)
     }
 
     private func jpeg() -> Data {

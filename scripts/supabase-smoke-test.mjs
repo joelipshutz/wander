@@ -157,6 +157,12 @@ async function main() {
         await client.query("rollback to savepoint shared_feed_smoke");
         await client.query("release savepoint shared_feed_smoke");
         console.log("ok - shared Feed preserves legacy provenance, original content and viewer privacy");
+        await client.query("savepoint shared_acceptance_feed_smoke");
+        await client.query(transactionBody(readFileSync(
+          new URL("../supabase/tests/shared_acceptance_feed_identity.sql", import.meta.url), "utf8"), "rollback"));
+        await client.query("rollback to savepoint shared_acceptance_feed_smoke");
+        await client.query("release savepoint shared_acceptance_feed_smoke");
+        console.log("ok - real shared acceptance preserves one linked post, independent ratings and historical engagement");
         await client.query("savepoint live_feed_smoke");
         await client.query(transactionBody(readFileSync(
           new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback"));
@@ -194,6 +200,7 @@ async function main() {
         console.log("ok - subtype detail answers round-trip, clear, and respect visibility");
         await client.query(readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8"));
         await client.query(readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8"));
+        await client.query(readFileSync(new URL("./sql/map-snapshot-smoke.sql", import.meta.url), "utf8"));
         console.log("ok - owner visit details preserve answers without exposing another user’s history");
         await client.query("savepoint events_interest_smoke");
         await client.query(readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8"));
@@ -2883,6 +2890,10 @@ savepoint shared_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/feed_shared_visit_context.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint shared_feed_smoke;
 release savepoint shared_feed_smoke;
+savepoint shared_acceptance_feed_smoke;
+${transactionBody(readFileSync(new URL("../supabase/tests/shared_acceptance_feed_identity.sql", import.meta.url), "utf8"), "rollback")}
+rollback to savepoint shared_acceptance_feed_smoke;
+release savepoint shared_acceptance_feed_smoke;
 savepoint live_feed_smoke;
 ${transactionBody(readFileSync(new URL("../supabase/tests/live_activity_feed.sql", import.meta.url), "utf8"), "rollback")}
 rollback to savepoint live_feed_smoke;
@@ -2931,6 +2942,7 @@ reset role;
 ${readFileSync(new URL("./sql/place-detail-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/own-place-visit-details-smoke.sql", import.meta.url), "utf8")}
 ${readFileSync(new URL("./sql/quick-check-in-smoke.sql", import.meta.url), "utf8")}
+${readFileSync(new URL("./sql/map-snapshot-smoke.sql", import.meta.url), "utf8")}
 savepoint events_interest_smoke;
 ${readFileSync(new URL("./sql/events-launch-interest-smoke.sql", import.meta.url), "utf8")}
 rollback to savepoint events_interest_smoke;

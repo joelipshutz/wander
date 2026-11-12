@@ -129,7 +129,12 @@ struct FeedActivity: Identifiable {
         self.occurredAt = occurredAt
         self.note = note
         self.rating = kind.supportsRating ? rating : nil
-        self.media = media
+        if kind == .listCreated, let list, let path = list.snapshotCoverPath {
+            self.media = [FeedMediaPreview(id: "snapshot-\(list.id)", storageBucket: "list-snapshots",
+                storagePath: path, accessibilityLabel: "Map snapshot of \(list.name)")]
+        } else {
+            self.media = media
+        }
         self.sharedVisit = kind == .placeBeen ? sharedVisit : nil
     }
 
@@ -140,6 +145,19 @@ struct FeedActivity: Identifiable {
         guard kind == .placeSaved else { return kind.ticketKind }
         guard let place else { return .saved }
         return place.userPlace.status == .been ? .checkIn : .wanna
+    }
+
+    var isMapSnapshotCreation: Bool {
+        kind == .listCreated && (list?.snapshotCaptureID != nil
+            || list?.snapshotCoverPath != nil || list?.snapshotCoverData != nil)
+    }
+
+    var creationEyebrow: String {
+        isMapSnapshotCreation ? "CREATED A MAP SNAPSHOT" : "CREATED A LIST"
+    }
+
+    var creationAttribution: String {
+        isMapSnapshotCreation ? "created a map snapshot" : "created a list"
     }
 }
 

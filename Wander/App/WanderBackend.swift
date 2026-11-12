@@ -1429,12 +1429,16 @@ final class WanderBackend: ObservableObject {
         return try await placeListRepository.upsert(draft)
     }
 
-    func deletePlaceList(listID: String) async throws {
+    func deletePlaceList(listID: String, snapshotCaptureID: String? = nil) async throws {
         guard let placeListRepository else {
             throw WanderRemoteError.notConfigured
         }
 
-        try await placeListRepository.delete(listID: listID)
+        if let snapshotCaptureID {
+            try await placeListRepository.deleteSnapshot(captureID: snapshotCaptureID)
+        } else {
+            try await placeListRepository.delete(listID: listID)
+        }
     }
 
     func leavePlaceList(listID: String) async throws {
