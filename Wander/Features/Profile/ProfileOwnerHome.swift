@@ -1292,7 +1292,7 @@ private struct ProfileSaveStreakRow: View {
         }
         let todayStatus = summary.isTodayCovered ? "Today is covered." : "Save today to keep it going."
         let streakSaveStatus = summary.displayedDayStates.contains(.streakSave)
-            ? "One missed day was protected by a Streak Save."
+            ? "Missed days were protected by a Streak Save."
             : ""
         return "\(summary.currentCount) day save streak. Best streak \(summary.bestCount) days. \(todayStatus) \(streakSaveStatus)"
     }
