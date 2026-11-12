@@ -67,8 +67,8 @@ final class ImportSaveStreakProjectionTests: XCTestCase {
                 _ = store.saveImportedCandidate(candidate(index), status: .wannaGo,
                     visibility: .selfOnly, note: nil, sourceType: PlaceImportSource.googleMaps.addSourceType)
             }
-            // Existing imports and Wanna→Been upgrades must not append another
-            // streak entry, even inside the transaction's normalization scope.
+            // Repeated Wanna imports do not append an entry; a Wanna→Been
+            // conversion creates a check-in and credits the current save day.
             _ = store.saveImportedCandidate(candidate(0), status: .wannaGo,
                 visibility: .selfOnly, note: nil, sourceType: PlaceImportSource.googleMaps.addSourceType)
             _ = store.saveImportedCandidate(candidate(1), status: .been,
@@ -82,7 +82,7 @@ final class ImportSaveStreakProjectionTests: XCTestCase {
         let ownerID = batchedStore.currentUser.id
         let ordinaryDates = ordinaryStore.saveStreakDatesByUserID[ownerID, default: []]
         let batchedDates = batchedStore.saveStreakDatesByUserID[ownerID, default: []]
-        XCTAssertEqual(batchedDates.count, 32)
+        XCTAssertEqual(batchedDates.count, 33)
         XCTAssertEqual(batchedDates.map(Calendar.current.startOfDay(for:)),
             ordinaryDates.map(Calendar.current.startOfDay(for:)))
         XCTAssertEqual(batchedStore.saveStreakRecoveryDatesByUserID, ordinaryStore.saveStreakRecoveryDatesByUserID)
