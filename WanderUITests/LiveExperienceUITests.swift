@@ -4,6 +4,55 @@ import XCTest
 final class LiveExperienceUITests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testAppliedAreaOffersListsAndAppendsEverywhereWithoutJumpingToTop() throws {
+        let app = launch(extraArguments: ["-astir.live.introduction.v1.user_joe.acknowledged", "YES"], selectsMapArea: false)
+        waitLiveCount(4, in: app)
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Everywhere")
+        app.buttons["live.draw"].tap()
+        app.buttons["Use visible area"].tap()
+        app.buttons["live.applyArea"].tap()
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
+        let add = app.buttons["live.addAreaToList"]
+        let clear = app.buttons["live.clearArea"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(add.isHittable && clear.isHittable)
+        XCTAssertLessThan(app.buttons["live.draw"].frame.maxX, add.frame.minX)
+        XCTAssertLessThan(add.frame.maxX, clear.frame.minX)
+        capture("REC689-applied-area-actions")
+        add.tap()
+        XCTAssertTrue(app.staticTexts["Add to lists"].waitForExistence(timeout: 5))
+        capture("REC689-area-list-picker")
+        app.buttons["map-list-picker.cancel"].tap()
+        setDrawer("expanded", in: app)
+        let scroll = app.scrollViews["feed.places.scroll"]
+        let everywhere = app.buttons["feed.showEverywhere"]
+        for _ in 0..<24 where !everywhere.isHittable { scroll.swipeUp() }
+        XCTAssertTrue(everywhere.isHittable)
+        capture("REC689-scoped-feed-bottom")
+        everywhere.tap()
+        let divider = app.descendants(matching: .any)["feed.everywhereActivity"].firstMatch
+        XCTAssertTrue(divider.waitForExistence(timeout: 10))
+        XCTAssertTrue(divider.isHittable, "The continuation divider remains in the viewport; do not reset to the first post")
+        XCTAssertFalse(everywhere.exists)
+        capture("REC689-everywhere-continuation")
+        scroll.swipeUp()
+        capture("REC689-everywhere-posts")
+    }
+
+    func testAppliedAreaActionsRemainReachableAtAccessibilitySize() {
+        let app = launch(largeText: true,
+                         extraArguments: ["-astir.live.introduction.v1.user_joe.acknowledged", "YES"], selectsMapArea: false)
+        waitLiveCount(4, in: app)
+        app.buttons["live.draw"].tap()
+        app.buttons["Use visible area"].tap()
+        app.buttons["live.applyArea"].tap()
+        let add = app.buttons["live.addAreaToList"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10))
+        XCTAssertTrue(add.isHittable)
+        XCTAssertTrue(app.buttons["live.clearArea"].isHittable)
+        capture("REC689-large-text-actions")
+    }
+
     func testCategoryParentSelectsAllCuisinesAndPreservesExclusions() {
         let app = launch()
         openCategoryFilters(in: app)
@@ -1230,7 +1279,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTFail("Expected the complete enabled control in the native scroll viewport.")
     }
 
-    private func launch(largeText: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
+    private func launch(largeText: Bool = false, extraArguments: [String] = [], selectsMapArea: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-WanderAuthenticatedUITest", "-WanderUseDemoFixtures",
                                "-WanderDisableWalkthroughs", "-WanderUnifiedLiveUITest", "-WanderNUXFeedFixture",
@@ -1248,7 +1297,7 @@ final class LiveExperienceUITests: XCTestCase {
         XCTAssertTrue(app.buttons["live.draw"].waitForExistence(timeout: 30))
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.buttons["live.draw"].isHittable }, object: nil)
         XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 20), .completed)
-        app.selectFeedLocation("Map area")
+        if selectsMapArea { app.selectFeedLocation("Map area") }
         return app
     }
 

@@ -3,6 +3,23 @@ import XCTest
 
 @MainActor
 final class LiveFeedQueryTests: XCTestCase {
+    func testEverywhereContinuationRemovesOnlyGeography() {
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100),
+            occurredBefore: Date(timeIntervalSince1970: 200), activityType: .checkIns,
+            center: .init(latitude: 0, longitude: 0), radiusMeters: 1_000,
+            categoryIDs: [WanderPlaceCategory.coffeeTeaSweets],
+            categoryOptions: [WanderPlaceCategory.restaurantsFood: ["italian"]], personIDs: ["friend"])
+        let expanded = query.expandedQuery(for: .everywhere)
+        XCTAssertNil(expanded.polygon); XCTAssertNil(expanded.center); XCTAssertNil(expanded.radiusMeters)
+        XCTAssertEqual(expanded.occurredAfter, query.occurredAfter)
+        XCTAssertEqual(expanded.occurredBefore, query.occurredBefore)
+        XCTAssertEqual(expanded.activityType, query.activityType)
+        XCTAssertEqual(expanded.categoryIDs, query.categoryIDs)
+        XCTAssertEqual(expanded.categoryOptions, query.categoryOptions)
+        XCTAssertEqual(expanded.personIDs, query.personIDs)
+        XCTAssertNil(query.nextExpansion(after: .selected), "Pagination never starts the continuation on its own")
+    }
+
     func testCommittedTimeAndTypesIncludeLegacyStatusWithoutConflatingLists() throws {
         let store = WanderStore(fixtures: .seed())
         let actor = store.shell(for: store.currentUser)

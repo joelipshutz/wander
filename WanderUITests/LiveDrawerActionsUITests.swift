@@ -64,7 +64,7 @@ final class LiveDrawerActionsUITests: XCTestCase {
         XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
     }
 
-    func testMapAreaRecoveryIsFullWidthAndRestoresEverywhere() {
+    func testMapAreaRecoveryIsFullWidthAndAppendsEverywhere() {
         let app = launch()
         selectReviewScope("Map area", in: app)
         applyFriends(in: app)
@@ -83,7 +83,8 @@ final class LiveDrawerActionsUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(button.frame.height, 51.99, "Allow subpixel rounding of the 52-point minimum")
         capture("full-width-show-everywhere", in: app)
         button.tap()
-        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Everywhere")
+        XCTAssertEqual(app.buttons["live.feed.scope.menu"].value as? String, "Map area")
+        XCTAssertTrue(app.descendants(matching: .any)["feed.everywhereActivity"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["live.resetFilters"].exists, "Broadening geography preserves shared filters")
         XCTAssertTrue(button.waitForNonExistence(timeout: 5))
     }

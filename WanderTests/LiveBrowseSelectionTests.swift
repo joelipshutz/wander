@@ -4,6 +4,22 @@ import XCTest
 @MainActor final class LiveBrowseSelectionTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 
+    func testDrawingApplySelectsMapAreaWithoutResettingSharedFiltersOrTime() throws {
+        var selection = LiveBrowseSelection(now: now)
+        selection.scope = .nearby; selection.cityID = "los-angeles"
+        selection.activityType = .checkIns; selection.time = .week
+        selection.personIDs = ["friend"]
+        selection.categoryIDs = [WanderPlaceCategory.restaurantsFood]
+        let applied = selection.applyingDrawnArea()
+        XCTAssertEqual(applied.feedLocationScope, .mapArea)
+        XCTAssertEqual(applied.scope, .featured)
+        XCTAssertEqual(applied.query(includingGeography: false), selection.query(includingGeography: false))
+        let area = try XCTUnwrap(LiveDrawnArea(coordinates: [
+            .init(latitude: 0, longitude: 0), .init(latitude: 0, longitude: 2), .init(latitude: 2, longitude: 0)]))
+        XCTAssertTrue(applied.feedQuery(area: area).contains(latitude: 0.5, longitude: 0.5))
+        XCTAssertFalse(applied.feedQuery(area: area).contains(latitude: 1.5, longitude: 1.5), "Use the polygon, not its bounding box")
+    }
+
     func testEverywhereIgnoresMapGeometryButSharesEveryContentFilter() throws {
         var selection = LiveBrowseSelection(now: now)
         selection.scope = .nearby

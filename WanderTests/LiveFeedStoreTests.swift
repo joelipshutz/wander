@@ -3,6 +3,117 @@ import XCTest
 
 @MainActor
 final class LiveFeedStoreTests: XCTestCase {
+    func testEverywhereAppendsAfterSelectedRowsWithoutResetAndKeepsItsOwnCursor() async throws {
+        let (store, query, inside, outside) = try continuationFixture()
+        let repository = LiveStoreRepository(pages: [
+            .init(activity: [inside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now),
+            .init(activity: [inside], featuredPlaces: [], nextCursor: "global-next", fetchedAt: .now),
+            .init(activity: [outside, inside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        let revision = store.liveFeedScrollResetRevision
+        let selectedIDs = store.visibleFeedActivityGroups.map(\.id)
+        let started = await store.showLiveFeedActivityEverywhere(backend: backend)
+        XCTAssertTrue(started)
+        XCTAssertTrue(store.hasMoreFeed, "A duplicate-only first global page must retain its cursor")
+        XCTAssertEqual(store.visibleLiveFeedSections.map(\.stage), [.selected, .everywhere])
+        XCTAssertEqual(store.visibleLiveFeedSections.first?.groups.map(\.id), selectedIDs)
+        let loaded = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(loaded)
+        XCTAssertEqual(store.liveFeedScrollResetRevision, revision)
+        XCTAssertEqual(store.visibleLiveFeedSections.first?.groups.map(\.id), selectedIDs)
+        XCTAssertEqual(store.visibleFeedActivityGroups.flatMap(\.activities).map(\.id), [inside.id, outside.id],
+                       "The newer outside post stays below the existing selected post")
+        XCTAssertEqual(repository.cursors, [nil, nil, "global-next"])
+        XCTAssertEqual(repository.queries, [query, query.expandedQuery(for: .everywhere), query.expandedQuery(for: .everywhere)])
+        XCTAssertFalse(store.hasMoreFeed)
+        let repeated = await store.showLiveFeedActivityEverywhere(backend: backend)
+        XCTAssertFalse(repeated)
+        store.selectLiveFeedQuery(query, resettingContinuation: true)
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected, "Reapplying the same area closes the continuation")
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertGreaterThan(store.liveFeedScrollResetRevision, revision)
+    }
+
+    func testEverywhereFailureKeepsScopedPostsAndRetryStartsAtFirstGlobalPage() async throws {
+        let (store, query, inside, outside) = try continuationFixture()
+        let repository = LiveStoreRepository(pages: [
+            .init(activity: [inside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now),
+            .init(activity: [outside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)])
+        repository.failureOnCalls = [2]
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        let revision = store.liveFeedScrollResetRevision
+        let expanded = await store.showLiveFeedActivityEverywhere(backend: backend)
+        XCTAssertFalse(expanded)
+        XCTAssertTrue(store.feedPaginationFailed)
+        XCTAssertTrue(store.hasMoreFeed)
+        XCTAssertEqual(store.visibleFeedActivityGroups.flatMap(\.activities).map(\.id), [inside.id])
+        let retried = await store.loadMoreFeed(backend: backend)
+        XCTAssertTrue(retried)
+        XCTAssertFalse(store.feedPaginationFailed)
+        XCTAssertEqual(repository.cursors, [nil, nil, nil])
+        XCTAssertEqual(store.liveFeedScrollResetRevision, revision)
+        XCTAssertEqual(store.visibleFeedActivityGroups.flatMap(\.activities).map(\.id), [inside.id, outside.id])
+        store.selectLiveFeedQuery(LiveFeedQuery(activityType: .wannas))
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected)
+        XCTAssertFalse(store.hasMoreFeed)
+    }
+
+    func testChangingScopeRejectsLateEverywhereContinuation() async throws {
+        let (store, query, inside, outside) = try continuationFixture()
+        let repository = LiveStoreRepository(pages: [
+            .init(activity: [inside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now),
+            .init(activity: [outside], featuredPlaces: [], nextCursor: "stale", fetchedAt: .now)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        repository.suspendedCall = 2
+        let expansion = Task { await store.showLiveFeedActivityEverywhere(backend: backend) }
+        await waitFor(repository, calls: 2)
+        store.selectLiveFeedQuery(LiveFeedQuery(activityType: .wannas))
+        repository.suspendedCall = nil
+        let accepted = await expansion.value
+        XCTAssertFalse(accepted)
+        XCTAssertNil(store.followedFeedPage)
+        XCTAssertEqual(store.liveFeedExpansionStage, .selected)
+        XCTAssertFalse(store.hasMoreFeed)
+    }
+
+    func testEmptyAreaCanAppendEverywhereWithAnEmptySelectedSection() async throws {
+        let (store, query, _, outside) = try continuationFixture()
+        let repository = LiveStoreRepository(pages: [emptyPage(1),
+            .init(activity: [outside], featuredPlaces: [], nextCursor: nil, fetchedAt: .now)])
+        let backend = WanderBackend(feedRepository: repository)
+        store.selectLiveFeedQuery(query)
+        _ = await store.refreshFollowedFeed(backend: backend)
+        let accepted = await store.showLiveFeedActivityEverywhere(backend: backend)
+        XCTAssertTrue(accepted)
+        XCTAssertTrue(store.visibleLiveFeedSections[0].groups.isEmpty)
+        XCTAssertEqual(store.visibleLiveFeedSections[1].groups.flatMap(\.activities).map(\.id), [outside.id])
+    }
+
+    private func continuationFixture() throws -> (WanderStore, LiveFeedQuery, FeedActivity, FeedActivity) {
+        let store = WanderStore(fixtures: .seed())
+        let places = store.currentUserVisiblePlaces
+        let insidePlace = try XCTUnwrap(places.first)
+        let outsidePlace = try XCTUnwrap(places.last)
+        XCTAssertNotEqual(insidePlace.place.id, outsidePlace.place.id)
+        insidePlace.place.latitude = 0; insidePlace.place.longitude = 0
+        outsidePlace.place.latitude = 1; outsidePlace.place.longitude = 1
+        let actor = store.shell(for: store.currentUser)
+        let query = LiveFeedQuery(occurredAfter: Date(timeIntervalSince1970: 100),
+            occurredBefore: Date(timeIntervalSince1970: 200), activityType: .checkIns,
+            center: .init(latitude: 0, longitude: 0), radiusMeters: 1_000, personIDs: [actor.id])
+        let inside = FeedActivity(id: "selected-post", kind: .placeBeen, actor: actor,
+            place: insidePlace, occurredAt: Date(timeIntervalSince1970: 150))
+        let outside = FeedActivity(id: "outside-newer", kind: .placeBeen, actor: actor,
+            place: outsidePlace, occurredAt: Date(timeIntervalSince1970: 190))
+        return (store, query, inside, outside)
+    }
+
     func testLateContentAndCompletionCannotCrossCommittedQuery() async {
         let store = WanderStore(fixtures: .seed())
         let first = LiveFeedQuery(activityType: .checkIns)

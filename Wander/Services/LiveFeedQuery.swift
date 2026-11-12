@@ -88,16 +88,20 @@ struct LiveFeedQuery: Equatable, Sendable {
         if !categoryIDs.isEmpty || !categoryOptions.isEmpty {
             guard let place = activity.place, includesCategory(place) else { return false }
         }
+        guard polygon != nil || center != nil else { return true }
+        guard let place = activity.place?.place else { return false }
+        return includesLocation(latitude: place.latitude, longitude: place.longitude)
+    }
+
+    func includesLocation(latitude: Double, longitude: Double) -> Bool {
+        guard isValid, latitude.isFinite, longitude.isFinite,
+              CLLocationCoordinate2DIsValid(.init(latitude: latitude, longitude: longitude)) else { return false }
         if let center, let radiusMeters {
-            guard let place = activity.place?.place,
-                  place.latitude.isFinite, place.longitude.isFinite,
-                  CLLocationCoordinate2DIsValid(.init(latitude: place.latitude, longitude: place.longitude)) else { return false }
             guard CLLocation(latitude: center.latitude, longitude: center.longitude)
-                .distance(from: CLLocation(latitude: place.latitude, longitude: place.longitude)) <= Double(radiusMeters) else { return false }
+                .distance(from: CLLocation(latitude: latitude, longitude: longitude)) <= Double(radiusMeters) else { return false }
         }
         guard polygon != nil else { return true }
-        guard let place = activity.place?.place else { return false }
-        return contains(latitude: place.latitude, longitude: place.longitude)
+        return contains(latitude: latitude, longitude: longitude)
     }
 
     /// Live's server projection supplies the viewer's canonical taxonomy. Do
@@ -199,7 +203,7 @@ struct LiveFeedQuery: Equatable, Sendable {
 /// Expansion changes only discovery filters. The selected audience, visibility,
 /// block rules and short-lived social authorization remain owned by WanderStore.
 enum LiveFeedExpansionStage: Int, CaseIterable, Identifiable, Sendable {
-    case selected, older, allActivity
+    case selected, older, allActivity, everywhere
     var id: Int { rawValue }
 }
 
@@ -231,11 +235,16 @@ extension LiveFeedQuery {
             return LiveFeedQuery(olderThan: self)
         case .allActivity:
             return LiveFeedQuery(occurredBefore: occurredBefore)
+        case .everywhere:
+            return LiveFeedQuery(occurredAfter: occurredAfter, occurredBefore: occurredBefore,
+                activityType: activityType, categoryIDs: Set(categoryIDs),
+                categoryOptions: categoryOptions, personIDs: Set(personIDs))
         }
     }
 
-    func expansionStage(for activity: FeedActivity) -> LiveFeedExpansionStage {
+    func expansionStage(for activity: FeedActivity, through stage: LiveFeedExpansionStage = .allActivity) -> LiveFeedExpansionStage {
         if includes(activity) { return .selected }
+        if stage == .everywhere { return .everywhere }
         if occurredAfter != nil, expandedQuery(for: .older).includes(activity) { return .older }
         return .allActivity
     }
@@ -243,6 +252,7 @@ extension LiveFeedQuery {
     func includes(_ activity: FeedActivity, through stage: LiveFeedExpansionStage) -> Bool {
         guard isValid else { return false }
         if includes(activity) { return true }
+        if stage == .everywhere { return expandedQuery(for: .everywhere).includes(activity) }
         if stage.rawValue >= LiveFeedExpansionStage.older.rawValue,
            occurredAfter != nil, expandedQuery(for: .older).includes(activity) { return true }
         return stage == .allActivity && expandedQuery(for: .allActivity).includes(activity)

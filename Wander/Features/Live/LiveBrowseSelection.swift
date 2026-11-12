@@ -163,6 +163,12 @@ struct LiveBrowseSelection: Codable, Equatable {
         return copy
     }
 
+    func applyingDrawnArea() -> Self {
+        var copy = searchingMapArea()
+        copy.feedLocationScope = .mapArea
+        return copy
+    }
+
     var summary: String {
         var terms = [scope == .nearby ? "\(radius.title) · \(nearbyCenter == nil ? (city?.name ?? "Choose a city") : (nearbyCenterName ?? "Map center"))" : "Featured", time.title]
         if activityType != .all { terms.append(activityType.rawValue) }

@@ -777,7 +777,8 @@ struct FeedScreen: View {
     @ViewBuilder
     private func content(_ projection: FeedActivityRenderProjection) -> some View {
         let renderedFocusGroupID = projection.groupID(containing: pendingActivityFocus?.activityID)
-        CircleQuestionFeedSection(state: backend.circleQuestions, userID: store.currentUser.id)
+        CircleQuestionFeedSection(state: backend.circleQuestions, userID: store.currentUser.id,
+                                  locationQuery: isEmbedded ? store.liveFeedQuery : nil)
         if showsInviteEntry { FeedInviteSection() }
         if page == nil, store.feedLoadState == .idle || store.feedLoadState == .loading {
             FeedLoadingState(audience: audienceSelection)
@@ -786,6 +787,10 @@ struct FeedScreen: View {
             ForEach(projection.sections) { section in
                 if section.stage == .older {
                     expansionDivider(title: "Showing older activity", identifier: "feed.olderActivity")
+                } else if section.stage == .everywhere {
+                    expansionDivider(title: "Activity everywhere", identifier: "feed.everywhereActivity")
+                    CircleQuestionFeedSection(state: backend.circleQuestions, userID: store.currentUser.id,
+                                              locationQuery: store.liveFeedQuery, outsideLocation: true)
                 } else if section.stage == .allActivity {
                     VStack(alignment: .leading, spacing: WanderTheme.spacing2) {
                         Text("These posts are outside your selected location, people, categories and activity filters.")
@@ -808,8 +813,9 @@ struct FeedScreen: View {
                         Text("You’re caught up with this activity.")
                             .font(AstirTypography.bodySmall).foregroundStyle(astirBrandMode.secondaryText)
                     }
-                    if let onShowActivityEverywhere {
+                    if let onShowActivityEverywhere, store.liveFeedExpansionStage == .selected {
                         WanderPrimaryButton(title: "Show activity everywhere", action: onShowActivityEverywhere)
+                            .disabled(store.isLoadingMoreFeed)
                             .padding(.top, 8)
                             .accessibilityIdentifier("feed.showEverywhere")
                     }

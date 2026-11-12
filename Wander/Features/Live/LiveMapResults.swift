@@ -72,6 +72,10 @@ final class LiveMapResults: ObservableObject {
 
     init(clock: @escaping () -> ContinuousClock.Instant = { .now }) { self.clock = clock }
 
+    func hasCompleteResults(for request: LiveMapRequest) -> Bool {
+        complete && !error && currentRequest?.hasSameScope(as: request) == true
+    }
+
     func load(request: LiveMapRequest, repository: (any FeedRepository)?,
               fixture: [FeedActivity], featured: @escaping @MainActor () async -> [VisiblePlace]?,
               permits: @escaping (FeedActivity) -> Bool) async {

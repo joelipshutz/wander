@@ -7,6 +7,36 @@ import Combine
 final class LiveMapResultsTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 2_000_000_000)
 
+    func testBulkAreaSelectionWaitsForResultsMatchingTheAppliedQuery() async {
+        let results = LiveMapResults()
+        let initial = LiveMapRequest(userID: "viewer", audience: .everyone, query: .init(),
+            featured: false, viewport: nil, refresh: 0)
+        let changed = LiveMapRequest(userID: "viewer", audience: .everyone,
+            query: .init(center: .init(latitude: 0, longitude: 0), radiusMeters: 1_000),
+            featured: false, viewport: nil, refresh: 0)
+        XCTAssertFalse(results.hasCompleteResults(for: initial))
+        await results.load(request: initial, repository: nil, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertTrue(results.hasCompleteResults(for: initial))
+        XCTAssertFalse(results.hasCompleteResults(for: changed), "Do not save a stale subset immediately after Apply")
+        await results.load(request: changed, repository: nil, fixture: [], featured: { [] }, permits: { _ in true })
+        XCTAssertTrue(results.hasCompleteResults(for: changed))
+    }
+
+    func testAreaListMembershipUsesTheExactPolygonAndUniqueMapPlaces() throws {
+        let inside = event(1), samePlace = event(2), outside = event(3)
+        let insidePlace = try XCTUnwrap(inside.place)
+        let outsidePlace = try XCTUnwrap(outside.place)
+        insidePlace.place.latitude = 0.25; insidePlace.place.longitude = 0.25
+        outsidePlace.place.latitude = 1.5; outsidePlace.place.longitude = 1.5
+        let repeated = FeedActivity(id: samePlace.id, kind: .placeBeen, actor: inside.actor,
+            place: insidePlace, occurredAt: now)
+        let projection = LiveMapDisplayProjection(pins: LiveMapProjection.pins(
+            activities: [inside, repeated, outside], featured: []))
+        let area = try XCTUnwrap(LiveDrawnArea(coordinates: [
+            .init(latitude: 0, longitude: 0), .init(latitude: 0, longitude: 2), .init(latitude: 2, longitude: 0)]))
+        XCTAssertEqual(projection.places(in: area).map(\.place.id), [insidePlace.place.id])
+    }
+
     func testAllMapPagesRetainMoreThanOneFeedWindowAndMoreThanOneHundredPins() async throws {
         let rows = (0..<127).map { event($0) }
         var cursors: [String?] = []

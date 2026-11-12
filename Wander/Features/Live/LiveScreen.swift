@@ -61,6 +61,8 @@ struct LiveScreen: View {
     @State private var nearbyLoading = false
     @State private var nearbyRequest = UUID()
     @StateObject private var recentListAdd = RecentPlaceListAddController()
+    @State private var areaListRoute: LiveAreaListRoute?
+    @State private var areaListMessage: String?
     @State private var didFrame = false
     @State private var detent = 1
     @State private var isFeedDestinationActive = false
@@ -280,6 +282,14 @@ struct LiveScreen: View {
             filters.modifier(modalLifecycle)
             #endif
         }
+        .sheet(item: $areaListRoute, onDismiss: modalDidDismiss) { route in
+            MapPlaceListPickerSheet(target: route.targets[0], additionalTargets: Array(route.targets.dropFirst())) { result in
+                let count = result.destinationListIDs.count
+                areaListMessage = result.deniedCount > 0
+                    ? "Some places couldn’t be added. Open Add to list to try again."
+                    : "Places added to \(count == 1 ? "1 list" : "\(count) lists")."
+            }.modifier(modalLifecycle)
+        }
         .sheet(isPresented: $showsIntroductionGuide, onDismiss: modalDidDismiss) {
             NavigationStack {
                 LiveIntroductionGuide(orientation: introductionAudience == .firstVisit
@@ -368,7 +378,7 @@ struct LiveScreen: View {
         }
     }
 
-    private var liveContent: some View {
+    private var liveStateContent: some View {
         livePresentedContent
         .task(id: mapRequest) {
             guard let request = mapRequest else { return }
@@ -412,6 +422,7 @@ struct LiveScreen: View {
             isFeedDestinationActive = false
             clearNativePlaceSelection()
             area = nil; selectedPlaceID = nil; drawing = false; didFrame = false
+            areaListRoute = nil; areaListMessage = nil
             fullProfilePin = nil; fullProfileCandidate = nil; committedMapBoundary = nil; committedMapViewport = nil
             mapActivity = []; mapProjection = LiveMapDisplayProjection()
             didRestoreBrowse = false; restoredWithoutLocation = false; lastLocationCenter = nil; backgroundedAt = nil
@@ -435,6 +446,7 @@ struct LiveScreen: View {
             recordFilterReviewMarker("presentation reset")
             #endif
             clearNativePlaceSelection(); fullProfileCandidate = nil
+            areaListRoute = nil; areaListMessage = nil
             isFeedDestinationActive = false
             filtersPresented = false; showsMessages = false; replyTarget = nil
             selectedPlan = nil; planSource = nil; queuedPlan = nil; queuedPlaceID = nil; queuedActivityID = nil; wantsPeopleSearch = false
@@ -449,6 +461,13 @@ struct LiveScreen: View {
         .alert("Zoom in to choose an area", isPresented: $areaNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Choose a region smaller than half the world, then draw or use the visible area.") }
+        .alert("Map area", isPresented: Binding(get: { areaListMessage != nil }, set: { if !$0 { areaListMessage = nil } })) {
+            Button("OK", role: .cancel) { areaListMessage = nil }
+        } message: { Text(areaListMessage ?? "") }
+    }
+
+    private var liveContent: some View {
+        liveStateContent
         .onAppear {
             restoreBrowseState()
             locationPermission.refreshAuthorizationStatus()
@@ -532,7 +551,7 @@ struct LiveScreen: View {
         fullProfilePin != nil || fullProfileCandidate != nil || planSource != nil || selectedPlan != nil || filtersPresented
             || previewSaveContext != nil || previewSharePlace != nil || showsFeedDestination
             || showsMessages || replyTarget != nil || showsEvents || showsContactInvites || showsUpcomingInvitations
-            || receivedPlan != nil || showsIntroductionGuide
+            || receivedPlan != nil || showsIntroductionGuide || areaListRoute != nil
     }
     private func resumeDeferredMapRefresh() {
         guard mapRefreshDeferred, isActive, !isMapCovered else { return }
@@ -739,21 +758,10 @@ struct LiveScreen: View {
                     .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true, accentAction: true)
             }
             HStack(spacing: 8) {
-                control(area?.drawActionTitle ?? "Draw area", symbol: "pencil.and.outline") { startDrawing() }
-                    .font(.system(size: 20, weight: .medium))
-                    .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
-                    .accessibilityIdentifier("live.draw")
-                if area != nil {
-                    Button {
+                LiveAreaControls(drawTitle: area?.drawActionTitle ?? "Draw area", hasArea: area != nil,
+                    onDraw: startDrawing, onAddToList: addAreaToList, onClear: {
                         area = nil; resetCommittedMapWindow(); mapSearch.didCommit(); commitSelection(selection)
-                    } label: {
-                        Text("Clear area")
-                            .font(AstirTypography.bodySmall).padding(.horizontal, 14).frame(minHeight: 44)
-                            .astirGlassSurface(cornerRadius: 22, interactive: true)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("live.clearArea")
-                }
+                    })
                 Spacer()
                 if nearbyLoading { ProgressView().padding(12).background(.regularMaterial, in: Circle()) }
             }
@@ -886,7 +894,9 @@ struct LiveScreen: View {
                         selection = selection.committed(at: .now)
                         installCommittedQuery(refresh: false)
                     },
-                    onShowActivityEverywhere: selection.feedLocationScope == .mapArea ? { selectFeedLocation(.everywhere) } : nil,
+                    onShowActivityEverywhere: selection.feedLocationScope == .mapArea ? {
+                        Task { await store.showLiveFeedActivityEverywhere(backend: auth.isSignedIn ? backend : nil) }
+                    } : nil,
                     onClearActivityFilters: sharedFilterCount > 0 ? { resetSharedFilters() } : nil,
                     onShowOlderActivity: selection.time != .all ? { showOlderActivity() } : nil,
                     onEmbeddedScrollPositionChange: { feedIsScrolled = $0 },
@@ -994,7 +1004,7 @@ struct LiveScreen: View {
             guard let draftArea else { return }
             area = .drawn(draftArea); self.draftArea = nil; drawing = false; selectedPlaceID = nil
             mapSearch.didCommit()
-            commitSelection(selection.searchingMapArea())
+            commitSelection(selection.applyingDrawnArea())
         } label: {
             Text("Apply").fixedSize(horizontal: false, vertical: true)
         }.frame(minHeight: 44).disabled(draftArea == nil).buttonStyle(.borderedProminent)
@@ -1215,9 +1225,25 @@ struct LiveScreen: View {
     }
 
     private func selectFeedLocation(_ scope: LiveFeedLocationScope) {
-        guard selection.feedLocationScope != scope else { return }
+        guard selection.feedLocationScope != scope || store.liveFeedExpansionStage != .selected else { return }
         selection.feedLocationScope = scope
-        installCommittedQuery()
+        installCommittedQuery(resettingContinuation: true)
+    }
+
+    private func addAreaToList() {
+        guard let area else { return }
+        guard let request = mapRequest, mapResults.hasCompleteResults(for: request) else {
+            areaListMessage = mapResults.error
+                ? "Places couldn’t finish loading. Retry loading the map, then add this area to a list."
+                : "Places are still loading. Try again in a moment."
+            return
+        }
+        let targets = mapProjection.places(in: area.boundary).map(MapPlaceListTarget.visiblePlace)
+        guard !targets.isEmpty else {
+            areaListMessage = "No places in this area yet. Try a different area or change your filters."
+            return
+        }
+        areaListRoute = LiveAreaListRoute(targets: targets)
     }
 
     private func selectNearby() {
@@ -1270,7 +1296,7 @@ struct LiveScreen: View {
         selectedPlaceID = nil
         cardMapOrigin = nil
         cardMapCameraOrigin = nil
-        installCommittedQuery()
+        installCommittedQuery(resettingContinuation: true)
         if changedNearby, let center = selection.center {
             mapSearch.willMoveProgrammatically()
             presentMapRegion(MKCoordinateRegion(
@@ -1282,13 +1308,16 @@ struct LiveScreen: View {
         }
     }
 
-    private func installCommittedQuery(refresh: Bool = true, preservingContent: Bool = false) {
+    private func installCommittedQuery(refresh: Bool = true, preservingContent: Bool = false,
+                                       resettingContinuation: Bool = false) {
         guard selection.isValid else { return }
         let boundary = resolvedMapBoundary()
         committedMapQuery = selection.query(area: boundary)
         let nextFeedQuery = selection.feedQuery(area: boundary)
         let changedFeed = store.liveFeedQuery != nextFeedQuery
-        store.selectLiveFeedQuery(nextFeedQuery, preservingMatchingContent: preservingContent)
+            || (resettingContinuation && store.liveFeedExpansionStage != .selected)
+        store.selectLiveFeedQuery(nextFeedQuery, preservingMatchingContent: preservingContent,
+                                  resettingContinuation: resettingContinuation)
         store.refreshLiveFeedDisplayLease()
         if refresh && (changedFeed || store.followedFeedPage == nil || store.liveFeedSocialExpired) {
             let userID = store.currentUser.id, query = store.liveFeedQuery
@@ -1800,4 +1829,71 @@ private struct LiveContactInvitePresentation: ViewModifier {
 private struct LiveDrawingActionsHeightKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct LiveAreaListRoute: Identifiable {
+    let id = UUID()
+    let targets: [MapPlaceListTarget]
+}
+
+/// Mount the action rail closed, then reveal it from the drawing control after
+/// Apply returns from the drawing canvas. Its anchor never moves horizontally.
+private struct LiveAreaControls: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let drawTitle: String
+    let hasArea: Bool
+    let onDraw: () -> Void
+    let onAddToList: () -> Void
+    let onClear: () -> Void
+    @State private var revealed = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Button(action: onDraw) {
+                Image(systemName: "pencil.and.outline")
+                    .font(.system(size: 20, weight: .medium))
+                    .frame(width: 44, height: 44)
+                    .astirGlassSurface(cornerRadius: 24, castsShadow: true, interactive: true)
+            }
+            .accessibilityLabel(drawTitle)
+            .accessibilityIdentifier("live.draw")
+            if revealed {
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) { actions }
+                    } else {
+                        HStack(spacing: 8) { actions }
+                    }
+                }
+                .transition(reduceMotion ? .identity : .move(edge: .leading).combined(with: .opacity))
+                .clipped()
+            }
+        }
+        .buttonStyle(.plain)
+        .task(id: hasArea) {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .spring(response: 0.36, dampingFraction: 0.86)) {
+                revealed = hasArea
+            }
+        }
+    }
+
+    @ViewBuilder private var actions: some View {
+        areaAction("Add to list", identifier: "live.addAreaToList", action: onAddToList)
+        areaAction("Clear area", identifier: "live.clearArea", action: onClear)
+    }
+
+    private func areaAction(_ title: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(AstirTypography.bodySmall)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 44)
+                .fixedSize(horizontal: false, vertical: true)
+                .astirGlassSurface(cornerRadius: 22, interactive: true)
+                .contentShape(Capsule())
+        }.accessibilityIdentifier(identifier)
+    }
 }
