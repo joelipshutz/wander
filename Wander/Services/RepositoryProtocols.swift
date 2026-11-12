@@ -1449,6 +1449,8 @@ struct PlaceListUpsertDraft: Equatable {
     let name: String
     let description: String
     let visibility: PlaceListVisibility
+    var snapshotCaptureID: String? = nil
+    var snapshotUserPlaceIDs: [String]? = nil
 }
 
 struct PlaceListItemDraft: Equatable {
@@ -2314,6 +2316,7 @@ protocol PlaceListRepository {
     func detail(listID: String) async throws -> RemotePlaceListDetail?
     func upsert(_ draft: PlaceListUpsertDraft) async throws -> String
     func delete(listID: String) async throws
+    func deleteSnapshot(captureID: String) async throws
     func leave(listID: String) async throws
     func setCollaborators(listID: String, userIDs: [String]) async throws
     func addItem(_ draft: PlaceListItemDraft) async throws -> String
@@ -2325,6 +2328,10 @@ protocol PlaceListRepository {
 }
 
 extension PlaceListRepository {
+    func deleteSnapshot(captureID: String) async throws {
+        throw WanderRemoteError.notConfigured
+    }
+
     func uploadSnapshotCover(listID: String, jpegData: Data) async throws -> String {
         throw WanderRemoteError.notConfigured
     }

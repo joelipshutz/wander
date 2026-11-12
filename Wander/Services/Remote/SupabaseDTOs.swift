@@ -432,6 +432,8 @@ struct RemoteFeedListDTO: Codable, Equatable {
     let itemCount: Int
     let createdAt: Date
     let updatedAt: Date
+    var snapshotCaptureID: String? = nil
+    var snapshotCoverPath: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -442,10 +444,12 @@ struct RemoteFeedListDTO: Codable, Equatable {
         case itemCount = "item_count"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case snapshotCaptureID = "snapshot_capture_id"
+        case snapshotCoverPath = "snapshot_cover_path"
     }
 
     func localList() -> LocalPlaceList {
-        LocalPlaceList(
+        var list = LocalPlaceList(
             localID: "remote_feed_list_\(id)",
             serverID: id,
             ownerUserID: ownerUserID,
@@ -454,9 +458,12 @@ struct RemoteFeedListDTO: Codable, Equatable {
             visibility: PlaceListVisibility(rawValue: visibility) ?? .followers,
             syncState: .synced,
             cachedItemCount: itemCount,
+            snapshotCoverPath: snapshotCoverPath,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
+        list.snapshotCaptureID = snapshotCaptureID
+        return list
     }
 }
 

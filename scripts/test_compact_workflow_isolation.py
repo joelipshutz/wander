@@ -17,6 +17,7 @@ PRIVACY = "privacy-validation.yml"
 FEED_MODES = ["COMPACT_ONLY", "UNPASSED_ONLY", "CONTINUITY_ONLY", "CONTINUITY_REMAINING_ONLY"]
 FEED_SELECTORS = [
     "WanderUITests/FeedPaginationUITests",
+    "WanderUITests/MapSnapshotFeedUITests",
     "WanderUITests/FeedConsolidationUITests/testRecentActivityOpensConversationAndAcknowledgesSharedBadge",
     "WanderUITests/FeedConsolidationUITests/testUnseenDotsClearOnlyAfterBrowsingAndPersistAcrossReopening",
     "WanderUITests/LiveDrawerActionsUITests",

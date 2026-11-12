@@ -903,10 +903,16 @@ struct ActivityPostcardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("View \(displayContext.media.count == 1 ? "photo" : "photos") from \(displayContext.actor.displayName)’s \(displayContext.ticketKind == .checkIn ? "check-in" : "save")")
+        .accessibilityLabel(opensSnapshotList ? "Open map snapshot list: \(displayContext.placeName)"
+            : "View \(displayContext.media.count == 1 ? "photo" : "photos") from \(displayContext.actor.displayName)’s \(displayContext.ticketKind == .checkIn ? "check-in" : "save")")
         .accessibilityValue(displayContext.media.count == 1 ? "1 photo" : "\(displayContext.media.count) photos")
-        .accessibilityHint("Opens a full-screen photo viewer")
+        .accessibilityHint(opensSnapshotList ? "Opens the snapshot's places" : "Opens a full-screen photo viewer")
         .accessibilityIdentifier("\(postcardAccessibilityIdentifier).photos")
+    }
+
+    private var opensSnapshotList: Bool {
+        openPhotos != nil && displayContext.ticketKind == .list
+            && displayContext.media.first?.storageBucket == "list-snapshots"
     }
 
     private var primaryText: Color {

@@ -10832,6 +10832,11 @@ final class WanderStoreTests: XCTestCase {
 
     func testListSuggestionsExcludeSyncedSnapshotMembersUsingPreSyncList() async throws {
         let store = makeStore()
+        for place in store.currentUserVisiblePlaces {
+            place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
+            place.userPlace.serverID = UUID().uuidString
+        }
         let ownPlaces = store.currentUserVisiblePlaces
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
             .image { _ in }.jpegData(compressionQuality: 0.8)!
@@ -12534,8 +12539,145 @@ final class WanderStoreTests: XCTestCase {
         XCTAssertEqual(normalized.count, added.count)
     }
 
+    func testSnapshotSyncSeedsOnlyCapturedMembersAndLaterAdditionsUseOrdinaryPath() async throws {
+        let store = makeStore()
+        let own = store.currentUserVisiblePlaces
+        XCTAssertGreaterThan(own.count, 2)
+        for place in own {
+            place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
+            place.userPlace.serverID = UUID().uuidString
+        }
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: Array(own.prefix(2)).map { $0.place.id }, coverData: data))
+        _ = store.addCurrentUserPlace(userPlaceID: own[2].userPlace.id, to: list)
+        let repository = FakePlaceListRepository()
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: repository))
+        let draft = try XCTUnwrap(repository.upsertedDrafts.first)
+        XCTAssertEqual(draft.snapshotCaptureID, list.snapshotCaptureID)
+        XCTAssertEqual(Set(draft.snapshotUserPlaceIDs ?? []), Set(own.prefix(2).compactMap { $0.userPlace.serverID }))
+        XCTAssertEqual(repository.itemRequests.count, 1)
+        XCTAssertEqual(repository.itemRequests.first?.draft.ownerUserPlaceID, own[2].userPlace.serverID)
+    }
+
+    func testSnapshotRemovalDuringAtomicCreateDeletesSeededItem() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
+        own.userPlace.serverID = UUID().uuidString
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let repository = FakePlaceListRepository()
+        repository.onUpsert = { _ in _ = store.removePlace(placeID: own.place.id, from: list) }
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(repository.removedItems.count, 1)
+        XCTAssertTrue(repository.itemRequests.isEmpty)
+        XCTAssertTrue(store.visiblePlaces(in: list).isEmpty)
+    }
+
+    func testSnapshotDeletionDuringAtomicCreateDoesNotUploadOrResurrect() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
+        own.userPlace.serverID = UUID().uuidString
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let repository = FakePlaceListRepository(upsertResult: try XCTUnwrap(list.snapshotCaptureID))
+        repository.onUpsert = { _ in _ = store.deletePlaceList(id: list.id) }
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: repository))
+        XCTAssertEqual(repository.deletedListIDs, [list.snapshotCaptureID!])
+        XCTAssertEqual(repository.snapshotUploadCount, 0)
+        XCTAssertTrue(repository.itemRequests.isEmpty)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .tombstoned)
+    }
+
+    func testSnapshotLostCreationReplyRetriesSameCaptureAndDeletionUsesCaptureID() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
+        own.userPlace.serverID = UUID().uuidString
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let first = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let repository = FakePlaceListRepository(upsertResult: try XCTUnwrap(first.snapshotCaptureID))
+        let backend = WanderBackend(placeListRepository: repository)
+        repository.upsertFailuresRemaining = 1
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertNil(store.placeLists.first { $0.localID == first.localID }?.serverID)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertEqual(repository.upsertedDrafts.prefix(2).map(\.snapshotCaptureID), [first.snapshotCaptureID, first.snapshotCaptureID])
+        XCTAssertEqual(store.placeLists.first { $0.localID == first.localID }?.syncState, .synced)
+
+        let second = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        repository.upsertFailuresRemaining = 1
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertTrue(store.deletePlaceList(id: second.id))
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertEqual(repository.deletedListIDs.last, second.snapshotCaptureID)
+        XCTAssertEqual(store.placeLists.first { $0.localID == second.localID }?.syncState, .tombstoned)
+    }
+
+    func testSnapshotRefreshAfterLostReplyPreservesOnePendingListAndDeletion() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        own.place.serverID = UUID().uuidString
+        own.userPlace.placeID = own.place.id
+        own.userPlace.serverID = UUID().uuidString
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let captureID = try XCTUnwrap(list.snapshotCaptureID)
+        let repository = FakePlaceListRepository(upsertResult: captureID)
+        repository.upsertFailuresRemaining = 1
+        let backend = WanderBackend(placeListRepository: repository)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        XCTAssertTrue(store.updatePlaceList(id: list.id, name: "Edited offline", description: "",
+            visibility: .stealth, collaboratorUserIDs: []))
+        let initialIDs = store.placeLists.first { $0.localID == list.localID }?.snapshotInitialItemIDs
+        let remote = LocalPlaceList(localID: "remote_snapshot", serverID: captureID,
+            ownerUserID: store.currentUser.id, name: list.name, description: "", visibility: .stealth, syncState: .synced)
+        let surface = FakeSurfaceSnapshotRepository()
+        surface.listSnapshot = PlaceListsRemoteSnapshot(summaries: [RemotePlaceListSummary(list: remote,
+            owner: ProfileShell(id: store.currentUser.id, handle: store.currentUser.handle,
+                displayName: store.currentUser.displayName, avatarURL: nil, bio: nil, relationship: .owner),
+            collaborators: [], itemCount: 1)],
+            details: [RemotePlaceListDetail(list: remote, collaborators: [], items: [])],
+            visiblePlacesByOwnerID: [:], relationshipsByOwnerID: [:])
+        let refreshBackend = WanderBackend(surfaceSnapshotRepository: surface)
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        XCTAssertEqual(store.placeLists.filter { $0.snapshotCaptureID == captureID || $0.id == captureID }.count, 1)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.name, "Edited offline")
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.snapshotInitialItemIDs, initialIDs)
+        XCTAssertTrue(store.deletePlaceList(id: list.id))
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        _ = await store.syncPendingPlaceLists(backend: backend)
+        await store.refreshRemotePlaceLists(backend: refreshBackend)
+        XCTAssertEqual(repository.deletedListIDs.last, captureID)
+        XCTAssertEqual(store.placeLists.filter { $0.snapshotCaptureID == captureID || $0.id == captureID }.count, 1)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .tombstoned)
+        XCTAssertNotNil(store.placeLists.first { $0.localID == list.localID }?.deletedAt)
+    }
+
+    func testSnapshotWithPendingSourceFailsWithoutPublishingPartialBatch() async throws {
+        let store = makeStore()
+        let own = try XCTUnwrap(store.currentUserVisiblePlaces.first)
+        let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { _ in }.jpegData(compressionQuality: 0.8)!
+        let list = try XCTUnwrap(store.createMapSnapshotList(placeIDs: [own.place.id], coverData: data))
+        let repository = FakePlaceListRepository()
+        _ = await store.syncPendingPlaceLists(backend: WanderBackend(placeListRepository: repository))
+        XCTAssertTrue(repository.upsertedDrafts.isEmpty)
+        XCTAssertTrue(repository.itemRequests.isEmpty)
+        XCTAssertEqual(store.placeLists.first { $0.localID == list.localID }?.syncState, .failed)
+    }
+
     func testSnapshotCoverFailureKeepsLocalCoverAndRetriesWithoutNewList() async throws {
         let store = makeStore()
+        for place in store.currentUserVisiblePlaces {
+            place.place.serverID = UUID().uuidString
+            place.userPlace.placeID = place.place.id
+            place.userPlace.serverID = UUID().uuidString
+        }
         let data = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             UIColor.orange.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
@@ -13717,6 +13859,7 @@ private final class FakeListSuggestionRepository: ListSuggestionRepository {
 
 @MainActor
 private final class FakePlaceListRepository: PlaceListRepository {
+    var upsertFailuresRemaining = 0
     var failSnapshotUpload = false
     private(set) var snapshotUploadCount = 0
 
@@ -13785,6 +13928,14 @@ private final class FakePlaceListRepository: PlaceListRepository {
         if failedDetailListIDs.contains(listID) {
             throw TestError.expected
         }
+        if let draft = upsertedDrafts.last, draft.snapshotCaptureID != nil, detailsByListID[listID] == nil {
+            return RemotePlaceListDetail(list: LocalPlaceList(localID: listID, serverID: listID,
+                ownerUserID: "user_joe", name: draft.name, description: draft.description), collaborators: [],
+                items: (draft.snapshotUserPlaceIDs ?? []).map { sourceID in
+                    LocalPlaceListItem(localID: UUID().uuidString, listID: listID, placeID: "fixture",
+                        ownerUserPlaceID: sourceID, addedByUserID: "user_joe", syncState: .synced)
+                })
+        }
         return detailsByListID[listID]
     }
 
@@ -13794,7 +13945,15 @@ private final class FakePlaceListRepository: PlaceListRepository {
             try? await Task.sleep(nanoseconds: upsertDelayNanoseconds)
         }
         upsertedDrafts.append(draft)
+        if upsertFailuresRemaining > 0 {
+            upsertFailuresRemaining -= 1
+            throw TestError.expected
+        }
         return upsertResults[min(upsertedDrafts.count - 1, upsertResults.count - 1)]
+    }
+
+    func deleteSnapshot(captureID: String) async throws {
+        try await delete(listID: captureID)
     }
 
     func delete(listID: String) async throws {
