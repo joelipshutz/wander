@@ -277,6 +277,8 @@ struct WanderApp: App {
                 activityNotificationRepository: SimulatorActivityNotificationRepository(
                     includesNotifications: ProcessInfo.processInfo.arguments.contains("-WanderActivityNotificationUITest")
                 ),
+                sharedVisitRepository: ProcessInfo.processInfo.arguments.contains("-WanderSharedVisitNavigationUITest")
+                    ? SimulatorSharedVisitNavigationRepository() : nil,
                 placePlanInvitationRepository: SimulatorPlacePlanInvitationRepository(
                     includesInvitations: ProcessInfo.processInfo.arguments.contains("-WanderPlacePlanUITest"),
                     suggestedAt: ProcessInfo.processInfo.arguments.contains("-WanderLiveUpcomingUITest")
@@ -623,6 +625,52 @@ final class SimulatorOnboardingProfileRepository: ProfileRepository {
 
     func searchProfiles(handleQuery: String) async throws -> [ProfileShell] { [] }
 }
+
+#if DEBUG && targetEnvironment(simulator)
+/// Exercises the real notification resolver and shared-save editor without a server.
+@MainActor
+final class SimulatorSharedVisitNavigationRepository: SharedVisitRepository {
+    static let participantID = "69200000-0000-4000-8000-000000000001"
+    private var accepted = false
+    private let invitation = SharedVisitInvitation(
+        participantID: participantID, groupID: "69200000-0000-4000-8000-000000000002",
+        invitationGeneration: 1, snapshotRevision: 1, status: .pending, invitedAt: .now,
+        sourceVisitID: "69200000-0000-4000-8000-000000000003", sourceOwnerUserID: "user_maya",
+        sourceOwnerHandle: "maya", sourceOwnerDisplayName: "Maya", sourceOwnerAvatarURL: nil,
+        placeID: "69200000-0000-4000-8000-000000000004", placeName: "Navigation Test Cafe",
+        category: "cafe", primaryCategory: "coffee_tea", subcategory: nil,
+        address: nil, locality: nil, region: nil, country: nil,
+        latitude: 34.05, longitude: -118.25, sourceProvider: "manual", sourceProviderPlaceID: nil,
+        visitedAt: .now, note: nil, ratingScore: nil, attributeAnswers: [], tags: [], photos: []
+    )
+
+    func inbox(before: Date?, limit: Int) async throws -> [SharedVisitInvitation] { accepted ? [] : [invitation] }
+    func context(participantID: String, generation: Int) async throws -> SharedVisitInvitation? {
+        participantID == Self.participantID && generation == 1 ? invitation : nil
+    }
+    func resolveDestination(participantID: String, generation: Int) async throws -> SharedVisitDestination? {
+        guard participantID == Self.participantID,
+              !ProcessInfo.processInfo.arguments.contains("-WanderUnavailableSharedVisitUITest") else { return nil }
+        return SharedVisitDestination(participantID: participantID, requestedGeneration: generation,
+            currentGeneration: 1, status: accepted ? "accepted" : "pending", placeID: invitation.placeID,
+            acceptedVisitID: nil, sourceVisitID: invitation.sourceVisitID)
+    }
+    func accept(_ draft: SharedVisitAcceptanceDraft) async throws -> SharedVisitAcceptanceResult {
+        accepted = true
+        return SharedVisitAcceptanceResult(operationID: draft.operationID, participantID: draft.participantID,
+            userPlaceID: draft.userPlaceID, visitID: draft.visitID, backfilledFromUserPlace: false,
+            status: .accepted, photoCopies: [])
+    }
+    func createInvites(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] { [] }
+    func inviteeUserIDs(sourceVisitID: String) async throws -> [String] { [] }
+    func setInvitees(sourceVisitID: String, inviteeUserIDs: [String]) async throws -> [SharedVisitInviteResult] { [] }
+    func decline(participantID: String, generation: Int) async throws {}
+    func companionContext(visitIDs: [String]) async throws -> [SharedVisitCompanion] { [] }
+    func downloadPhotoData(bucket: String, path: String) async throws -> Data { throw WanderRemoteError.notConfigured }
+    func uploadPhotoData(bucket: String, path: String, data: Data, contentType: String) async throws { throw WanderRemoteError.notConfigured }
+    func markPhotoUploaded(photoID: String) async throws { throw WanderRemoteError.notConfigured }
+}
+#endif
 
 /// Lets simulator UI tests exercise the native notification authorization
 /// prompt without making remote calls or weakening the production boundary.
