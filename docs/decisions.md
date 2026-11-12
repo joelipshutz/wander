@@ -1181,3 +1181,22 @@ an unsent reminder; offline cancellation takes effect after sync. The contextual
 invitation remains available for recent eligible visits for seven days. Reminder
 copy is generic to avoid revealing a place on the lock screen; tapping opens the
 exact owned visit. The migration must precede deployment of the supporting app.
+
+## REC-688 / REC-690 — place-profile loading, 2026-11-11
+
+Full place profiles show a native spinner while photo metadata or image bytes
+are pending, then the real photo or a settled “No photos available” state.
+Stock imagery is not a loading fallback. Photo publication precedes category
+enrichment and its remote sync. A fresh cached public provider photo can seed
+the header; decoded pixels may be reused across sizes only for the same
+canonical place and photo, at an equal or larger decode size. Protected photos
+still require their existing access check before decoded-cache reuse.
+
+Rating refreshes depend on the place's rating/sync inputs and the viewer's
+access inputs, rather than the store-wide presentation revision. Loaded server
+scores remain visible during same-scope refreshes and additive history hydration.
+Removed/restricted activity, relationship/privacy changes, account/session
+changes, backgrounding and failed refreshes clear the previous values. Obsolete
+responses cannot replace newer results. The server remains authoritative for
+the independent own, friends and Astir aggregates; visible client history never
+substitutes for the Astir average.

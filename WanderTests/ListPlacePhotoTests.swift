@@ -4,6 +4,25 @@ import XCTest
 
 final class ListPlacePhotoTests: XCTestCase {
     @MainActor
+    func testLargerDecodedPhotoServesProfileWithoutAnotherDecodeButNeverUpscalesOrCrossesIdentity() async throws {
+        let pipeline = PlacePhotoImagePipeline()
+        let data = try imageData(size: CGSize(width: 1500, height: 1500))
+        let decoded = await pipeline.image(from: data, canonicalPlaceKey: "place",
+            photoKey: "photo", targetPixelSize: 1440)
+        let card = try XCTUnwrap(decoded)
+        let profile = pipeline.cachedImage(canonicalPlaceKey: "place", photoKey: "photo", targetPixelSize: 1200)
+        XCTAssertTrue(profile === card)
+        // Invalid bytes prove an adequate cache hit does not decode again.
+        let reused = await pipeline.image(from: Data(), canonicalPlaceKey: "place", photoKey: "photo", targetPixelSize: 1200)
+        XCTAssertTrue(reused === card)
+        XCTAssertNil(pipeline.cachedImage(canonicalPlaceKey: "place", photoKey: "photo", targetPixelSize: 1800))
+        XCTAssertNil(pipeline.cachedImage(canonicalPlaceKey: "place", photoKey: "photo", targetPixelSize: 3200))
+        XCTAssertNil(pipeline.cachedImage(canonicalPlaceKey: "other-place", photoKey: "photo", targetPixelSize: 1200))
+        XCTAssertNil(pipeline.cachedImage(canonicalPlaceKey: "place", photoKey: "other-photo", targetPixelSize: 1200))
+        XCTAssertEqual(pipeline.cacheMetrics().entryCount, 1)
+    }
+
+    @MainActor
     func testResolverUsesPreloadedUserPhotoWithoutMetadataLookup() async throws {
         let userPhoto = photo(provider: "visit_photo", id: "user-photo")
         let repository = RecordingListPlacePhotoRepository(

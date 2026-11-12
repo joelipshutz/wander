@@ -3714,7 +3714,8 @@ final class NavigationContractTests: XCTestCase {
         XCTAssertFalse(photoMedia.contains("store.follows"))
         XCTAssertFalse(photoMedia.contains("store.blocks"))
         XCTAssertTrue(source.contains("store.listPhotoAuthorizationScopeKey()"))
-        XCTAssertTrue(photoMedia.contains("AstirPlacePhotoAsset(stableKey: place.id)"))
+        XCTAssertFalse(photoMedia.contains("AstirPlacePhotoAsset"),
+            "Lists must never flash stock photography while real photos load")
         XCTAssertTrue(photoMedia.contains("eligibleUserIDs: eligibleUserIDs"))
         XCTAssertTrue(previewMosaic.contains("Image(systemName: PlaceListSymbol.systemImage)"))
         XCTAssertFalse(previewMosaic.contains("String(list.name.prefix(1))"))
