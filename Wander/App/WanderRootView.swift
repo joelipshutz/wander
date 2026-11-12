@@ -716,10 +716,10 @@ struct WanderRootView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(astirBrandMode.accentText)
+                    .background(astirBrandMode.background, in: Capsule())
                     .accessibilityIdentifier("legacy-map.close")
                 }
                 .padding(.horizontal, WanderTheme.spacing4)
-                .background(astirBrandMode.background)
             }
             .environmentObject(store)
             .environmentObject(walkthroughs)
