@@ -569,7 +569,7 @@ Current status as of 2026-06-16:
 - Signed archive succeeds locally for `com.grayline.wander`.
 - App Store Connect app record exists for bundle id `com.grayline.wander`.
 - Builds `0.1 (1)` through `0.1 (27)` uploaded successfully and began App Store Connect processing. Build `0.1 (27)` packages the expanded map place detail sheet from PR #9.
-- Public TestFlight group `rec.me Alpha` exists with public link enabled and no custom tester cap: `https://testflight.apple.com/join/knEhRa6t`.
+- Public TestFlight group `rec.me Alpha` exists with public link enabled and no custom tester cap: `https://testflight.apple.com/join/Nz8dJqD6`.
 - Build `0.1 (5)` is attached to the public group. Export compliance is set to `usesNonExemptEncryption=false`.
 - Build `0.1 (5)` passed external TestFlight review.
 - Build `0.1 (6)` is attached to `Wander Alpha`, export compliance is set to `usesNonExemptEncryption=false`, and external TestFlight review is `APPROVED`.

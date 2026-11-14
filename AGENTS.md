@@ -620,7 +620,7 @@ top-level release announcement to the dedicated rec.me Slack release channel:
 - Release channel ID: `C0BM5CY0GQY`
 - Feedback channel: `#testflight-feedback`
 - Feedback channel ID: `C0BAA7DG2AC`
-- Public TestFlight link: `https://testflight.apple.com/join/knEhRa6t`
+- Public TestFlight link: `https://testflight.apple.com/join/Nz8dJqD6`
 
 The Slack note must include:
 

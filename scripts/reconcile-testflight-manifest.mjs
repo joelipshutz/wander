@@ -10,7 +10,7 @@ import {
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const TESTFLIGHT_URL = "https://testflight.apple.com/join/knEhRa6t";
+const TESTFLIGHT_URL = "https://testflight.apple.com/join/Nz8dJqD6";
 const RELEASE_NOTES_CHANNEL = "#release-notes";
 const FEEDBACK_CHANNEL = "#testflight-feedback";
 const DISPOSITIONS = new Set(["ship", "exclude", "release-operation"]);

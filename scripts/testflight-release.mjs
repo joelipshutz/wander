@@ -18,7 +18,7 @@ const DEFAULTS = {
   groupName: "rec.me Alpha",
   pollSeconds: 30,
   projectPath: "project.yml",
-  publicLink: "https://testflight.apple.com/join/knEhRa6t",
+  publicLink: "https://testflight.apple.com/join/Nz8dJqD6",
   timeoutAttempts: 30,
 };
 

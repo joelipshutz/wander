@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 struct WanderShareContent: Equatable {
-    static let publicTestFlightURL = URL(string: "https://testflight.apple.com/join/knEhRa6t")!
+    static let publicTestFlightURL = URL(string: "https://testflight.apple.com/join/Nz8dJqD6")!
 
     let item: URL
     let additionalItems: [URL]
