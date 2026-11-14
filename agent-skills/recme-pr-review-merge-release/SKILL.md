@@ -396,7 +396,7 @@ The release note must include:
 - tester-facing changes from the manifest;
 - a concrete testing checklist;
 - known/deferred behavior;
-- public link `https://testflight.apple.com/join/knEhRa6t`; and
+- public link `https://testflight.apple.com/join/Nz8dJqD6`; and
 - a request to report problems in `#testflight-feedback` (`C0BAA7DG2AC`) with
   device, account/email if relevant, screenshots, and exact repro steps.
 
