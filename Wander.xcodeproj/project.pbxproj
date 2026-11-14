@@ -2774,34 +2774,34 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					0A325A118755573578F89F15 = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 					2BACA7E7CEA90713CD015E38 = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 						TestTargetID = 4008C3BBEE3A6875816FA651;
 					};
 					37043FFD3A7F40BE4ED75C0F = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 					3EB8B4EBA82BA89478F45844 = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 					4008C3BBEE3A6875816FA651 = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 					8C330C6117AF2935F6EFE207 = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 						TestTargetID = DAEABFB4D177DCC30394FDDE;
 					};
 					AE294465F9516B04DD43A25A = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 					D6C13F9C626D4B53368335EA = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 						TestTargetID = 4008C3BBEE3A6875816FA651;
 					};
 					DAEABFB4D177DCC30394FDDE = {
-						DevelopmentTeam = Y7TVK75RZ8;
+						DevelopmentTeam = DKHA44HD9S;
 					};
 				};
 			};
@@ -3812,7 +3812,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 187;
-				DEVELOPMENT_TEAM = Y7TVK75RZ8;
+				DEVELOPMENT_TEAM = DKHA44HD9S;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.03;
 				SDKROOT = iphoneos;
@@ -3829,7 +3829,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CURRENT_PROJECT_VERSION = 187;
-				DEVELOPMENT_TEAM = Y7TVK75RZ8;
+				DEVELOPMENT_TEAM = DKHA44HD9S;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0.03;
 				SDKROOT = iphoneos;
